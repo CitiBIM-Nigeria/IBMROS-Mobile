@@ -1,37 +1,65 @@
 using UnityEngine;
 using System;
 
+/// <summary>
+/// Coordinates all input-driven interactions in the Room scene.
+///
+/// Priority order for pointer input:
+///   1. Scale handle tap/drag  (highest)
+///   2. Drag selected object
+///   3. Camera look rotation   (single finger, no object)
+///
+/// Two-finger input is routed directly to CameraController
+/// and never interferes with object manipulation.
+/// </summary>
 public class ObjectManipulator : MonoBehaviour
 {
+    // ---------------------------------------------------------------
+    // DEPENDENCIES
+    // ---------------------------------------------------------------
+
     [Header("Dependencies")]
-    [SerializeField] private InputManager inputManager;
-    [SerializeField] private SelectionManager selectionManager;
-    [SerializeField] private ObjectDragHandler dragHandler;
+    [SerializeField] private InputManager          inputManager;
+    [SerializeField] private SelectionManager      selectionManager;
+    [SerializeField] private ObjectDragHandler     dragHandler;
     [SerializeField] private ObjectRotationHandler rotationHandler;
-    [SerializeField] private ObjectScaleHandler scaleHandler;
-    [SerializeField] private CameraController cameraController;
+    [SerializeField] private ObjectScaleHandler    scaleHandler;
+    [SerializeField] private CameraController      cameraController;
+
+    // ---------------------------------------------------------------
+    // EVENTS
+    // ---------------------------------------------------------------
 
     public event Action OnManipulationStart;
     public event Action OnManipulationEnd;
     public event Action OnCameraRotationStart;
     public event Action OnCameraRotationEnd;
 
-    private bool _isRotatingCamera = false;
-    private Vector2 _lastScreenPos;
-    private Transform _selectedObject;
+    // ---------------------------------------------------------------
+    // PRIVATE STATE
+    // ---------------------------------------------------------------
+
+    private bool      _isRotatingCamera = false;
+    private Vector2   _lastScreenPos    = Vector2.zero;
+    private Transform _selectedObject   = null;
+
+    // ---------------------------------------------------------------
+    // UNITY LIFECYCLE
+    // ---------------------------------------------------------------
 
     void OnEnable()
     {
         if (inputManager != null)
         {
-            inputManager.OnPointerDown += HandlePointerDown;
-            inputManager.OnPointerMove += HandlePointerMove;
-            inputManager.OnPointerUp += HandlePointerUp;
+            inputManager.OnPointerDown       += HandlePointerDown;
+            inputManager.OnPointerMove       += HandlePointerMove;
+            inputManager.OnPointerUp         += HandlePointerUp;
+            inputManager.OnTwoFingerPanDelta += HandleTwoFingerPan;
         }
 
         if (selectionManager != null)
         {
-            selectionManager.onObjectSelected += HandleObjectSelected;
+            selectionManager.onObjectSelected   += HandleObjectSelected;
             selectionManager.onObjectDeselected += HandleObjectDeselected;
         }
     }
@@ -40,17 +68,22 @@ public class ObjectManipulator : MonoBehaviour
     {
         if (inputManager != null)
         {
-            inputManager.OnPointerDown -= HandlePointerDown;
-            inputManager.OnPointerMove -= HandlePointerMove;
-            inputManager.OnPointerUp -= HandlePointerUp;
+            inputManager.OnPointerDown       -= HandlePointerDown;
+            inputManager.OnPointerMove       -= HandlePointerMove;
+            inputManager.OnPointerUp         -= HandlePointerUp;
+            inputManager.OnTwoFingerPanDelta -= HandleTwoFingerPan;
         }
 
         if (selectionManager != null)
         {
-            selectionManager.onObjectSelected -= HandleObjectSelected;
+            selectionManager.onObjectSelected   -= HandleObjectSelected;
             selectionManager.onObjectDeselected -= HandleObjectDeselected;
         }
     }
+
+    // ---------------------------------------------------------------
+    // SELECTION CALLBACKS
+    // ---------------------------------------------------------------
 
     private void HandleObjectSelected(Transform target)
     {
@@ -63,25 +96,29 @@ public class ObjectManipulator : MonoBehaviour
         CancelCameraRotation();
     }
 
+    // ---------------------------------------------------------------
+    // SINGLE FINGER INPUT
+    // ---------------------------------------------------------------
+
     private void HandlePointerDown(Vector2 screenPosition)
     {
-        // Priority 1: Scale handle tap
+        // Priority 1 — scale handle (handled via UGUI events in ScaleRigUI)
         if (scaleHandler.TryBeginScale(screenPosition))
         {
             OnManipulationStart?.Invoke();
             return;
         }
 
-        // Priority 2: Drag selected object
+        // Priority 2 — drag selected object
         if (dragHandler.TryBeginDrag(screenPosition))
         {
             OnManipulationStart?.Invoke();
             return;
         }
 
-        // Priority 3: Camera rotation
+        // Priority 3 — camera look rotation (finger on empty space)
         _isRotatingCamera = true;
-        _lastScreenPos = screenPosition;
+        _lastScreenPos    = screenPosition;
         dragHandler.SetBlocked(true);
         scaleHandler.SetBlocked(true);
         rotationHandler.SetBlocked(true);
@@ -104,7 +141,7 @@ public class ObjectManipulator : MonoBehaviour
 
         if (_isRotatingCamera)
         {
-            Vector2 delta = screenPosition - _lastScreenPos;
+            Vector2 delta  = screenPosition - _lastScreenPos;
             _lastScreenPos = screenPosition;
             cameraController?.RotateCamera(delta);
         }
@@ -132,8 +169,7 @@ public class ObjectManipulator : MonoBehaviour
 
     private void CancelCameraRotation()
     {
-        if (!_isRotatingCamera)
-            return;
+        if (!_isRotatingCamera) return;
 
         _isRotatingCamera = false;
         dragHandler.SetBlocked(false);
@@ -142,38 +178,54 @@ public class ObjectManipulator : MonoBehaviour
         OnCameraRotationEnd?.Invoke();
     }
 
+    // ---------------------------------------------------------------
+    // TWO FINGER PAN — routes directly to camera, never touches objects
+    // ---------------------------------------------------------------
+
+    private void HandleTwoFingerPan(Vector2 screenDelta)
+    {
+        cameraController?.HandleTwoFingerPan(screenDelta);
+    }
+
+    // ---------------------------------------------------------------
+    // OBJECT ACTIONS (called by UI buttons)
+    // ---------------------------------------------------------------
+
     public void DeleteSelectedObject()
     {
-        if (_selectedObject == null)
-            return;
+        if (_selectedObject == null) return;
 
         GameObject go = _selectedObject.gameObject;
         selectionManager.DeselectObject();
 
         UndoRedoManager.Instance?.Record(new DeleteAction(go));
 
-        // SetActive false instead of Destroy so Undo can restore it
+        // Deactivate instead of Destroy so Undo can restore it
         go.SetActive(false);
+
+        Debug.Log($"[ObjectManipulator] Deleted: {go.name}");
     }
 
     public void DuplicateSelectedObject()
     {
-        if (_selectedObject == null)
-            return;
+        if (_selectedObject == null) return;
 
-        Vector3 offset = new Vector3(0.5f, 0, 0.5f);
+        Vector3 offset = new Vector3(0.5f, 0f, 0.5f);
+
         GameObject clone = Instantiate(
             _selectedObject.gameObject,
             _selectedObject.position + offset,
             _selectedObject.rotation
         );
 
-        clone.name = _selectedObject.name.Replace("(Clone)", "").Trim();
+        clone.name = _selectedObject.name
+            .Replace("(Clone)", "").Trim();
 
         UndoRedoManager.Instance?.Record(
-            new DuplicateAction(clone, _selectedObject.name, selectionManager)
-        );
+            new DuplicateAction(clone, _selectedObject.name, selectionManager));
 
         selectionManager.SelectObject(clone.transform);
+
+        Debug.Log($"[ObjectManipulator] Duplicated: {clone.name}");
     }
 }

@@ -14,8 +14,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FurnitureRegistry
   entries:
   - itemKey: IKEA BRIMNES
-    glbFileName: chair_glb.glb
-    prefabFallback: {fileID: -6689036041284674117, guid: 08dd91b1fa43745cdbaeb1645608f123, type: 3}
+    glbFileName: Bathroom Furniture/DRAGAN 4-piece bathroom set - bamboo.glb
+    prefabFallback: {fileID: 2795416273744518130, guid: 3395c682f554e4e20913b2968ce8094b, type: 3}
+    spawnScale: {x: 0, y: 0, z: 0}
+    realWorldSizeMeters: {x: 1, y: 1, z: 1}
+    category: 
+  - itemKey: IKEA MALM
+    glbFileName: ggg.glb
+    prefabFallback: {fileID: 2795416273744518130, guid: 3395c682f554e4e20913b2968ce8094b, type: 3}
+    spawnScale: {x: 0, y: 0, z: 0}
+    realWorldSizeMeters: {x: 1, y: 1, z: 1}
+    category: 
+  - itemKey: IKEA HEMNES
+    glbFileName: "TOSSBERG  L\xC5NGFJ\xC4LL conference chair - Gunnared beigewhite.glb"
+    prefabFallback: {fileID: 2795416273744518130, guid: 3395c682f554e4e20913b2968ce8094b, type: 3}
     spawnScale: {x: 0, y: 0, z: 0}
     realWorldSizeMeters: {x: 1, y: 1, z: 1}
     category: 

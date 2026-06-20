@@ -4,8 +4,8 @@ public static class AwsConfig
     public const string Region = "us-east-1";
 
     // IAM User credentials - development only, never ship these in production
-    public const string AccessKey = "your-access-key-here";
-    public const string SecretKey = "your-secret-key-here";
+    public const string AccessKey = "AKIA6OKTCAVHPPEJQC5F";
+    public const string SecretKey = "SvnK0+dXVDlrS1euGzs3yxh2plEnbtx7bcIWhvRr";
 
     // Cognito Identity Pool - issues temporary credentials to all users
     public const string IdentityPoolId = "us-east-1:a1b45243-b537-4a69-af72-9764a2aeb9f2";
@@ -19,8 +19,21 @@ public static class AwsConfig
     public static string CognitoProviderName =>
         $"cognito-idp.{Region}.amazonaws.com/{UserPoolId}";
 
-    // S3 bucket name for storing 3D furniture models
-    public const string FurnitureBucketName = "ibm-ros-furniture-models";
+    // S3 bucket name for storing 3D furniture models.
+    // MIGRATED to the new pipeline backend (ros-furniture-assets / ros-products).
+    // Old values kept here for one-line rollback to the legacy DB:
+    //   FurnitureBucketName        = "ibm-ros-furniture-models"
+    //   FurnitureCatalogTableName  = "ibm-ros-furniture-catalog"
+    //   FurnitureCatalogMerchantId = "0001"
+    public const string FurnitureBucketName = "ros-furniture-assets";
+
+    // Product catalog table written by ikea_pipeline.py
+    public const string FurnitureCatalogTableName    = "ros-products";
+    // Category tree: departments / categories / breadcrumb subcategories
+    public const string CategoriesTableName          = "ros-categories";
+    // Merchant partition the pipeline writes everything under
+    public const string FurnitureCatalogMerchantId   = "ikea";
+
 
     // S3 bucket name for storing user room screenshots
     public const string UserContentBucketName = "ibm-ros-user-content";

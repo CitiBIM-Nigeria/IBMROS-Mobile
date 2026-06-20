@@ -37,7 +37,6 @@ namespace SingularityGroup.HotReload {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         #endif
         private static void InitOnAppLoad() {
-            AppCallbackListener.Init(); // any platform might be using this
             UnityHelper.Init();
             Translations.LoadDefaultLocalization();
             bool onlyPrefabMissing;

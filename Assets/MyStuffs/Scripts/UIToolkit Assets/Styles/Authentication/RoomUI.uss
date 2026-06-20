@@ -1,3 +1,9 @@
+/* ============================================================
+   RoomUI.uss — Matches reference image exactly
+   Top bar: transparent, plain white icons, no circles
+   Bottom bar: transparent, plain white text+icons, no pills
+============================================================ */
+
 /* ROOT */
 .root {
     width: 100%;
@@ -8,7 +14,9 @@
     background-color: rgba(0, 0, 0, 0);
 }
 
-/* TOP BAR */
+/* ============================================================
+   TOP BAR — fully transparent, icons only, no backgrounds
+============================================================ */
 .top-bar {
     position: absolute;
     top: 0;
@@ -19,6 +27,7 @@
     align-items: center;
     padding-left: 16px;
     padding-right: 16px;
+    padding-top: 10px;
     background-color: rgba(0, 0, 0, 0);
 }
 
@@ -27,96 +36,49 @@
 }
 
 .top-bar__button {
-    width: 48px;
-    height: 48px;
-    border-radius: 24px;
-    background-color: rgba(255, 255, 255, 0.15);
+    width: 44px;
+    height: 44px;
+    border-radius: 0;
+    background-color: rgba(0, 0, 0, 0);
     border-width: 0;
-    margin-left: 8px;
+    margin-left: 4px;
     align-items: center;
     justify-content: center;
 }
 
 .top-bar__button--close {
     margin-left: 0;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(0, 0, 0, 0);
 }
 
 .top-bar__button:hover {
-    background-color: rgba(255, 255, 255, 0.25);
+    background-color: rgba(0, 0, 0, 0);
 }
 
 .top-bar__icon {
-    font-size: 20px;
+    font-size: 22px;
     color: rgb(255, 255, 255);
     -unity-text-align: middle-center;
 }
 
-/* CONTEXTUAL PANEL */
-.contextual-panel {
-    position: absolute;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    background-color: rgb(255, 255, 255);
-    border-radius: 32px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-    padding-left: 16px;
-    padding-right: 16px;
-    translate: -50% 0;
-}
-
-.contextual-panel--hidden {
-    display: none;
-}
-
-.contextual-panel--visible {
-    display: flex;
-}
-
-.contextual-panel__button {
-    width: 52px;
-    height: 52px;
-    border-radius: 26px;
-    background-color: rgba(0, 0, 0, 0);
-    border-width: 0;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    margin-left: 4px;
-    margin-right: 4px;
-}
-
-.contextual-panel__button:hover {
-    background-color: rgba(0, 0, 0, 0.06);
-}
-
-.contextual-panel__icon {
-    font-size: 22px;
-    color: rgb(30, 30, 30);
-    -unity-text-align: middle-center;
-}
-
-.contextual-panel__label {
-    font-size: 10px;
-    color: rgb(80, 80, 80);
-    -unity-text-align: middle-center;
-    margin-top: 2px;
-}
-
-/* BOTTOM BAR */
+/* ============================================================
+   BOTTOM BAR — transparent, plain icons + text, no pills
+   Left:   ^ 2D stacked label
+   Center: joystick space
+   Right:  + Add Furniture
+============================================================ */
 .bottom-bar {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 96px;
+    height: 100px;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
     padding-left: 20px;
     padding-right: 20px;
+    padding-bottom: 16px;
     background-color: rgba(0, 0, 0, 0);
 }
 
@@ -132,40 +94,63 @@
     justify-content: center;
     background-color: rgba(0, 0, 0, 0);
     border-width: 0;
-    padding: 8px;
+    padding: 0;
+    min-width: 80px;
+}
+
+.bottom-bar__button:hover {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.bottom-bar__button:active {
+    opacity: 0.7;
 }
 
 .bottom-bar__icon {
-    font-size: 20px;
+    font-size: 28px;
     color: rgb(255, 255, 255);
     -unity-text-align: middle-center;
 }
 
 .bottom-bar__icon--large {
-    font-size: 28px;
+    font-size: 40px;
+    -unity-font-style: bold;
 }
 
 .bottom-bar__label {
-    font-size: 12px;
+    font-size: 13px;
     color: rgb(255, 255, 255);
     -unity-text-align: middle-center;
-    margin-top: 4px;
+    margin-top: 3px;
+    -unity-font-style: bold;
 }
 
+/* ============================================================
+   FURNITURE DISMISS OVERLAY
+============================================================ */
+.furniture-dismiss-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(44, 36, 22, 0.35);
+}
 
-/* ============================================
+/* ============================================================
    FURNITURE PANEL SHELL
-============================================ */
-
+============================================================ */
 .furniture-panel {
     position: absolute;
     top: 0;
     bottom: 0;
     right: 0;
     width: 55%;
-    background-color: rgb(255, 255, 255);
-    border-top-left-radius: 20px;
-    border-bottom-left-radius: 20px;
+    background-color: rgb(245, 240, 232);
+    border-top-left-radius: 24px;
+    border-bottom-left-radius: 24px;
+    border-left-width: 1px;
+    border-left-color: rgb(232, 224, 208);
     flex-direction: column;
     translate: 100% 0;
     overflow: hidden;
@@ -175,38 +160,41 @@
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    padding-top: 16px;
+    padding-top: 20px;
     padding-bottom: 12px;
     padding-left: 20px;
     padding-right: 16px;
     border-bottom-width: 1px;
-    border-bottom-color: rgb(230, 230, 230);
+    border-bottom-color: rgb(232, 224, 208);
+    background-color: rgb(245, 240, 232);
 }
 
 .furniture-panel__title {
-    font-size: 22px;
-    color: rgb(20, 20, 20);
+    font-size: 20px;
+    color: rgb(44, 36, 22);
     -unity-font-style: bold;
 }
 
 .furniture-panel__search-btn {
     width: 36px;
     height: 36px;
-    background-color: transparent;
+    background-color: rgb(237, 232, 222);
+    border-radius: 18px;
     border-width: 0;
     align-items: center;
     justify-content: center;
 }
 
 .furniture-panel__search-icon {
-    font-size: 18px;
-    color: rgb(20, 20, 20);
+    font-size: 16px;
+    color: rgb(61, 47, 30);
 }
 
 .furniture-panel__body {
     flex-grow: 1;
     flex-direction: column;
     overflow: hidden;
+    background-color: rgb(245, 240, 232);
 }
 
 .furniture-panel__scroll {
@@ -216,60 +204,50 @@
     padding-right: 10px;
 }
 
-
-/* ============================================
+/* ============================================================
    FURNITURE PANEL TABS
-============================================ */
-
+============================================================ */
 .furniture-panel__tabs {
     flex-direction: row;
     padding-left: 12px;
     padding-right: 12px;
     padding-bottom: 10px;
-    padding-top: 4px;
+    padding-top: 8px;
     border-bottom-width: 1px;
-    border-bottom-color: rgb(230, 230, 230);
+    border-bottom-color: rgb(232, 224, 208);
+    background-color: rgb(245, 240, 232);
 }
 
 .furniture-tab {
     flex-grow: 1;
-    height: 36px;
+    height: 34px;
     background-color: transparent;
     border-width: 0;
-    border-radius: 20px;
+    border-radius: 999px;
     align-items: center;
     justify-content: center;
-    margin-left: 4px;
-    margin-right: 4px;
+    margin-left: 3px;
+    margin-right: 3px;
 }
 
 .furniture-tab__label {
-    font-size: 13px;
-    color: rgb(120, 120, 120);
+    font-size: 12px;
+    color: rgb(140, 123, 107);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
 }
 
 .furniture-tab--active {
-    background-color: rgb(20, 20, 20);
+    background-color: rgb(61, 47, 30);
 }
 
 .furniture-tab--active .furniture-tab__label {
-    color: rgb(255, 255, 255);
+    color: rgb(245, 240, 232);
 }
 
-
-/* ============================================
+/* ============================================================
    FURNITURE CATEGORY GRID
-============================================ */
-
-.furniture-panel__scroll {
-    flex-grow: 1;
-    padding-top: 12px;
-    padding-left: 10px;
-    padding-right: 10px;
-}
-
+============================================================ */
 .furniture-category-grid {
     flex-direction: column;
     padding-bottom: 20px;
@@ -285,58 +263,62 @@
     flex-grow: 1;
     flex-shrink: 1;
     flex-basis: 0;
-    background-color: rgb(245, 245, 245);
-    border-radius: 14px;
+    background-color: rgb(253, 250, 245);
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: rgb(232, 224, 208);
     align-items: center;
     justify-content: center;
     padding-top: 16px;
     padding-bottom: 14px;
-    border-width: 0;
     cursor: link;
     margin-left: 4px;
     margin-right: 4px;
 }
 
 .category-card:hover {
-    background-color: rgb(235, 235, 235);
+    background-color: rgb(245, 240, 232);
+    border-color: rgb(200, 150, 90);
 }
 
 .category-card:active {
-    scale: 0.97;
-    background-color: rgb(225, 225, 225);
+    scale: 0.96;
+    background-color: rgb(237, 232, 222);
 }
 
 .category-card__icon-area {
-    width: 72px;
-    height: 72px;
+    width: 68px;
+    height: 68px;
     align-items: center;
     justify-content: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
+    background-color: rgb(237, 232, 222);
+    border-radius: 34px;
 }
 
 .category-card__emoji {
-    font-size: 36px;
+    font-size: 32px;
     -unity-text-align: middle-center;
 }
 
 .category-card__name {
-    font-size: 13px;
-    color: rgb(20, 20, 20);
+    font-size: 12px;
+    color: rgb(44, 36, 22);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     white-space: normal;
-    padding-left: 8px;
-    padding-right: 8px;
+    padding-left: 6px;
+    padding-right: 6px;
 }
 
-/* ============================================
+/* ============================================================
    FURNITURE PANEL BACK BUTTON
-============================================ */
-
+============================================================ */
 .furniture-panel__back-btn {
     width: 32px;
     height: 32px;
-    background-color: transparent;
+    background-color: rgb(237, 232, 222);
+    border-radius: 16px;
     border-width: 0;
     align-items: center;
     justify-content: center;
@@ -349,17 +331,16 @@
 }
 
 .furniture-panel__back-icon {
-    font-size: 28px;
-    color: rgb(20, 20, 20);
+    font-size: 24px;
+    color: rgb(44, 36, 22);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     margin-top: -4px;
 }
 
-/* ============================================
-   NAVIGATION SLIDE ANIMATION CONTAINERS
-============================================ */
-
+/* ============================================================
+   NAVIGATION SLIDE CONTAINERS
+============================================================ */
 .furniture-nav-container {
     flex-grow: 1;
     flex-direction: row;
@@ -372,10 +353,9 @@
     flex-shrink: 0;
 }
 
-/* ============================================
-   FILTER CHIPS ROW
-============================================ */
-
+/* ============================================================
+   FILTER CHIPS
+============================================================ */
 .filter-chips-scroll {
     flex-shrink: 0;
     margin-bottom: 8px;
@@ -393,14 +373,14 @@
 }
 
 .filter-chip {
-    height: 52px;
-    min-width: 80px;
-    border-radius: 14px;
+    height: 34px;
+    min-width: 70px;
+    border-radius: 999px;
     border-width: 1px;
-    border-color: rgb(200, 200, 200);
-    background-color: rgb(245, 245, 245);
-    padding-left: 10px;
-    padding-right: 10px;
+    border-color: rgb(213, 204, 188);
+    background-color: rgb(253, 250, 245);
+    padding-left: 14px;
+    padding-right: 14px;
     align-items: center;
     justify-content: center;
     margin-right: 8px;
@@ -409,28 +389,24 @@
 }
 
 .filter-chip--active {
-    background-color: rgb(20, 20, 20);
-    border-color: rgb(20, 20, 20);
+    background-color: rgb(61, 47, 30);
+    border-color: rgb(61, 47, 30);
 }
 
 .filter-chip__label {
     font-size: 12px;
-    color: rgb(20, 20, 20);
+    color: rgb(44, 36, 22);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
-    white-space: normal;
-    padding-left: 4px;
-    padding-right: 4px;
 }
 
 .filter-chip--active .filter-chip__label {
-    color: rgb(255, 255, 255);
+    color: rgb(245, 240, 232);
 }
 
-/* ============================================
+/* ============================================================
    SORT BAR
-============================================ */
-
+============================================================ */
 .sort-bar {
     flex-direction: row;
     align-items: center;
@@ -441,8 +417,8 @@
 }
 
 .sort-btn {
-    height: 34px;
-    border-radius: 20px;
+    height: 32px;
+    border-radius: 999px;
     border-width: 0;
     background-color: transparent;
     padding-left: 14px;
@@ -454,26 +430,26 @@
 }
 
 .sort-btn--active {
-    background-color: rgb(20, 20, 20);
+    background-color: rgb(61, 47, 30);
 }
 
 .sort-btn__label {
-    font-size: 13px;
-    color: rgb(120, 120, 120);
+    font-size: 12px;
+    color: rgb(140, 123, 107);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
 }
 
 .sort-btn--active .sort-btn__label {
-    color: rgb(255, 255, 255);
+    color: rgb(245, 240, 232);
 }
 
 .sort-filter-icon-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 20px;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
     border-width: 1px;
-    border-color: rgb(200, 200, 200);
+    border-color: rgb(213, 204, 188);
     background-color: transparent;
     align-items: center;
     justify-content: center;
@@ -486,11 +462,9 @@
     -unity-text-align: middle-center;
 }
 
-
-/* ============================================
+/* ============================================================
    ITEM LIST
-============================================ */
-
+============================================================ */
 .item-list-scroll {
     flex-grow: 1;
     padding-left: 10px;
@@ -503,28 +477,30 @@
 }
 
 .item-card {
-    background-color: rgb(248, 248, 248);
+    background-color: rgb(253, 250, 245);
     border-radius: 16px;
-    margin-bottom: 12px;
-    border-width: 0;
+    border-width: 1px;
+    border-color: rgb(232, 224, 208);
+    margin-bottom: 10px;
     overflow: hidden;
     cursor: link;
 }
 
 .item-card:active {
     scale: 0.98;
+    background-color: rgb(245, 240, 232);
 }
 
 .item-card__image-area {
     width: 100%;
-    height: 160px;
-    background-color: rgb(235, 235, 235);
+    height: 150px;
+    background-color: rgb(237, 232, 222);
     align-items: center;
     justify-content: center;
 }
 
 .item-card__placeholder-emoji {
-    font-size: 64px;
+    font-size: 60px;
     -unity-text-align: middle-center;
 }
 
@@ -532,26 +508,28 @@
     position: absolute;
     bottom: 10px;
     left: 10px;
-    background-color: rgb(255, 255, 255);
+    background-color: rgba(245, 240, 232, 0.92);
     border-radius: 6px;
     padding-left: 8px;
     padding-right: 8px;
     padding-top: 3px;
     padding-bottom: 3px;
+    border-width: 1px;
+    border-color: rgb(213, 204, 188);
 }
 
 .item-card__badge-text {
     font-size: 10px;
-    color: rgb(20, 20, 20);
+    color: rgb(61, 47, 30);
     -unity-font-style: bold;
     letter-spacing: 1px;
 }
 
 .item-card__info {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 12px;
+    padding-right: 12px;
     padding-top: 10px;
-    padding-bottom: 14px;
+    padding-bottom: 12px;
     flex-direction: row;
     align-items: flex-start;
     justify-content: space-between;
@@ -564,20 +542,20 @@
 }
 
 .item-card__name {
-    font-size: 14px;
-    color: rgb(20, 20, 20);
+    font-size: 13px;
+    color: rgb(44, 36, 22);
     -unity-font-style: bold;
     margin-bottom: 3px;
 }
 
 .item-card__dimensions {
-    font-size: 12px;
-    color: rgb(120, 120, 120);
+    font-size: 11px;
+    color: rgb(140, 123, 107);
 }
 
 .item-card__fav-btn {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     background-color: transparent;
     border-width: 0;
     align-items: center;
@@ -586,45 +564,44 @@
 }
 
 .item-card__fav-icon {
-    font-size: 18px;
+    font-size: 16px;
     -unity-text-align: middle-center;
+    color: rgb(200, 150, 90);
 }
 
-
-/* ============================================
+/* ============================================================
    ITEM DETAIL SHEET
-============================================ */
-
+============================================================ */
 .item-detail-overlay {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(44, 36, 22, 0.45);
     align-items: center;
     justify-content: flex-end;
 }
 
-.item-detail-overlay--visible {
-    display: flex;
-}
-
 .item-detail-sheet {
     width: 100%;
-    background-color: rgb(255, 255, 255);
-    border-top-left-radius: 24px;
-    border-top-right-radius: 24px;
+    background-color: rgb(245, 240, 232);
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
+    border-top-width: 1px;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-color: rgb(232, 224, 208);
     flex-direction: column;
     max-height: 90%;
     translate: 0 100%;
 }
 
 .item-detail-handle {
-    width: 40px;
+    width: 36px;
     height: 4px;
     border-radius: 999px;
-    background-color: rgb(210, 210, 210);
+    background-color: rgb(213, 204, 188);
     align-self: center;
     margin-top: 12px;
     margin-bottom: 4px;
@@ -642,25 +619,26 @@
 }
 
 .item-detail-nav-btn {
-    width: 40px;
-    height: 40px;
-    background-color: transparent;
+    width: 38px;
+    height: 38px;
+    background-color: rgb(237, 232, 222);
+    border-radius: 19px;
     border-width: 0;
     align-items: center;
     justify-content: center;
 }
 
 .item-detail-nav-icon {
-    font-size: 28px;
-    color: rgb(20, 20, 20);
+    font-size: 24px;
+    color: rgb(44, 36, 22);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     margin-top: -4px;
 }
 
 .item-detail-close-icon {
-    font-size: 18px;
-    color: rgb(20, 20, 20);
+    font-size: 16px;
+    color: rgb(44, 36, 22);
     -unity-text-align: middle-center;
 }
 
@@ -670,15 +648,17 @@
 
 .item-detail-image-area {
     width: 100%;
-    height: 220px;
-    background-color: rgb(240, 240, 240);
+    height: 210px;
+    background-color: rgb(237, 232, 222);
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(228, 220, 206);
 }
 
 .item-detail-emoji {
-    font-size: 96px;
+    font-size: 90px;
     -unity-text-align: middle-center;
 }
 
@@ -704,14 +684,15 @@
 }
 
 .item-detail-brand {
-    font-size: 13px;
-    color: rgb(100, 100, 100);
+    font-size: 11px;
+    color: rgb(140, 123, 107);
     margin-bottom: 2px;
+    letter-spacing: 1px;
 }
 
 .item-detail-name {
     font-size: 22px;
-    color: rgb(20, 20, 20);
+    color: rgb(44, 36, 22);
     -unity-font-style: bold;
 }
 
@@ -728,27 +709,29 @@
 .item-detail-fav-icon {
     font-size: 22px;
     -unity-text-align: middle-center;
+    color: rgb(200, 150, 90);
 }
 
 .item-detail-dimensions {
-    font-size: 13px;
-    color: rgb(120, 120, 120);
+    font-size: 12px;
+    color: rgb(140, 123, 107);
     margin-bottom: 4px;
 }
 
 .item-detail-divider {
     height: 1px;
-    background-color: rgb(230, 230, 230);
+    background-color: rgb(228, 220, 206);
     width: 100%;
     margin-top: 14px;
     margin-bottom: 14px;
 }
 
 .item-detail-section-title {
-    font-size: 15px;
-    color: rgb(20, 20, 20);
+    font-size: 14px;
+    color: rgb(61, 47, 30);
     -unity-font-style: bold;
     margin-bottom: 10px;
+    letter-spacing: 0.5px;
 }
 
 .item-detail-color-row {
@@ -758,8 +741,8 @@
 }
 
 .item-detail-color-swatch {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border-radius: 999px;
     margin-right: 8px;
     margin-bottom: 8px;
@@ -769,12 +752,12 @@
 }
 
 .item-detail-color-swatch--selected {
-    border-color: rgb(20, 20, 20);
+    border-color: rgb(61, 47, 30);
 }
 
 .item-detail-description {
     font-size: 13px;
-    color: rgb(80, 80, 80);
+    color: rgb(100, 88, 72);
     white-space: normal;
     line-height: 1.6;
 }
@@ -785,14 +768,15 @@
     padding-top: 12px;
     padding-bottom: 32px;
     border-top-width: 1px;
-    border-top-color: rgb(230, 230, 230);
+    border-top-color: rgb(228, 220, 206);
+    background-color: rgb(245, 240, 232);
     flex-shrink: 0;
 }
 
 .item-detail-add-btn {
     width: 100%;
     height: 52px;
-    background-color: rgb(20, 20, 20);
+    background-color: rgb(61, 47, 30);
     border-radius: 999px;
     border-width: 0;
     align-items: center;
@@ -801,14 +785,15 @@
 }
 
 .item-detail-add-btn:active {
-    background-color: rgb(60, 60, 60);
+    background-color: rgb(44, 36, 22);
     scale: 0.98;
 }
 
 .item-detail-add-label {
     font-size: 15px;
-    color: rgb(255, 255, 255);
+    color: rgb(245, 240, 232);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     letter-spacing: 0.5px;
 }
+

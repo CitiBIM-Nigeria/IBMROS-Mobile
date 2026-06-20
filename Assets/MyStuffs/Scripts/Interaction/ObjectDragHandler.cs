@@ -20,10 +20,13 @@ public class ObjectDragHandler : MonoBehaviour
     private Vector3 _grabOffset;
 
     public bool IsDragging => _isDragging;
+    
+    private LayerMask _wallMask = 0;
 
     void Awake()
     {
         _mainCamera = Camera.main;
+        _wallMask = LayerMask.GetMask("Wall", "Default");
     }
 
     void OnEnable()
@@ -69,14 +72,23 @@ public class ObjectDragHandler : MonoBehaviour
         if (!hitSelected)
             return false;
 
-        _isDragging = true;
+        _isDragging        = true;
         _dragStartPosition = _selectedObject.position;
 
-        // Find where the floor would be hit under the same touch
+        // Only store XZ grab offset — Y is always calculated from floor
         if (Physics.Raycast(ray, out RaycastHit floorHit, 100f, floorLayer))
-            _grabOffset = _selectedObject.position - floorHit.point;
+        {
+            // XZ offset only — keeps object under finger horizontally
+            _grabOffset = new Vector3(
+                _selectedObject.position.x - floorHit.point.x,
+                0f,  // Y handled separately in UpdateDrag
+                _selectedObject.position.z - floorHit.point.z
+            );
+        }
         else
+        {
             _grabOffset = Vector3.zero;
+        }
 
         OnDragStart?.Invoke();
         return true;
@@ -84,26 +96,59 @@ public class ObjectDragHandler : MonoBehaviour
 
     public void UpdateDrag(Vector2 screenPosition)
     {
-        if (!_isDragging || _selectedObject == null)
-            return;
+        if (!_isDragging || _selectedObject == null) return;
 
         Ray ray = _mainCamera.ScreenPointToRay(screenPosition);
 
         if (Physics.Raycast(ray, out RaycastHit hit, 100f, floorLayer))
         {
-            Vector3 targetPosition = hit.point + _grabOffset;
-
-            Renderer renderer = _selectedObject.GetComponentInChildren<Renderer>();
-            if (renderer != null)
+            // XZ from floor hit + grab offset
+            // Y always from floor + pivot-to-bottom so chair never sinks
+            float pivotToBase = 0f;
+            Renderer[] renderers = _selectedObject.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
             {
-                float pivotToBase = _selectedObject.position.y - renderer.bounds.min.y;
-                targetPosition.y = hit.point.y + pivotToBase;
+                Bounds combined = renderers[0].bounds;
+                foreach (var r in renderers)
+                    combined.Encapsulate(r.bounds);
+                pivotToBase = _selectedObject.position.y - combined.min.y;
             }
+            
+            Vector3 targetPosition = new Vector3(
+                hit.point.x + _grabOffset.x,
+                hit.point.y + pivotToBase,
+                hit.point.z + _grabOffset.z
+            );
 
-            _selectedObject.position = targetPosition;
+            Vector3 direction = targetPosition - _selectedObject.position;
+            float   distance  = direction.magnitude;
+
+            if (distance > 0.001f)
+            {
+                var box = _selectedObject.GetComponent<BoxCollider>();
+                if (box != null)
+                {
+                    if (!Physics.BoxCast(
+                            _selectedObject.position,
+                            box.size * 0.45f,
+                            direction.normalized,
+                            out _,
+                            _selectedObject.rotation,
+                            distance,
+                            _wallMask))
+                    {
+                        _selectedObject.position = targetPosition;
+                    }
+                }
+                else
+                {
+                    _selectedObject.position = targetPosition;
+                }
+            }
         }
     }
 
+ 
     public void EndDrag()
     {
         if (!_isDragging)

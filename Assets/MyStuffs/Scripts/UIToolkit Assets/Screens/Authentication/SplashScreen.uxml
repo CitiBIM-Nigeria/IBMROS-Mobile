@@ -1,7 +1,9 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
-    <Style src="project://database/Assets/MyStuffs/IbmRos/Scripts/UI/Styles/IbmRosTheme.uss?fileID=7433441132597879392&amp;guid=934fe7e1c0c5c4bf4a36002625785e6f&amp;type=3#IbmRosTheme"/>
-    <Style src="project://database/Assets/MyStuffs/IbmRos/Scripts/UI/Styles/SplashScreen.uss?fileID=7433441132597879392&amp;guid=a625fe389faf4476aa11b49379def590&amp;type=3#SplashScreen"/>
+    <Style src="project://database/Assets/MyStuffs/Scripts/UIToolkit%20Assets/Styles/IbmRosTheme.uss?fileID=7433441132597879392&amp;guid=934fe7e1c0c5c4bf4a36002625785e6f&amp;type=3#IbmRosTheme"/>
+    <Style src="project://database/Assets/MyStuffs/Scripts/UIToolkit%20Assets/Styles/Authentication/SplashScreen.uss?fileID=7433441132597879392&amp;guid=a625fe389faf4476aa11b49379def590&amp;type=3#SplashScreen"/>
     <ui:VisualElement name="SplashScreen" picking-mode="Ignore" class="splash-root">
+        <ui:VisualElement name="SplashBgImage" picking-mode="Ignore" class="splash-bg-image"/>
+        <ui:VisualElement name="SplashBgOverlay" picking-mode="Ignore" class="splash-bg-overlay"/>
         <ui:VisualElement name="SplashGlow1" picking-mode="Ignore" class="splash-glow splash-glow--1"/>
         <ui:VisualElement name="SplashGlow2" picking-mode="Ignore" class="splash-glow splash-glow--2"/>
         <ui:VisualElement name="SplashContent" picking-mode="Ignore" class="splash-content">

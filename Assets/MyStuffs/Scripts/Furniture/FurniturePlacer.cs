@@ -12,6 +12,14 @@ public class FurniturePlacer : MonoBehaviour
     [SerializeField] private LayerMask floorLayer;
     [SerializeField] private float placementHeightOffset = 0f;
 
+    [Header("Initial Snap")]
+    [Tooltip("How far in front of the camera to spawn the object (XZ plane).")]
+    [SerializeField] private float spawnDistanceForward = 2.5f;
+
+    [Tooltip("How high above the spawn point to start the downward raycast. " +
+             "Increase this if your floor is below world Y=0.")]
+    [SerializeField] private float snapRaycastStartHeight = 5f;
+
     public event Action<FurnitureItem> OnFurniturePlaced;
     public event Action OnPlacementCancelled;
 
@@ -19,11 +27,11 @@ public class FurniturePlacer : MonoBehaviour
     private FurnitureItem _previewItem;
     private bool _isPlacing = false;
     private Camera _mainCamera;
-    
+
     private Vector3 _smoothedPosition;
-    private bool    _hasInitialPosition = false;
+    private bool _hasInitialPosition = false;
     public float POSITION_SMOOTH_SPEED = 2f;
-    
+
     private float _pivotToBottomOffset = 0f;
 
     void Awake()
@@ -48,7 +56,6 @@ public class FurniturePlacer : MonoBehaviour
             inputManager.OnPointerClick -= HandlePointerClick;
         }
     }
-    
 
     public void CancelPlacement()
     {
@@ -57,10 +64,10 @@ public class FurniturePlacer : MonoBehaviour
         if (_previewObject != null)
             Destroy(_previewObject);
 
-        _previewObject       = null;
-        _previewItem         = null;
-        _isPlacing           = false;
-        _hasInitialPosition  = false;
+        _previewObject      = null;
+        _previewItem        = null;
+        _isPlacing          = false;
+        _hasInitialPosition = false;
         _pivotToBottomOffset = 0f;
 
         OnPlacementCancelled?.Invoke();
@@ -68,6 +75,10 @@ public class FurniturePlacer : MonoBehaviour
     }
 
     public bool IsPlacing => _isPlacing;
+
+    // ---------------------------------------------------------------
+    // INPUT HANDLERS
+    // ---------------------------------------------------------------
 
     private void HandlePointerMove(Vector2 screenPosition)
     {
@@ -78,17 +89,14 @@ public class FurniturePlacer : MonoBehaviour
         if (!Physics.Raycast(ray, out RaycastHit hit, 100f, floorLayer))
             return;
 
-        // Calculate the correctly lifted target position
         Vector3 targetPosition = GetLiftedPosition(hit.point);
 
-        // Initialise smoothed position on first move
         if (!_hasInitialPosition)
         {
-            _smoothedPosition    = targetPosition;
-            _hasInitialPosition  = true;
+            _smoothedPosition   = targetPosition;
+            _hasInitialPosition = true;
         }
 
-        // Smooth toward target — kills the jitter
         _smoothedPosition = Vector3.Lerp(
             _smoothedPosition,
             targetPosition,
@@ -96,15 +104,6 @@ public class FurniturePlacer : MonoBehaviour
         );
 
         _previewObject.transform.position = _smoothedPosition;
-    }
-    
-    private Vector3 GetLiftedPosition(Vector3 hitPoint)
-    {
-        return new Vector3(
-            hitPoint.x,
-            hitPoint.y + _pivotToBottomOffset + placementHeightOffset,
-            hitPoint.z
-        );
     }
 
     private void HandlePointerClick(Vector2 screenPosition)
@@ -117,19 +116,14 @@ public class FurniturePlacer : MonoBehaviour
         if (!Physics.Raycast(ray, out RaycastHit hit, 100f, floorLayer))
             return;
 
-        // Confirm placement at tap position
         _previewObject.transform.position = hit.point;
         ApplyFloorOffset(hit.point);
 
-        // Restore normal material
         SetPreviewMaterial(false);
-
         _previewItem.SetPlaced(true);
 
-        // Register with furniture registry
         furnitureRegistry?.Register(_previewItem);
 
-        // Record undo action
         UndoRedoManager.Instance?.Record(
             new PlaceAction(_previewObject, selectionManager)
         );
@@ -137,19 +131,133 @@ public class FurniturePlacer : MonoBehaviour
         FurnitureItem placedItem = _previewItem;
 
         _previewObject = null;
-        _previewItem = null;
-        _isPlacing = false;
+        _previewItem   = null;
+        _isPlacing     = false;
 
-        // Auto select the placed object
         selectionManager?.SelectObject(placedItem.transform);
-
         OnFurniturePlaced?.Invoke(placedItem);
     }
-    
+
+    // ---------------------------------------------------------------
+    // BEGIN PLACEMENT
+    // ---------------------------------------------------------------
+
+    public void BeginPlacement(GameObject furniturePrefab)
+    {
+        if (furniturePrefab == null) return;
+        if (_isPlacing) CancelPlacement();
+
+        _previewObject = Instantiate(furniturePrefab);
+        _previewItem   = _previewObject.GetComponent<FurnitureItem>()
+                         ?? _previewObject.AddComponent<FurnitureItem>();
+
+        SetPreviewMaterial(true);
+        _isPlacing = true;
+
+        selectionManager?.DeselectObject();
+        SnapToFloorInFrontOfCamera();
+
+        Debug.Log($"[FurniturePlacer] Placement started for {furniturePrefab.name}");
+    }
+
+    public void BeginPlacementFromInstance(GameObject sceneInstance)
+    {
+        if (sceneInstance == null) return;
+        if (_isPlacing) CancelPlacement();
+
+        _previewObject = sceneInstance;
+        _previewItem   = _previewObject.GetComponent<FurnitureItem>()
+                         ?? _previewObject.AddComponent<FurnitureItem>();
+
+        SetPreviewMaterial(true);
+        _isPlacing = true;
+
+        selectionManager?.DeselectObject();
+        SnapToFloorInFrontOfCamera();
+
+        Debug.Log($"[FurniturePlacer] Placement started (from instance) for {sceneInstance.name}");
+    }
+
+    // ---------------------------------------------------------------
+    // SNAP TO FLOOR — fixed
+    //
+    // Old approach: ray from camera position going camera.forward
+    //   Problem: at eye height the ray hits a wall or flies over the
+    //   floor entirely, leaving the ghost floating in the air.
+    //
+    // New approach:
+    //   1. Pick a point on the XZ plane directly in front of the camera
+    //      (ignoring camera pitch so it's always on the floor plane).
+    //   2. Cast a ray straight DOWN from high above that point.
+    //   3. That ray always hits the floor regardless of camera angle.
+    // ---------------------------------------------------------------
+
+    private void SnapToFloorInFrontOfCamera()
+    {
+        if (_mainCamera == null)
+            _mainCamera = Camera.main;
+
+        if (_mainCamera == null) return;
+
+        // Step 1 — find a point in front of the camera on the XZ plane.
+        // We use the camera's yaw (Y rotation) only, ignoring pitch,
+        // so the target point is always at floor level distance.
+        Vector3 flatForward = _mainCamera.transform.forward;
+        flatForward.y = 0f;
+
+        // If camera is looking straight up/down flatForward can be zero
+        if (flatForward.sqrMagnitude < 0.001f)
+            flatForward = _mainCamera.transform.right; // fallback
+
+        flatForward.Normalize();
+
+        Vector3 targetXZ = _mainCamera.transform.position
+                           + flatForward * spawnDistanceForward;
+
+        // Step 2 — cast straight down from above that point to find the floor.
+        Vector3 rayOrigin = new Vector3(targetXZ.x,
+                                        targetXZ.y + snapRaycastStartHeight,
+                                        targetXZ.z);
+
+        Ray downRay = new Ray(rayOrigin, Vector3.down);
+
+        if (Physics.Raycast(downRay, out RaycastHit hit,
+                            snapRaycastStartHeight + 20f, floorLayer))
+        {
+            Debug.Log($"[FurniturePlacer] Floor hit at {hit.point}");
+            ApplyFloorOffset(hit.point);
+        }
+        else
+        {
+            // Fallback — floor collider not found on floorLayer.
+            // Place at the XZ target position at Y=0 as a last resort.
+            // This usually means floorLayer isn't assigned correctly.
+            Debug.LogWarning("[FurniturePlacer] Floor not found via downward raycast. " +
+                             "Check that floorLayer is assigned and your floor has a collider " +
+                             "on that layer. Falling back to Y=0.");
+
+            Vector3 fallback = targetXZ;
+            fallback.y = 0f;
+            ApplyFloorOffset(fallback);
+        }
+
+        // Initialise smoothed position to avoid lerp-from-zero on first move
+        if (_previewObject != null)
+        {
+            _smoothedPosition   = _previewObject.transform.position;
+            _hasInitialPosition = true;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // FLOOR OFFSET — lifts pivot so bottom of mesh sits on the floor
+    // ---------------------------------------------------------------
+
     private void ApplyFloorOffset(Vector3 hitPoint)
     {
         if (_previewObject == null) return;
 
+        // Place at hit point first so bounds are calculated in world space
         _previewObject.transform.position = hitPoint;
 
         Renderer[] renderers = _previewObject.GetComponentsInChildren<Renderer>();
@@ -157,7 +265,8 @@ public class FurniturePlacer : MonoBehaviour
         if (renderers.Length == 0)
         {
             _pivotToBottomOffset = 0f;
-            _previewObject.transform.position = hitPoint + Vector3.up * placementHeightOffset;
+            _previewObject.transform.position = hitPoint
+                + Vector3.up * placementHeightOffset;
             return;
         }
 
@@ -165,13 +274,27 @@ public class FurniturePlacer : MonoBehaviour
         foreach (var r in renderers)
             combined.Encapsulate(r.bounds);
 
-        // Cache this offset — reused every move frame
-        _pivotToBottomOffset = _previewObject.transform.position.y - combined.min.y;
+        // Distance from pivot (current Y) to the bottom of the mesh
+        _pivotToBottomOffset = _previewObject.transform.position.y
+                               - combined.min.y;
 
-        Vector3 finalPosition  = hitPoint;
-        finalPosition.y       += _pivotToBottomOffset + placementHeightOffset;
+        Vector3 finalPosition = hitPoint;
+        finalPosition.y += _pivotToBottomOffset + placementHeightOffset;
         _previewObject.transform.position = finalPosition;
     }
+
+    private Vector3 GetLiftedPosition(Vector3 hitPoint)
+    {
+        return new Vector3(
+            hitPoint.x,
+            hitPoint.y + _pivotToBottomOffset + placementHeightOffset,
+            hitPoint.z
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // PREVIEW MATERIAL — semi-transparent ghost
+    // ---------------------------------------------------------------
 
     private void SetPreviewMaterial(bool isPreview)
     {
@@ -191,8 +314,10 @@ public class FurniturePlacer : MonoBehaviour
                 if (isPreview)
                 {
                     mat.SetFloat("_Mode", 3);
-                    mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                    mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                    mat.SetInt("_SrcBlend",
+                        (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                    mat.SetInt("_DstBlend",
+                        (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
                     mat.SetInt("_ZWrite", 0);
                     mat.EnableKeyword("_ALPHABLEND_ON");
                     mat.renderQueue = 3000;
@@ -200,84 +325,15 @@ public class FurniturePlacer : MonoBehaviour
                 else
                 {
                     mat.SetFloat("_Mode", 0);
-                    mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-                    mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+                    mat.SetInt("_SrcBlend",
+                        (int)UnityEngine.Rendering.BlendMode.One);
+                    mat.SetInt("_DstBlend",
+                        (int)UnityEngine.Rendering.BlendMode.Zero);
                     mat.SetInt("_ZWrite", 1);
                     mat.DisableKeyword("_ALPHABLEND_ON");
                     mat.renderQueue = -1;
                 }
             }
         }
-    }
-    
-    // Use this when the GameObject is already instantiated in the scene (e.g. from GLB loader)
-    public void BeginPlacement(GameObject furniturePrefab)
-    {
-        if (furniturePrefab == null) return;
-        if (_isPlacing) CancelPlacement();
-
-        _previewObject = Instantiate(furniturePrefab);
-        _previewItem   = _previewObject.GetComponent<FurnitureItem>()
-                         ?? _previewObject.AddComponent<FurnitureItem>();
-
-        SetPreviewMaterial(true);
-        _isPlacing = true;
-
-        selectionManager?.DeselectObject();
-
-        // Snap to floor immediately so it never appears sunken
-        SnapToInitialPosition();
-
-        Debug.Log($"[FurniturePlacer] Placement started for {furniturePrefab.name}");
-    }
-
-    public void BeginPlacementFromInstance(GameObject sceneInstance)
-    {
-        if (sceneInstance == null) return;
-        if (_isPlacing) CancelPlacement();
-
-        _previewObject = sceneInstance;
-        _previewItem   = _previewObject.GetComponent<FurnitureItem>()
-                         ?? _previewObject.AddComponent<FurnitureItem>();
-
-        SetPreviewMaterial(true);
-        _isPlacing = true;
-
-        selectionManager?.DeselectObject();
-
-        // Snap to floor immediately so it never appears sunken
-        SnapToInitialPosition();
-
-        Debug.Log($"[FurniturePlacer] Placement started (from instance) for {sceneInstance.name}");
-    }
-    
-    private void SnapToInitialPosition()
-    {
-        if (_mainCamera == null)
-            _mainCamera = Camera.main;
-
-        if (_mainCamera == null) return;
-
-        // Cast a ray from camera centre forward to find the floor
-        Ray ray = new Ray(_mainCamera.transform.position, _mainCamera.transform.forward);
-
-        Vector3 spawnPoint;
-
-        if (Physics.Raycast(ray, out RaycastHit hit, 20f, floorLayer))
-        {
-            spawnPoint = hit.point;
-        }
-        else
-        {
-            // Fallback — fixed distance in front of camera on XZ plane
-            Vector3 forward = _mainCamera.transform.forward;
-            forward.y = 0;
-            forward.Normalize();
-            spawnPoint   = _mainCamera.transform.position + forward * 3f;
-            spawnPoint.y = 0f;
-        }
-
-        // Use ApplyFloorOffset to lift it correctly off the floor
-        ApplyFloorOffset(spawnPoint);
     }
 }

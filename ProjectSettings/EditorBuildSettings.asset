@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/MyStuffs/Scenes/Room.unity
     guid: ed3418a1c1b044fdcb7d59dbf75f8048
+  - enabled: 1
+    path: Assets/MyStuffs/Scenes/IKEAStore.unity
+    guid: 9462e43059c12f24f8117b2f14cb21c1
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

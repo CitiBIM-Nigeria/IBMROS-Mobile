@@ -151,5 +151,39 @@ public class AwsManager : MonoBehaviour
         }
     }
     
+    public async Task RefreshCredentialsIfNeeded()
+    {
+        try
+        {
+            var region = RegionEndpoint.GetBySystemName(AwsConfig.Region);
+
+            // Create a completely new credentials object
+            // ClearCredentials() does not fix an expired Cognito identity token
+            // Only a brand new CognitoAWSCredentials fixes this
+            _credentials = new CognitoAWSCredentials(
+                AwsConfig.IdentityPoolId,
+                region
+            );
+
+            // Rebuild clients with the fresh credentials
+            S3Client       = new AmazonS3Client(_credentials, region);
+            DynamoDBClient = new AmazonDynamoDBClient(_credentials, region);
+
+            // If user is authenticated, re-add their login token
+            // so they do not lose their authenticated session
+            // (skip this block if you only use guest access)
+            // _credentials.AddLogin(AwsConfig.CognitoProviderName, savedIdToken);
+
+            // Pre-fetch to confirm credentials work before returning
+            await _credentials.GetCredentialsAsync();
+
+            Debug.Log("[AwsManager] Credentials refreshed successfully.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[AwsManager] RefreshCredentials error: {e.Message}");
+        }
+    }
+    
    
 }

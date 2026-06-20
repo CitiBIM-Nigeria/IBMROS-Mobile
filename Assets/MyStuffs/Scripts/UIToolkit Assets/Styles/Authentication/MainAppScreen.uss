@@ -1,8 +1,47 @@
 @import url("project://database/Assets/MyStuffs/IbmRos/Scripts/UI/Styles/IbmRosTheme.uss?fileID=7433441132597879392&guid=934fe7e1c0c5c4bf4a36002625785e6f&type=3#IbmRosTheme");
 
 /* ============================================
-   MAIN APP SCREEN STYLES
+   MAIN APP SCREEN  —  v2
+   Simplified layout:
+     • No AR banner
+     • No furniture catalog / category chips
+     • My Rooms — Add Room button only for now
+     • 3-item bottom nav (Home, Rooms, Profile)
+     • Theme toggle + accent picker in profile panel
 ============================================ */
+
+
+/* ============================================
+   ROOT & SCROLL
+============================================ */
+
+.main-app-root {
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+    background-color: var(--color-bg-primary);
+}
+
+.main-scroll {
+    flex-grow: 1;
+    width: 100%;
+}
+
+.main-scroll > .unity-scroll-view__content-and-vertical-scroll-container {
+    flex-grow: 1;
+}
+
+.main-scroll > .unity-scroll-view__content-and-vertical-scroll-container
+> .unity-scroll-view__content-container {
+    padding: 0;
+}
+
+.main-content {
+    flex-direction: column;
+    width: 100%;
+    padding-bottom: var(--space-4);
+}
+
 
 /* ============================================
    TOP HEADER
@@ -16,9 +55,9 @@
     padding-left: var(--space-5);
     padding-right: var(--space-5);
     padding-bottom: var(--space-4);
-    background-color: var(--color-bg-primary);
+    background-color: var(--color-bg-surface);
     border-bottom-width: 1px;
-    border-bottom-color: var(--color-border-default);
+    border-bottom-color: var(--color-border-subtle);
     flex-shrink: 0;
 }
 
@@ -40,7 +79,7 @@
 
 .main-header__logo-text {
     font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
+    color: rgb(255, 255, 255);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
 }
@@ -66,6 +105,7 @@
     align-items: center;
 }
 
+/* Notification / theme-toggle icon buttons */
 .main-header__icon-btn {
     width: 40px;
     height: 40px;
@@ -87,6 +127,7 @@
 .main-header__icon-label {
     font-size: 18px;
     -unity-text-align: middle-center;
+    color: var(--color-text-secondary);
 }
 
 .main-header__profile-btn {
@@ -102,120 +143,9 @@
     border-color: var(--color-brand-secondary);
 }
 
-/* ============================================
-   MAIN SCROLL
-============================================ */
-
-.main-scroll {
-    flex-grow: 1;
-    width: 100%;
-}
-
-.main-scroll > .unity-scroll-view__content-and-vertical-scroll-container {
-    flex-grow: 1;
-}
-
-.main-scroll > .unity-scroll-view__content-and-vertical-scroll-container
-> .unity-scroll-view__content-container {
-    padding: 0;
-}
-
-.main-content {
-    flex-direction: column;
-    width: 100%;
-    padding-bottom: var(--space-4);
-}
 
 /* ============================================
-   AR LAUNCH BANNER
-============================================ */
-
-.main-ar-banner {
-    margin-top: var(--space-5);
-    margin-left: var(--space-5);
-    margin-right: var(--space-5);
-    background-color: var(--color-brand-primary);
-    border-radius: var(--radius-2xl);
-    border-width: 1px;
-    border-color: rgba(10, 132, 255, 0.3);
-    flex-direction: row;
-    overflow: hidden;
-    min-height: 160px;
-}
-
-.main-ar-banner__content {
-    flex-direction: column;
-    flex-grow: 1;
-    padding: var(--space-6);
-    justify-content: center;
-}
-
-.main-ar-banner__tag {
-    font-size: var(--font-size-xs);
-    color: var(--color-brand-accent);
-    -unity-font-style: bold;
-    letter-spacing: var(--letter-spacing-widest);
-    margin-bottom: var(--space-2);
-}
-
-.main-ar-banner__title {
-    font-size: var(--font-size-2xl);
-    color: var(--color-text-primary);
-    -unity-font-style: bold;
-    white-space: normal;
-    margin-bottom: var(--space-2);
-}
-
-.main-ar-banner__subtitle {
-    font-size: var(--font-size-sm);
-    color: rgba(255, 255, 255, 0.6);
-    white-space: normal;
-    margin-bottom: var(--space-5);
-}
-
-.main-ar-banner__btn {
-    background-color: var(--color-brand-secondary);
-    border-radius: var(--radius-full);
-    border-width: 0;
-    height: 40px;
-    padding-left: var(--space-5);
-    padding-right: var(--space-5);
-    align-items: center;
-    justify-content: center;
-    width: auto;
-    align-self: flex-start;
-}
-
-.main-ar-banner__btn Label {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
-    -unity-font-style: bold;
-    letter-spacing: var(--letter-spacing-wide);
-}
-
-.main-ar-banner__btn:hover {
-    background-color: #2196F3;
-}
-
-.main-ar-banner__btn:active {
-    scale: 0.97;
-}
-
-.main-ar-banner__decor {
-    width: 100px;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.main-ar-banner__icon {
-    font-size: 56px;
-    -unity-text-align: middle-center;
-    opacity: 0.8;
-}
-
-/* ============================================
-   SECTIONS
+   SECTION SHARED
 ============================================ */
 
 .main-section {
@@ -243,8 +173,9 @@
     color: var(--color-brand-secondary);
 }
 
+
 /* ============================================
-   ROOMS HORIZONTAL SCROLL
+   MY ROOMS
 ============================================ */
 
 .main-rooms-scroll {
@@ -256,6 +187,7 @@
     flex-direction: row;
     padding-left: var(--space-5);
     padding-right: var(--space-5);
+    padding-bottom: var(--space-2);
 }
 
 .main-rooms-row {
@@ -263,7 +195,7 @@
     align-items: flex-start;
 }
 
-/* Room card base */
+/* Base room card */
 .main-room-card {
     width: 130px;
     background-color: var(--color-bg-surface);
@@ -291,13 +223,13 @@
     height: 150px;
     background-color: transparent;
     border-style: dashed;
-    border-color: var(--color-border-subtle);
+    border-color: var(--color-border-default);
     flex-direction: column;
 }
 
 .main-room-card--add:hover {
     border-color: var(--color-brand-secondary);
-    background-color: rgba(10, 132, 255, 0.05);
+    background-color: rgba(10, 132, 255, 0.04);
 }
 
 .main-room-card__add-icon {
@@ -321,25 +253,27 @@
     color: var(--color-brand-secondary);
 }
 
-/* Room card image area */
+/* Room card image area — drop a background-image here from C# */
 .main-room-card__image {
     width: 100%;
     height: 100px;
     background-color: var(--color-bg-elevated);
     align-items: center;
     justify-content: center;
+    /* IMAGE SLOT: set background-image from C# via:
+       card.Q<VisualElement>("RoomCardImage").style.backgroundImage = ... */
 }
 
 .main-room-card__placeholder-icon {
     font-size: 40px;
     -unity-text-align: middle-center;
-    opacity: 0.6;
+    opacity: 0.5;
 }
 
-/* Room card footer */
 .main-room-card__footer {
     flex-direction: column;
     padding: var(--space-3);
+    background-color: var(--color-bg-surface);
 }
 
 .main-room-card__name {
@@ -354,187 +288,23 @@
     margin-top: 2px;
 }
 
-/* ============================================
-   CATEGORY CHIPS
-============================================ */
-
-.main-category-scroll {
-    width: 100%;
-}
-
-.main-category-scroll > .unity-scroll-view__content-and-vertical-scroll-container
-> .unity-scroll-view__content-container {
-    flex-direction: row;
+/* Empty-state hint shown when there are no saved rooms yet */
+.main-rooms-empty {
     padding-left: var(--space-5);
     padding-right: var(--space-5);
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-4);
 }
 
-.main-category-row {
-    flex-direction: row;
-    align-items: center;
-}
-
-.main-category-chip {
-    background-color: var(--color-bg-elevated);
-    border-radius: var(--radius-full);
-    border-width: 1px;
-    border-color: var(--color-border-subtle);
-    height: 34px;
-    padding-left: var(--space-4);
-    padding-right: var(--space-4);
-    margin-right: var(--space-2);
-    flex-shrink: 0;
-    width: auto;
-}
-
-.main-category-chip Label {
+.main-rooms-empty__text {
     font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    -unity-font-style: bold;
+    color: var(--color-text-placeholder);
+    white-space: normal;
 }
 
-.main-category-chip:hover {
-    border-color: var(--color-brand-secondary);
-}
-
-.main-category-chip--active {
-    background-color: var(--color-brand-secondary);
-    border-color: var(--color-brand-secondary);
-}
-
-.main-category-chip--active Label {
-    color: var(--color-text-primary);
-}
 
 /* ============================================
-   FURNITURE GRID
-============================================ */
-
-.main-furniture-grid {
-    flex-direction: row;
-    flex-wrap: wrap;
-    padding-left: var(--space-5);
-    padding-right: var(--space-3);
-}
-
-.main-furniture-card {
-    width: 48%;
-    background-color: var(--color-bg-surface);
-    border-radius: var(--radius-xl);
-    border-width: 1px;
-    border-color: var(--color-border-subtle);
-    overflow: hidden;
-    margin-right: var(--space-2);
-    margin-bottom: var(--space-3);
-}
-
-.main-furniture-card:hover {
-    border-color: var(--color-border-active);
-}
-
-.main-furniture-card__image {
-    width: 100%;
-    height: 130px;
-    background-color: var(--color-bg-elevated);
-    align-items: center;
-    justify-content: center;
-    position: relative;
-}
-
-.main-furniture-card__placeholder-icon {
-    font-size: 50px;
-    -unity-text-align: middle-center;
-    opacity: 0.7;
-}
-
-/* AR button overlay on furniture image */
-.main-furniture-card__ar-btn {
-    position: absolute;
-    top: var(--space-2);
-    right: var(--space-2);
-    background-color: var(--color-brand-secondary);
-    border-radius: var(--radius-sm);
-    border-width: 0;
-    height: 24px;
-    padding-left: var(--space-2);
-    padding-right: var(--space-2);
-    align-items: center;
-    justify-content: center;
-    width: auto;
-}
-
-.main-furniture-card__ar-btn Label {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-primary);
-    -unity-font-style: bold;
-    letter-spacing: var(--letter-spacing-wide);
-}
-
-.main-furniture-card__ar-btn:hover {
-    background-color: #2196F3;
-}
-
-.main-furniture-card__body {
-    flex-direction: column;
-    padding: var(--space-3);
-}
-
-.main-furniture-card__name {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
-    -unity-font-style: bold;
-}
-
-.main-furniture-card__brand {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
-    margin-top: 2px;
-}
-
-.main-furniture-card__footer {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: var(--space-3);
-}
-
-.main-furniture-card__price {
-    font-size: var(--font-size-md);
-    color: var(--color-brand-secondary);
-    -unity-font-style: bold;
-}
-
-.main-furniture-card__add-btn {
-    width: 28px;
-    height: 28px;
-    background-color: var(--color-brand-secondary);
-    border-radius: var(--radius-full);
-    border-width: 0;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    width: auto;
-}
-
-.main-furniture-card__add-btn Label {
-    font-size: var(--font-size-xl);
-    color: var(--color-text-primary);
-    -unity-text-align: middle-center;
-    -unity-font-style: bold;
-    padding-left: var(--space-2);
-    padding-right: var(--space-2);
-}
-
-.main-furniture-card__add-btn:hover {
-    background-color: #2196F3;
-}
-
-.main-furniture-card__add-btn:active {
-    scale: 0.95;
-}
-
-/* ============================================
-   BOTTOM NAVIGATION BAR
+   BOTTOM NAVIGATION  —  3 items
 ============================================ */
 
 .main-bottom-nav {
@@ -589,43 +359,36 @@
     color: var(--color-text-secondary);
 }
 
-/* Center AR button */
-.main-nav-ar-btn {
-    width: 56px;
-    height: 56px;
-    background-color: var(--color-brand-secondary);
-    border-radius: var(--radius-full);
-    border-width: 0;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    margin-top: -20px;
-    flex-shrink: 0;
+/* Bottom padding so scroll content clears the nav bar */
+.main-bottom-pad {
+    height: 80px;
 }
 
-.main-nav-ar-btn__icon {
-    font-size: 26px;
-    -unity-text-align: middle-center;
-}
-
-.main-nav-ar-btn:hover {
-    background-color: #2196F3;
-}
-
-.main-nav-ar-btn:active {
-    scale: 0.95;
-}
 
 /* ============================================
-   PROFILE DROPDOWN PANEL
+   PROFILE PANEL  +  BACKDROP
 ============================================ */
+
+.main-profile-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-bg-overlay);
+    display: none;
+}
+
+.main-profile-backdrop--visible {
+    display: flex;
+}
 
 .main-profile-panel {
     position: absolute;
     top: 80px;
     right: var(--space-5);
-    width: 260px;
-    background-color: var(--color-bg-elevated);
+    width: 280px;
+    background-color: var(--color-bg-surface);
     border-radius: var(--radius-xl);
     border-width: 1px;
     border-color: var(--color-border-subtle);
@@ -638,6 +401,7 @@
     flex-direction: column;
 }
 
+/* User info header */
 .main-profile-panel__header {
     flex-direction: row;
     align-items: center;
@@ -662,6 +426,7 @@
     margin-top: 2px;
 }
 
+/* Menu items */
 .main-profile-panel__item {
     flex-direction: row;
     align-items: center;
@@ -676,7 +441,7 @@
 }
 
 .main-profile-panel__item:hover {
-    background-color: rgba(255, 255, 255, 0.04);
+    background-color: var(--color-bg-elevated);
 }
 
 .main-profile-panel__item-icon {
@@ -694,6 +459,7 @@
     -unity-text-align: middle-left;
 }
 
+/* Danger items */
 .main-profile-panel__item--danger:hover {
     background-color: var(--color-error-light);
 }
@@ -705,22 +471,134 @@
     -unity-text-align: middle-left;
 }
 
-/* Backdrop closes the panel when tapped outside */
-.main-profile-backdrop {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: transparent;
+
+/* ============================================
+   THEME TOGGLE ROW  (inside profile panel)
+============================================ */
+
+.theme-toggle-row {
+    flex-direction: row;
+    align-items: center;
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-2);
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+    margin-bottom: var(--space-1);
+}
+
+.theme-toggle-row__label {
+    font-size: var(--font-size-md);
+    color: var(--color-text-primary);
+    flex-grow: 1;
+    -unity-text-align: middle-left;
+}
+
+/* The pill toggle track */
+.theme-toggle-track {
+    width: 46px;
+    height: 26px;
+    border-radius: var(--radius-full);
+    background-color: var(--color-bg-elevated);
+    border-width: 1.5px;
+    border-color: var(--color-border-default);
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 2px;
+    padding-right: 2px;
+    cursor: link;
+    flex-shrink: 0;
+    flex-direction: row;
+}
+
+.theme-toggle-track--on {
+    background-color: var(--color-brand-secondary);
+    border-color: var(--color-brand-secondary);
+    justify-content: flex-end;
+}
+
+/* The thumb inside the track */
+.theme-toggle-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-full);
+    background-color: var(--color-bg-surface);
+    flex-shrink: 0;
+}
+
+.theme-toggle-track--on .theme-toggle-thumb {
+    background-color: rgb(255, 255, 255);
+}
+
+/* Icon inside thumb */
+.theme-toggle-icon {
+    font-size: 11px;
+    -unity-text-align: middle-center;
+    color: var(--color-text-placeholder);
+}
+
+
+/* ============================================
+   ACCENT COLOUR PICKER  (inside profile panel)
+============================================ */
+
+.accent-picker-row {
+    flex-direction: column;
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+    padding-bottom: var(--space-3);
+}
+
+.accent-picker-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    letter-spacing: var(--letter-spacing-wider);
+    -unity-font-style: bold;
+    margin-bottom: var(--space-2);
+}
+
+.accent-picker-dots {
+    flex-direction: row;
+    align-items: center;
+}
+
+/* Individual colour dot */
+.accent-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    margin-right: var(--space-2);
+    border-width: 2px;
+    border-color: transparent;
+    align-items: center;
+    justify-content: center;
+    cursor: link;
+    flex-shrink: 0;
+}
+
+.accent-dot:hover {
+    scale: 1.1;
+}
+
+.accent-dot--selected {
+    border-color: var(--color-text-primary);
+}
+
+.accent-dot__check {
+    font-size: 12px;
+    color: rgb(255, 255, 255);
+    -unity-text-align: middle-center;
+    -unity-font-style: bold;
     display: none;
 }
 
-.main-profile-backdrop--visible {
+.accent-dot--selected .accent-dot__check {
     display: flex;
 }
 
-/* Bottom padding so content is not hidden by nav bar */
-.main-bottom-pad {
-    height: 80px;
-}
+/* The five preset dot colours — backgrounds are hardcoded
+   because they represent fixed palette choices */
+.accent-dot--blue   { background-color: rgb(10, 132, 255); }
+.accent-dot--green  { background-color: rgb(16, 185, 129); }
+.accent-dot--purple { background-color: rgb(139, 92, 246); }
+.accent-dot--amber  { background-color: rgb(245, 158, 11); }
+.accent-dot--rose   { background-color: rgb(244, 63, 94);  }

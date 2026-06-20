@@ -39,6 +39,8 @@ public class ActionMenuController : MonoBehaviour
     private bool _isScalingMode = false;
     private Vector3[] _corners = new Vector3[4];
     private bool _isRotatingPanel = false;
+    private Bounds _targetCombinedBounds;
+    private bool   _hasCombinedBounds = false;
 
     void Awake()
     {
@@ -197,8 +199,28 @@ public class ActionMenuController : MonoBehaviour
         _isScalingMode = false;
         scaleRigUI?.HideRig();
 
-        _targetObject = target;
-        _targetRenderer = target.GetComponentInChildren<Renderer>();
+        _targetObject   = target;
+
+        // Get combined bounds of ALL renderers not just first child
+        Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
+        if (renderers.Length > 0)
+        {
+            Bounds combined = renderers[0].bounds;
+            foreach (var r in renderers)
+                combined.Encapsulate(r.bounds);
+
+            // Create a temporary renderer reference is not enough
+            // Store the combined bounds directly for positioning
+            _targetRenderer = renderers[0]; // keep reference for null check
+            _targetCombinedBounds = combined;
+            _hasCombinedBounds = true;
+        }
+        else
+        {
+            _targetRenderer = null;
+            _hasCombinedBounds = false;
+        }
+
         ShowPanels();
     }
 
@@ -301,8 +323,25 @@ public class ActionMenuController : MonoBehaviour
         if (_targetRenderer == null || _mainCamera == null)
             return;
 
+        // Use combined bounds for multi-part objects
+        Bounds boundsToUse = _hasCombinedBounds
+            ? _targetCombinedBounds
+            : _targetRenderer.bounds;
+
+        // Recalculate combined bounds every frame since object may have moved
+        if (_targetObject != null)
+        {
+            Renderer[] renderers = _targetObject.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                boundsToUse = renderers[0].bounds;
+                foreach (var r in renderers)
+                    boundsToUse.Encapsulate(r.bounds);
+            }
+        }
+
         bool isOnScreen = ScreenSpaceHelper.TryGetScreenSpaceBounds(
-            _targetRenderer.bounds,
+            boundsToUse,
             _mainCamera,
             out ScreenSpaceHelper.ObjectScreenBounds screenBounds
         );
@@ -313,54 +352,54 @@ public class ActionMenuController : MonoBehaviour
             return;
         }
 
-        if (panelAbove != null)
+        Rect safeArea = GetConstrainedSafeArea();
+
+        // Panel Above
+        if (panelAbove != null && panelAbove.gameObject.activeSelf)
         {
             float scaleFactor = panelAbove.lossyScale.y;
-            float halfWidth = panelAbove.rect.width * scaleFactor * 0.5f;
-            float halfHeight = panelAbove.rect.height * scaleFactor * 0.5f;
+            float halfW = panelAbove.rect.width  * scaleFactor * 0.5f;
+            float halfH = panelAbove.rect.height * scaleFactor * 0.5f;
 
-            Rect safeArea = GetConstrainedSafeArea();
+            float x = Mathf.Clamp(screenBounds.CenterX,
+                safeArea.xMin + halfW, safeArea.xMax - halfW);
+            float y = screenBounds.TopY + verticalPadding;
+            y = Mathf.Clamp(y, safeArea.yMin + halfH, safeArea.yMax - halfH);
 
-            float targetX = Mathf.Clamp(
-                screenBounds.CenterX,
-                safeArea.xMin + halfWidth,
-                safeArea.xMax - halfWidth
-            );
-
-            float targetY = screenBounds.TopY + verticalPadding * scaleFactor;
-            targetY = Mathf.Clamp(
-                targetY,
-                safeArea.yMin + halfHeight,
-                safeArea.yMax - halfHeight
-            );
-
-            panelAbove.position = new Vector2(targetX, targetY);
+            panelAbove.position = new Vector3(x, y, 0f);
         }
 
-        if (panelBelow != null)
+        // Panel Below
+        if (panelBelow != null && panelBelow.gameObject.activeSelf)
         {
             float scaleFactor = panelBelow.lossyScale.y;
-            float halfWidth = panelBelow.rect.width * scaleFactor * 0.5f;
-            float halfHeight = panelBelow.rect.height * scaleFactor * 0.5f;
+            float halfW = panelBelow.rect.width  * scaleFactor * 0.5f;
+            float halfH = panelBelow.rect.height * scaleFactor * 0.5f;
 
-            Rect safeArea = GetConstrainedSafeArea();
+            float x = Mathf.Clamp(screenBounds.CenterX,
+                safeArea.xMin + halfW, safeArea.xMax - halfW);
+            float y = screenBounds.BottomY - verticalPadding;
+            y = Mathf.Clamp(y, safeArea.yMin + halfH, safeArea.yMax - halfH);
 
-            float edgeMargin = 24f * (Screen.width / 1080f);
+            // Ensure minimum gap between above and below panels
+            if (panelAbove != null && panelAbove.gameObject.activeSelf)
+            {
+                float aboveBottom = panelAbove.position.y
+                    - panelAbove.rect.height * panelAbove.lossyScale.y * 0.5f;
+                float belowTop = y + halfH;
+                float overlap  = belowTop - aboveBottom + minVerticalSpacing;
 
-            float targetX = Mathf.Clamp(
-                screenBounds.CenterX,
-                safeArea.xMin + halfWidth + edgeMargin,
-                safeArea.xMax - halfWidth - edgeMargin
-            );
+                if (overlap > 0f)
+                {
+                    panelAbove.position = new Vector3(
+                        panelAbove.position.x,
+                        panelAbove.position.y + overlap * 0.5f,
+                        0f);
+                    y -= overlap * 0.5f;
+                }
+            }
 
-            float targetY = screenBounds.BottomY - verticalPadding * scaleFactor;
-            targetY = Mathf.Clamp(
-                targetY,
-                safeArea.yMin + halfHeight,
-                safeArea.yMax - halfHeight
-            );
-
-            panelBelow.position = new Vector2(targetX, targetY);
+            panelBelow.position = new Vector3(x, y, 0f);
         }
     }
 

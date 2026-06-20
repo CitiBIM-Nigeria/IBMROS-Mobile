@@ -12,99 +12,109 @@ public class FurnitureSpawnManager : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private FurnitureRegistry registry;
     [SerializeField] private FurniturePlacer   furniturePlacer;
-
-    [Header("Fallback Settings")]
-    [SerializeField] private bool allowPlaceholderCube = true;
-
+    
     // ---------------------------------------------------------------
     // CALLED BY RoomUIManager when Add to Room is tapped
     // ---------------------------------------------------------------
 
-    public async void SpawnItem(string itemKey)
+    public async void SpawnItem(string s3ModelUrl)
     {
-        if (registry == null)
-        {
-            Debug.LogError("[FurnitureSpawnManager] Registry not assigned.");
-            return;
-        }
-
         if (furniturePlacer == null)
         {
             Debug.LogError("[FurnitureSpawnManager] FurniturePlacer not assigned.");
             return;
         }
 
-        var entry = registry.GetEntry(itemKey);
-
-        // -------------------------------------------------------
-        // Path A — GLB from CloudFront
-        // -------------------------------------------------------
-        if (entry != null && !string.IsNullOrEmpty(entry.glbFileName))
+        if (string.IsNullOrEmpty(s3ModelUrl))
         {
-            Debug.Log($"[FurnitureSpawnManager] Loading GLB for '{itemKey}'.");
-
-            GameObject loadedModel = null;
-
-            // Subscribe once to capture result
-            void OnLoaded(string fileName, GameObject model)
-            {
-                if (fileName != entry.glbFileName) return;
-                FurnitureService.OnModelLoaded -= OnLoaded;
-                loadedModel = model;
-            }
-
-            void OnFailed(string fileName, string error)
-            {
-                if (fileName != entry.glbFileName) return;
-                FurnitureService.OnModelLoadFailed -= OnFailed;
-                Debug.LogError($"[FurnitureSpawnManager] Load failed for '{itemKey}': {error}");
-            }
-
-            FurnitureService.OnModelLoaded    += OnLoaded;
-            FurnitureService.OnModelLoadFailed += OnFailed;
-
-            await FurnitureService.Instance.LoadModel(entry.glbFileName);
-
-            FurnitureService.OnModelLoaded    -= OnLoaded;
-            FurnitureService.OnModelLoadFailed -= OnFailed;
-
-            if (loadedModel != null)
-            {
-                InitializeFurnitureItem(loadedModel, itemKey, entry);
-                furniturePlacer.BeginPlacementFromInstance(loadedModel); // not BeginPlacement
-                return;
-            }
-        }
-
-        // -------------------------------------------------------
-        // Path B — Prefab fallback
-        // -------------------------------------------------------
-        if (entry != null && entry.prefabFallback != null)
-        {
-            Debug.Log($"[FurnitureSpawnManager] Using prefab fallback for '{itemKey}'.");
-            var instance = Instantiate(entry.prefabFallback);
-            instance.transform.localScale = entry.spawnScale;
-            InitializeFurnitureItem(instance, itemKey, entry);
-            furniturePlacer.BeginPlacement(instance);
+            Debug.LogWarning("[FurnitureSpawnManager] No model URL. Using placeholder.");
+            var placeholder = CreatePlaceholderCube("Unknown", isLoading: false);
+            InitializeFurnitureItem(placeholder, "Unknown", null);
+            furniturePlacer.BeginPlacement(placeholder);
             return;
         }
 
-        // -------------------------------------------------------
-        // Path C — Placeholder cube (dev only)
-        // -------------------------------------------------------
-        if (allowPlaceholderCube)
+        Debug.Log($"[FurnitureSpawnManager] Loading GLB: {s3ModelUrl}");
+
+        // Show loading cube immediately so user gets instant feedback
+        var loadingCube = CreatePlaceholderCube(s3ModelUrl, isLoading: true);
+        InitializeFurnitureItem(loadingCube, s3ModelUrl, null);
+        furniturePlacer.BeginPlacementFromInstance(loadingCube);
+
+        GameObject loadedModel = null;
+
+        void OnLoaded(string fileName, GameObject model)
         {
-            Debug.LogWarning($"[FurnitureSpawnManager] No model for '{itemKey}'. Using placeholder.");
-            var placeholder = CreatePlaceholder(itemKey);
-            InitializeFurnitureItem(placeholder, itemKey, entry);
-            furniturePlacer.BeginPlacement(placeholder);
+            if (fileName != s3ModelUrl) return;
+            FurnitureService.OnModelLoaded -= OnLoaded;
+            loadedModel = model;
         }
-        else
+
+        void OnFailed(string fileName, string error)
         {
-            Debug.LogError($"[FurnitureSpawnManager] No model available for '{itemKey}'.");
+            if (fileName != s3ModelUrl) return;
+            FurnitureService.OnModelLoadFailed -= OnFailed;
+            Debug.LogError($"[FurnitureSpawnManager] Load failed: {error}");
         }
+
+        FurnitureService.OnModelLoaded     += OnLoaded;
+        FurnitureService.OnModelLoadFailed += OnFailed;
+
+        await FurnitureService.Instance.LoadModel(s3ModelUrl);
+
+        FurnitureService.OnModelLoaded     -= OnLoaded;
+        FurnitureService.OnModelLoadFailed -= OnFailed;
+
+        if (loadedModel != null)
+        {
+            // Grab position and rotation from the loading cube before destroying it
+            Vector3    cubePosition = loadingCube.transform.position;
+            Quaternion cubeRotation = loadingCube.transform.rotation;
+
+            // Cancel placement of the loading cube and destroy it
+            furniturePlacer.CancelPlacement();
+            Destroy(loadingCube);
+
+            // Place the real model at the same position
+            loadedModel.transform.position = cubePosition;
+            loadedModel.transform.rotation = cubeRotation;
+
+            InitializeFurnitureItem(loadedModel, s3ModelUrl, null);
+            furniturePlacer.BeginPlacementFromInstance(loadedModel);
+            return;
+        }
+
+        // Model failed to load — loading cube stays as placeholder
+        Debug.LogWarning($"[FurnitureSpawnManager] Model failed, keeping placeholder cube.");
+        if (loadingCube != null)
+            loadingCube.name = $"[Placeholder] {s3ModelUrl}";
+    }
+    
+    private GameObject CreatePlaceholderCube(string itemKey, bool isLoading = false)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = isLoading ? "LoadingPlaceholder" : $"[Placeholder] {itemKey}";
+        go.transform.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+
+        var renderer = go.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            // Grey while loading, blue as permanent placeholder
+            mat.color = isLoading
+                ? new Color(0.75f, 0.75f, 0.75f, 0.6f)
+                : new Color(0.4f, 0.6f, 1f, 0.5f);
+            renderer.material = mat;
+        }
+
+        // Remove default collider — InitializeFurnitureItem adds its own
+        var col = go.GetComponent<Collider>();
+        if (col != null) Destroy(col);
+
+        return go;
     }
 
+    
     // ---------------------------------------------------------------
     // HELPERS
     // ---------------------------------------------------------------
@@ -112,18 +122,16 @@ public class FurnitureSpawnManager : MonoBehaviour
     private void InitializeFurnitureItem(
         GameObject go, string itemKey, FurnitureRegistry.CatalogEntry entry)
     {
-        // Add or get FurnitureItem
         var item = go.GetComponent<FurnitureItem>()
                    ?? go.AddComponent<FurnitureItem>();
 
         item.Initialize(
             id:            itemKey,
-            furnitureName: entry != null ? entry.itemKey           : itemKey,
-            category:      entry != null ? entry.category          : "Uncategorized",
-            realWorldSize: entry != null ? entry.realWorldSizeMeters : Vector3.one
+            furnitureName: itemKey,
+            category:      "Uncategorized",
+            realWorldSize: Vector3.one
         );
 
-        // Set interactable layer on all children too
         int layer = LayerMask.NameToLayer("Interactable");
         if (layer >= 0)
         {
@@ -132,11 +140,9 @@ public class FurnitureSpawnManager : MonoBehaviour
                 child.gameObject.layer = layer;
         }
 
-        // Remove any existing colliders first to avoid duplicates
         foreach (var col in go.GetComponentsInChildren<Collider>())
             Destroy(col);
 
-        // Calculate combined bounds from all renderers
         Renderer[] renderers = go.GetComponentsInChildren<Renderer>();
 
         if (renderers.Length > 0)
@@ -145,36 +151,35 @@ public class FurnitureSpawnManager : MonoBehaviour
             foreach (var r in renderers)
                 combined.Encapsulate(r.bounds);
 
-            // Add a single BoxCollider on the root fitted to the mesh bounds
-            var box = go.AddComponent<BoxCollider>();
-
-            // Convert world bounds to local space
+            var box    = go.AddComponent<BoxCollider>();
             box.center = go.transform.InverseTransformPoint(combined.center);
             box.size   = combined.size;
-
-            Debug.Log($"[FurnitureSpawnManager] Fitted collider: center={box.center}, size={box.size}");
         }
         else
         {
-            // Fallback — unit box
             go.AddComponent<BoxCollider>();
-            Debug.LogWarning($"[FurnitureSpawnManager] No renderers found on '{itemKey}', using unit collider.");
         }
+
+        // Add Rigidbody so Unity physics engine respects colliders
+        // Kinematic = we control position manually via drag
+        // FreezeAll = no physics rotation or movement
+        // ContinuousSpeculative = detects collisions with static walls correctly
+        // Remove any existing Rigidbodies from children first
+        foreach (var existingRb in go.GetComponentsInChildren<Rigidbody>())
+            Destroy(existingRb);
+
+        // Add fresh Rigidbody to root only
+        var furnitureRb = go.AddComponent<Rigidbody>();
+        furnitureRb.isKinematic            = true;
+        furnitureRb.useGravity             = false;
+        furnitureRb.constraints            = RigidbodyConstraints.FreezeAll;
+        furnitureRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+
+        Debug.Log($"[FurnitureSpawnManager] Initialized: {itemKey} " +
+                  $"| Collider: {go.GetComponent<BoxCollider>() != null} " +
+                  $"| Rigidbody: {go.GetComponent<Rigidbody>() != null}");
     }
-
-    private GameObject CreatePlaceholder(string itemKey)
-    {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        go.transform.localScale = new Vector3(1f, 0.5f, 2f);
-        go.name = $"[Placeholder] {itemKey}";
-
-        var mat = new Material(Shader.Find("Standard"));
-        mat.color = new Color(0.4f, 0.6f, 1f, 0.5f);
-        go.GetComponent<Renderer>().material = mat;
-
-        go.AddComponent<FurnitureItem>().Initialize(
-            itemKey, itemKey, "Unknown", Vector3.one);
-
-        return go;
-    }
+    
+    
+    
 }

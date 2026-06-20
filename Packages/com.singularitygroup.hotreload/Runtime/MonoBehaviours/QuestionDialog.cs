@@ -18,6 +18,7 @@ namespace SingularityGroup.HotReload {
         public Button buttonCancel;
         public Button buttonMoreInfo;
         
+        [NonSerialized]
         public TaskCompletionSource<bool> completion = new TaskCompletionSource<bool>();
 
         public void UpdateView(Config config) {

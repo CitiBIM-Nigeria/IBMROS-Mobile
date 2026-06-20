@@ -741,7 +741,7 @@ namespace SingularityGroup.HotReload.Editor {
             ".java"
         };
         
-        static void HandleAssetChange(string assetPath) {
+        static void HandleAssetChange(string assetPath, bool tooManyChanges) {
             if (MultiplayerPlaymodeHelper.IsClone) {
                 return;
             }
@@ -799,6 +799,11 @@ namespace SingularityGroup.HotReload.Editor {
                         return;
                     }
                 }
+            }
+            // On a large burst we skip the bulk asset re-import (it can storm/loop) — but only after the
+            // compile-file and plugin checks above, so those still trigger a recompile.
+            if (tooManyChanges) {
+                return;
             }
             var path = ToPath(assetPath);
             if (path == null) {

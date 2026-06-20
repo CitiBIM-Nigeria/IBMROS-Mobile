@@ -12,21 +12,28 @@ public class RoomUIManager : MonoBehaviour
     [SerializeField] private BottomBarController bottomBarController;
     [SerializeField] private FurniturePanelController furniturePanelController;
     [SerializeField] private ItemDetailSheetController itemDetailSheetController;
-    
+
     [Header("Spawning")]
     [SerializeField] private FurnitureSpawnManager furnitureSpawnManager;
 
     [Header("Scene Objects to Hide")]
     [SerializeField] private GameObject joystickObject;
+    
+    [Header("Selection")]
+    [SerializeField] private SelectionManager selectionManager;
+    [SerializeField] private ActionMenuController actionMenuController;
 
     private VisualElement _root;
     private VisualElement _topBar;
     private VisualElement _bottomBar;
-    private VisualElement _roomRoot;
+    private VisualElement _dismissOverlay;
 
-    private bool _ignoreNextRootClick = false;
-    private bool _addedToRoom        = false;
-
+    private Button _storeButton;
+    private bool _ignoreNextOverlayClick = false;
+    private bool _addedToRoom            = false;
+    
+    private string _pendingS3ModelUrl = "";
+    
     void OnEnable()
     {
         if (uiDocument == null)
@@ -35,18 +42,21 @@ public class RoomUIManager : MonoBehaviour
             return;
         }
 
-        _root      = uiDocument.rootVisualElement;
-        _topBar    = _root.Q<VisualElement>("TopBar");
-        _bottomBar = _root.Q<VisualElement>("BottomBar");
-        _roomRoot  = _root.Q<VisualElement>("Root");
+        _root           = uiDocument.rootVisualElement;
+        _topBar         = _root.Q<VisualElement>("TopBar");
+        _bottomBar      = _root.Q<VisualElement>("BottomBar");
+        _dismissOverlay = _root.Q<VisualElement>("FurnitureDismissOverlay");
+        _storeButton    = _root.Q<Button>("StoreButton");
+        _storeButton?.RegisterCallback<ClickEvent>(OnStoreClicked);
 
-        _roomRoot?.RegisterCallback<PointerDownEvent>(OnRootPointerDown);
+        _dismissOverlay?.RegisterCallback<PointerDownEvent>(OnDismissOverlayTapped);
 
         toolbarController?.Initialize(_root);
         bottomBarController?.Initialize(_root);
         furniturePanelController?.Initialize(_root);
         itemDetailSheetController?.Initialize(_root);
 
+        // Wire up events
         if (toolbarController != null)
         {
             toolbarController.OnCloseClicked      += OnCloseClicked;
@@ -64,16 +74,61 @@ public class RoomUIManager : MonoBehaviour
 
         if (itemDetailSheetController != null)
         {
-            itemDetailSheetController.OnSheetClosed     += OnItemDetailClosed;
+            itemDetailSheetController.OnSheetClosed      += OnItemDetailClosed;
             itemDetailSheetController.OnAddToRoomClicked += OnAddToRoomHandler;
         }
+
+        // Preload furniture catalog as soon as Room scene loads
+        // AwsManager persists from Main scene so it is already initialized
+        StartCatalogPreload();
+    }
+
+    private void StartCatalogPreload()
+    {
+        if (AwsManager.Instance == null)
+        {
+            Debug.LogWarning("[RoomUIManager] AwsManager not ready yet.");
+            return;
+        }
+
+        if (FurnitureDataService.Instance == null)
+        {
+            Debug.LogWarning("[RoomUIManager] FurnitureDataService not ready yet.");
+            return;
+        }
+
+        if (AwsManager.Instance.IsInitialized)
+        {
+            _ = FurnitureDataService.Instance.LoadCategories();
+            Debug.Log("[RoomUIManager] Started catalog preload.");
+        }
+        else
+        {
+            AwsManager.OnAwsReady += OnAwsReadyForPreload;
+            Debug.Log("[RoomUIManager] Waiting for AWS before preload.");
+        }
+    }
+
+    private void OnAwsReadyForPreload()
+    {
+        AwsManager.OnAwsReady -= OnAwsReadyForPreload;
+
+        if (FurnitureDataService.Instance == null)
+        {
+            Debug.LogWarning("[RoomUIManager] FurnitureDataService still null on AWS ready.");
+            return;
+        }
+
+        _ = FurnitureDataService.Instance.LoadCategories();
+        Debug.Log("[RoomUIManager] AWS ready — started catalog preload.");
     }
 
     void OnDisable()
     {
-        _roomRoot?.UnregisterCallback<PointerDownEvent>(OnRootPointerDown);
-
+        AwsManager.OnAwsReady -= OnAwsReadyForPreload;
+        _dismissOverlay?.UnregisterCallback<PointerDownEvent>(OnDismissOverlayTapped);
         toolbarController?.Cleanup();
+        _storeButton?.UnregisterCallback<ClickEvent>(OnStoreClicked);
 
         if (toolbarController != null)
         {
@@ -92,39 +147,35 @@ public class RoomUIManager : MonoBehaviour
 
         if (itemDetailSheetController != null)
         {
-            itemDetailSheetController.OnSheetClosed     -= OnItemDetailClosed;
+            itemDetailSheetController.OnSheetClosed      -= OnItemDetailClosed;
             itemDetailSheetController.OnAddToRoomClicked -= OnAddToRoomHandler;
         }
     }
+    
 
     // ---------------------------------------------------------------
-    // ROOT POINTER DOWN
+    // DISMISS OVERLAY
     // ---------------------------------------------------------------
 
-    private void OnRootPointerDown(PointerDownEvent evt)
+    private void OnDismissOverlayTapped(PointerDownEvent evt)
     {
-        if (_ignoreNextRootClick)
+        if (_ignoreNextOverlayClick)
         {
-            _ignoreNextRootClick = false;
+            _ignoreNextOverlayClick = false;
             return;
-        }
-
-        if (furniturePanelController == null || !furniturePanelController.IsOpen)
-            return;
-
-        if (itemDetailSheetController != null && itemDetailSheetController.IsOpen)
-            return;
-
-        var panel = _root.Q<VisualElement>("FurniturePanel");
-        if (panel != null)
-        {
-            Vector2 localPos = panel.WorldToLocal(evt.position);
-            if (panel.ContainsPoint(localPos))
-                return;
         }
 
         Debug.Log("[RoomUIManager] Outside tap — closing panel.");
-        furniturePanelController.Close();
+        SetDismissOverlayVisible(false);
+        furniturePanelController?.Close();
+    }
+
+    private void SetDismissOverlayVisible(bool visible)
+    {
+        if (_dismissOverlay != null)
+            _dismissOverlay.style.display = visible
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
     }
 
     // ---------------------------------------------------------------
@@ -151,8 +202,13 @@ public class RoomUIManager : MonoBehaviour
     private void OnAddFurnitureClicked()
     {
         Debug.Log("[RoomUIManager] Add furniture tapped.");
-        _ignoreNextRootClick = true;
+    
+        // Deselect any selected furniture and hide action menu
+        selectionManager?.DeselectObject();
+        actionMenuController?.HidePanels();
+    
         SetRoomUIVisible(false);
+        SetDismissOverlayVisible(true);
         furniturePanelController?.Open();
     }
 
@@ -163,46 +219,50 @@ public class RoomUIManager : MonoBehaviour
     private void OnFurniturePanelClosed()
     {
         Debug.Log("[RoomUIManager] Panel closed — restoring UI.");
+        SetDismissOverlayVisible(false);
         SetRoomUIVisible(true);
     }
 
     private void OnItemSelected(string itemData)
     {
         var parts = itemData.Split('|');
-        if (parts.Length < 4) return;
+        if (parts.Length < 5) return;
 
-        string emoji      = parts[0];
-        string brand      = parts[1];
-        string name       = parts[2];
-        string dimensions = parts[3];
+        string emoji       = parts[0];
+        string productId   = parts[1];
+        string s3ModelUrl  = parts[2];
+        string name        = parts[3];
+        string description = parts[4];
+        string imageUrl    = parts.Length > 5 ? parts[5] : "";
 
+        _pendingS3ModelUrl = s3ModelUrl;
+
+        SetDismissOverlayVisible(false);
         furniturePanelController?.HideWithoutReset();
-        itemDetailSheetController?.Open(emoji, brand, name, dimensions);
+        itemDetailSheetController?.Open(emoji, name, description, productId, imageUrl);
     }
 
     // ---------------------------------------------------------------
     // ITEM DETAIL CALLBACKS
     // ---------------------------------------------------------------
 
-    private void OnAddToRoomHandler(string itemKey)
+    private void OnAddToRoomHandler(string productId)
     {
         _addedToRoom = true;
-        Debug.Log($"[RoomUIManager] Add to Room: {itemKey}");
-        furnitureSpawnManager?.SpawnItem(itemKey);
+        Debug.Log($"[RoomUIManager] Add to Room: {productId}");
+        furnitureSpawnManager?.SpawnItem(_pendingS3ModelUrl);
     }
 
     private void OnItemDetailClosed()
     {
         if (_addedToRoom)
         {
-            // User placed furniture — restore main UI, do NOT reopen panel
             _addedToRoom = false;
             SetRoomUIVisible(true);
             return;
         }
 
-        // User dismissed sheet via back/close — reopen panel where they left off
-        _ignoreNextRootClick = true;
+        SetDismissOverlayVisible(true);
         furniturePanelController?.Open();
     }
 
@@ -220,5 +280,11 @@ public class RoomUIManager : MonoBehaviour
 
         if (joystickObject != null)
             joystickObject.SetActive(visible);
+    }
+    
+    private void OnStoreClicked(ClickEvent evt)
+    {
+        Debug.Log("[RoomUIManager] Store tapped — loading IKEA Store scene.");
+        SceneManager.LoadScene("IKEAStore");
     }
 }

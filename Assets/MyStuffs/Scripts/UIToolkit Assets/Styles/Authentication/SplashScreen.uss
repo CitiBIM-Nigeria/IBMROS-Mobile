@@ -1,5 +1,15 @@
 @import url("project://database/Assets/MyStuffs/IbmRos/Scripts/UI/Styles/IbmRosTheme.uss?fileID=7433441132597879392&guid=934fe7e1c0c5c4bf4a36002625785e6f&type=3#IbmRosTheme");
 
+/* ============================================================
+   SPLASH SCREEN  —  v2
+   Cream / light by default.
+   Background image is optional — set from the Unity Inspector
+   or from C# via:
+       splashBgImage.style.backgroundImage = new StyleBackground(yourTexture2D);
+   If no image is set, the plain cream background shows through.
+============================================================ */
+
+/* ── Root ───────────────────────────────────────── */
 .splash-root {
     width: 100%;
     height: 100%;
@@ -9,27 +19,57 @@
     flex-direction: column;
 }
 
+/* ── Background image layer ─────────────────────── */
+/* Full-screen image slot. Add your room photo here. */
+.splash-bg-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* background-image set from C# or Inspector */
+    -unity-background-scale-mode: scale-and-crop;
+}
+
+/* Semi-transparent overlay sits on top of the image
+   so the logo and text remain legible */
+.splash-bg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(250, 249, 246, 0.72);
+}
+
+/* Dark theme overlay is darker to keep text readable */
+.theme-dark .splash-bg-overlay {
+    background-color: rgba(10, 15, 30, 0.78);
+}
+
+/* ── Decorative glow blobs ───────────────────────── */
 .splash-glow {
     position: absolute;
     border-radius: var(--radius-full);
 }
 
 .splash-glow--1 {
-    width: 400px;
-    height: 400px;
-    background-color: rgba(10, 132, 255, 0.08);
-    top: -100px;
-    right: -100px;
+    width: 320px;
+    height: 320px;
+    background-color: rgba(10, 132, 255, 0.07);
+    top: -80px;
+    right: -80px;
 }
 
 .splash-glow--2 {
-    width: 350px;
-    height: 350px;
-    background-color: rgba(0, 198, 255, 0.06);
-    bottom: -80px;
-    left: -80px;
+    width: 280px;
+    height: 280px;
+    background-color: rgba(0, 198, 255, 0.05);
+    bottom: -60px;
+    left: -60px;
 }
 
+/* ── Content block — centred vertically ─────────── */
 .splash-content {
     flex-direction: column;
     align-items: center;
@@ -37,6 +77,7 @@
     flex-grow: 1;
 }
 
+/* ── Logo mark ───────────────────────────────────── */
 .splash-logo-mark {
     width: 88px;
     height: 88px;
@@ -49,12 +90,13 @@
 
 .splash-logo-initials {
     font-size: 32px;
-    color: var(--color-text-primary);
+    color: rgb(255, 255, 255);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     letter-spacing: var(--letter-spacing-wide);
 }
 
+/* ── App name & tagline ──────────────────────────── */
 .splash-app-name {
     font-size: var(--font-size-4xl);
     color: var(--color-text-primary);
@@ -71,6 +113,7 @@
     letter-spacing: var(--letter-spacing-widest);
 }
 
+/* ── Loading row — pinned to bottom ─────────────── */
 .splash-loading-row {
     flex-direction: row;
     align-items: center;
@@ -84,7 +127,7 @@
     height: 16px;
     border-radius: var(--radius-full);
     border-width: 2px;
-    border-color: var(--color-border-subtle);
+    border-color: var(--color-border-default);
     border-top-color: var(--color-brand-secondary);
     margin-right: var(--space-3);
 }
