@@ -15,6 +15,12 @@
         </ui:VisualElement>
         <ui:ScrollView name="LoginScroll" horizontal-scrolling-enabled="false" vertical-scrolling-enabled="true" mouse-wheel-scroll-size="80" class="login-scroll">
             <ui:VisualElement name="LoginContent" class="login-content">
+                <ui:VisualElement name="BackRow" class="back-row">
+                    <ui:Button name="BackToAppButton" class="back-button">
+                        <ui:Label name="BackIcon" text="←" class="back-button__icon-text"/>
+                        <ui:Label name="BackText" text="Continue as guest" class="back-button__text"/>
+                    </ui:Button>
+                </ui:VisualElement>
                 <ui:VisualElement name="LogoSection" class="logo-container">
                     <ui:VisualElement name="LogoMark" class="logo-mark">
                         <ui:Label name="LogoInitials" text="IR" class="login-logo-initials"/>

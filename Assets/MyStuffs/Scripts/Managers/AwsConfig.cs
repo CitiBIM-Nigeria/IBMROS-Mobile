@@ -2,10 +2,7 @@ public static class AwsConfig
 {
     // AWS Region where all your services are hosted
     public const string Region = "us-east-1";
-
-    // IAM User credentials - development only, never ship these in production
-    public const string AccessKey = "AKIA6OKTCAVHPPEJQC5F";
-    public const string SecretKey = "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";
+    
 
     // Cognito Identity Pool - issues temporary credentials to all users
     public const string IdentityPoolId = "us-east-1:a1b45243-b537-4a69-af72-9764a2aeb9f2";
@@ -35,12 +32,12 @@ public static class AwsConfig
     public const string FurnitureCatalogMerchantId   = "ikea";
 
 
-    // S3 bucket name for storing user room screenshots
+    /*// S3 bucket name for storing user room screenshots
     public const string UserContentBucketName = "ibm-ros-user-content";
 
     // DynamoDB table names
     public const string ProductsTableName = "ibm-ros-products";
-    public const string UserLayoutsTableName = "ibm-ros-user-layouts";
+    public const string UserLayoutsTableName = "ibm-ros-user-layouts";*/
 
     // Token expiry buffer in minutes
     // Refresh token before it expires by this many minutes

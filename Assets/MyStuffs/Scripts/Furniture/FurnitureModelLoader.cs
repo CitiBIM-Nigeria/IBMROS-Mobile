@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using UnityGLTF; // Swapped from GLTFast
+using GLTFast; // GLBs are now WebP-free, so glTFast loads them with correct
+               // sRGB/Linear colour spaces + URP materials (no manual fixups).
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -11,6 +13,12 @@ public class FurnitureModelLoader : MonoBehaviour
 
     // Local cache folder inside the app's persistent data path
     private string CachePath => Path.Combine(Application.persistentDataPath, "FurnitureCache");
+
+    // Bump this string whenever the pipeline re-uploads models at the SAME S3
+    // paths (e.g. after a re-scrape). On startup, if the cached version differs,
+    // the whole model cache is wiped so old bytes can't be served. This is what
+    // stops a stale, texture-stripped mesh.glb from loading after a re-scrape.
+    private const string CacheVersion = "2026-06-23-per-colour-clean";
 
     void Awake()
     {
@@ -23,9 +31,20 @@ public class FurnitureModelLoader : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // Create cache folder if it does not exist
         if (!Directory.Exists(CachePath))
             Directory.CreateDirectory(CachePath);
+
+        // Auto-bust a stale cache when the version marker doesn't match.
+        string marker = Path.Combine(CachePath, "cache_version.txt");
+        string current = File.Exists(marker) ? File.ReadAllText(marker) : "";
+        if (current != CacheVersion)
+        {
+            ClearCache();   // deletes + recreates the cache folder
+            try { File.WriteAllText(Path.Combine(CachePath, "cache_version.txt"),
+                                    CacheVersion); } catch { }
+            Debug.Log($"[FurnitureModelLoader] Model cache cleared (version "
+                      + $"{CacheVersion}) — will re-download fresh models.");
+        }
     }
     
     // Main method to load a furniture model by filename
@@ -106,47 +125,35 @@ public class FurnitureModelLoader : MonoBehaviour
         }
     }
     
-    // Fix URP materials after GLB import
-    private void FixMaterials(GameObject model)
-    {
-        var renderers = model.GetComponentsInChildren<Renderer>();
-        foreach (var renderer in renderers)
-        {
-            foreach (var mat in renderer.materials)
-            {
-                // Replace Standard with URP Lit
-                if (mat.shader.name.Contains("Standard") || 
-                    mat.shader.name.Contains("GLTF"))
-                {
-                    mat.shader = Shader.Find("Universal Render Pipeline/Lit");
-                }
-            }
-        }
-    }
-    
-    // Loads a GLB file from local path using UnityGLTF
+    // Loads a GLB file from a local path using glTFast
     private async Task<GameObject> LoadFromFile(string localPath, string fileName)
     {
         try
         {
-            var options  = new ImportOptions();
-            var importer = new GLTFSceneImporter(localPath, options);
+            // glTFast loads the self-contained GLB (PNG/JPEG textures, no
+            // EXT_texture_webp) and builds URP materials with correct colour
+            // spaces — no shader-swap or texture re-application needed.
+            byte[] data = await File.ReadAllBytesAsync(localPath);
 
-            await importer.LoadSceneAsync();
-
-            if (importer.CreatedObject == null)
+            var gltf   = new GltfImport();
+            bool loaded = await gltf.LoadGltfBinary(data);
+            if (!loaded)
             {
-                Debug.LogError($"[FurnitureModelLoader] Failed to instantiate {fileName}.");
+                Debug.LogError($"[FurnitureModelLoader] glTFast failed to load {fileName}.");
                 return null;
             }
 
-            importer.CreatedObject.name = fileName;
+            var root = new GameObject(fileName);
+            bool ok  = await gltf.InstantiateMainSceneAsync(root.transform);
+            if (!ok)
+            {
+                Debug.LogError($"[FurnitureModelLoader] glTFast failed to instantiate {fileName}.");
+                Destroy(root);
+                return null;
+            }
 
-            // Fix materials for URP — Standard shader appears white in URP
-            FixUrpMaterials(importer.CreatedObject);
-
-            Debug.Log($"[FurnitureModelLoader] Loaded: {fileName}");
-            return importer.CreatedObject;
+            Debug.Log($"[FurnitureModelLoader] Loaded (glTFast): {fileName}");
+            return root;
         }
         catch (Exception e)
         {
@@ -155,53 +162,77 @@ public class FurnitureModelLoader : MonoBehaviour
         }
     }
 
-    private void FixUrpMaterials(GameObject model)
-    {
-        if (model == null) return;
+    // ---------------------------------------------------------------
+    // COLOUR SWAP (texture-swap workflow)
+    // ---------------------------------------------------------------
 
-        var urpLit = Shader.Find("Universal Render Pipeline/Lit");
-        if (urpLit == null)
+    // baseColor textures live on spawned models, so they must NOT go through the
+    // shared LRU cache (which can Destroy() them). We hold them here instead, keyed
+    // by URL, so repeat swaps are instant. Call ClearBaseColorCache when leaving a
+    // product to free them.
+    private readonly Dictionary<string, Texture2D> _baseColorCache = new();
+
+    private async Task<Texture2D> GetBaseColorTexture(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return null;
+        if (_baseColorCache.TryGetValue(url, out var cached) && cached != null)
+            return cached;
+        var tex = await ImageCache.LoadTextureUncached(url);
+        if (tex != null) _baseColorCache[url] = tex;
+        return tex;
+    }
+
+    // Recolour an already-loaded model by swapping the baseColor (fabric) texture
+    // on its material. The shared mesh.glb already embeds the PRIMARY colour, so
+    // this is only needed to switch to a different colour.
+    public async Task ApplyBaseColor(GameObject model, string baseColorUrl)
+    {
+        if (model == null || string.IsNullOrEmpty(baseColorUrl))
+            return;
+
+        var tex = await GetBaseColorTexture(baseColorUrl);
+        if (tex == null)
         {
-            Debug.LogWarning("[FurnitureModelLoader] URP Lit shader not found.");
+            Debug.LogWarning($"[FurnitureModelLoader] baseColor load failed: {baseColorUrl}");
             return;
         }
 
-        var renderers  = model.GetComponentsInChildren<Renderer>(true);
-        int fixedCount = 0;
-
-        foreach (var renderer in renderers)
+        int applied = 0;
+        foreach (var renderer in model.GetComponentsInChildren<Renderer>(true))
         {
-            var materials = renderer.materials;
-
-            foreach (var mat in materials)
+            foreach (var mat in renderer.materials)
             {
                 if (mat == null) continue;
-                if (mat.shader.name.Contains("Universal Render Pipeline")) continue;
-
-                // Grab the single base texture and color before shader swap
-                var mainTex   = mat.mainTexture;
-                var mainColor = mat.color;
-
-                // Swap to URP Lit
-                mat.shader = urpLit;
-
-                // Restore base texture and color using URP property names
-                mat.SetColor("_BaseColor", mainColor);
-
-                if (mainTex != null)
-                    mat.SetTexture("_BaseMap", mainTex);
-
-                // Reasonable defaults for furniture
-                mat.SetFloat("_Metallic",   0f);
-                mat.SetFloat("_Smoothness", 0.3f);
-
-                fixedCount++;
+                if (mat.HasProperty("_BaseMap"))
+                {
+                    mat.SetTexture("_BaseMap", tex);
+                    if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", Color.white);
+                    applied++;
+                }
+                else if (mat.HasProperty("baseColorTexture"))
+                {
+                    mat.SetTexture("baseColorTexture", tex);
+                    applied++;
+                }
             }
-
-            renderer.materials = materials;
         }
+        Debug.Log($"[FurnitureModelLoader] Recoloured {applied} material(s) on {model.name}.");
+    }
 
-        Debug.Log($"[FurnitureModelLoader] Fixed {fixedCount} materials on {model.name}");
+    // Pre-download the other colours' textures when a product opens so a later
+    // swap is instant. Fire-and-forget.
+    public async Task PrefetchBaseColor(string baseColorUrl)
+    {
+        await GetBaseColorTexture(baseColorUrl);
+    }
+
+    // Free the held baseColor textures (call when leaving a product / room).
+    public void ClearBaseColorCache()
+    {
+        foreach (var tex in _baseColorCache.Values)
+            if (tex != null) Destroy(tex);
+        _baseColorCache.Clear();
     }
 
     // Clears the entire local model cache

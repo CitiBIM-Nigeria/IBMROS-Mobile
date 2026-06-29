@@ -116,7 +116,11 @@ public class SplashController : MonoBehaviour
             return;
         }
 
-        ScreenNavigator.Instance.NavigateTo(ScreenName.Login);
+        // Guest-first: no valid session → go straight into the app as a guest
+        // (AwsManager already holds guest credentials). Sign-in is offered inside
+        // the app and only required for premium actions — not as an entry wall.
+        Debug.Log("[SplashController] No session — entering as guest.");
+        ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
     }
     
     

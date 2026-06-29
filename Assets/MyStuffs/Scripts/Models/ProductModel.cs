@@ -10,8 +10,11 @@ public class ProductVariant
     public string ColourName         { get; set; }
     public bool   IsPrimary          { get; set; }
     public float  Price              { get; set; }
-    public string BaseColorUrl       { get; set; }   // GLB base-colour texture
+    public string ModelUrl           { get; set; }   // this colour's own GLB (bucket KEY, domain stripped)
+    public string SwatchUrl          { get; set; }   // IKEA 80×80 chip for the colour circle
+    public string DominantColor      { get; set; }   // "#rrggbb" flat-colour fallback
     public string DisplayUrl         { get; set; }   // transparent .webp (bg removed)
+    public string DisplayThumbUrl    { get; set; }   // 400px grid thumbnail
     public string DisplayOriginalUrl { get; set; }   // original .jpg
 }
 
@@ -49,15 +52,32 @@ public class ProductModel
         Variants.Find(v => v.IsPrimary) ??
         (Variants.Count > 0 ? Variants[0] : null);
 
-    // Best available product image — full CloudFront URL. Prefers the transparent
-    // .webp (filled by the background-removal worker); falls back to the original
-    // .jpg while that's still pending.
+    // The default/primary colour's own GLB key. Equals S3ModelUrl in practice
+    // (the product's default model is the primary colour).
+    public string PrimaryModelUrl => PrimaryVariant?.ModelUrl ?? string.Empty;
+
+    // Best FULL image (detail screen) — transparent .webp, else original .jpg.
     public string BestImageUrl
     {
         get
         {
             var v = PrimaryVariant;
             if (v == null) return string.Empty;
+            if (!string.IsNullOrEmpty(v.DisplayUrl))         return v.DisplayUrl;
+            if (!string.IsNullOrEmpty(v.DisplayOriginalUrl)) return v.DisplayOriginalUrl;
+            return string.Empty;
+        }
+    }
+
+    // Best SMALL image for the catalog grid — prefers the 400px thumbnail, then
+    // the full transparent image, then the original. Cuts grid bandwidth ~50×.
+    public string BestThumbnailUrl
+    {
+        get
+        {
+            var v = PrimaryVariant;
+            if (v == null) return string.Empty;
+            if (!string.IsNullOrEmpty(v.DisplayThumbUrl))    return v.DisplayThumbUrl;
             if (!string.IsNullOrEmpty(v.DisplayUrl))         return v.DisplayUrl;
             if (!string.IsNullOrEmpty(v.DisplayOriginalUrl)) return v.DisplayOriginalUrl;
             return string.Empty;

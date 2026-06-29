@@ -8,6 +8,7 @@ public class ObjectDragHandler : MonoBehaviour
 
     [Header("Config")]
     [SerializeField] private LayerMask floorLayer;
+    [SerializeField] private float     wallMargin = 0.08f;  // inset from wall (m)
 
     public event Action OnDragStart;
     public event Action OnDragEnd;
@@ -23,10 +24,18 @@ public class ObjectDragHandler : MonoBehaviour
     
     private LayerMask _wallMask = 0;
 
+    // Floor extents, captured when a drag starts — the item's footprint is
+    // clamped to this so it stays in the room (stops at walls, slides along them).
+    private Bounds _roomBounds;
+    private bool   _hasRoomBounds;
+    private float  _floorY;   // floor height captured at drag start (for the plane)
+
     void Awake()
     {
         _mainCamera = Camera.main;
-        _wallMask = LayerMask.GetMask("Wall", "Default");
+        // Only WALLS block dragging. Including "Default" made the cast hit the
+        // floor/ceiling/props (and the model itself) → drag felt stuck/jumpy.
+        _wallMask = LayerMask.GetMask("Wall");
     }
 
     void OnEnable()
@@ -84,10 +93,14 @@ public class ObjectDragHandler : MonoBehaviour
                 0f,  // Y handled separately in UpdateDrag
                 _selectedObject.position.z - floorHit.point.z
             );
+            _roomBounds    = floorHit.collider.bounds;   // room footprint to clamp to
+            _floorY        = floorHit.point.y;           // plane height for UpdateDrag
+            _hasRoomBounds = true;
         }
         else
         {
-            _grabOffset = Vector3.zero;
+            _grabOffset    = Vector3.zero;
+            _hasRoomBounds = false;
         }
 
         OnDragStart?.Invoke();
@@ -100,52 +113,53 @@ public class ObjectDragHandler : MonoBehaviour
 
         Ray ray = _mainCamera.ScreenPointToRay(screenPosition);
 
-        if (Physics.Raycast(ray, out RaycastHit hit, 100f, floorLayer))
+        // Raycast a MATH PLANE at floor height — NOT the floor collider. The
+        // plane always returns a point, so the item follows the cursor smoothly
+        // everywhere (even when the cursor is over a wall), instead of freezing
+        // when a collider raycast misses. That was the real cause of the
+        // stickiness. The room-bounds clamp below keeps it off the walls.
+        Plane floorPlane = new Plane(Vector3.up, new Vector3(0f, _floorY, 0f));
+        if (!floorPlane.Raycast(ray, out float enter)) return;
+        Vector3 hitPoint = ray.GetPoint(enter);
+
+        // Object footprint (for floor-snap + clamping).
+        Bounds combined    = default;
+        bool   hasBounds   = false;
+        float  pivotToBase = 0f;
+        Renderer[] renderers = _selectedObject.GetComponentsInChildren<Renderer>();
+        if (renderers.Length > 0)
         {
-            // XZ from floor hit + grab offset
-            // Y always from floor + pivot-to-bottom so chair never sinks
-            float pivotToBase = 0f;
-            Renderer[] renderers = _selectedObject.GetComponentsInChildren<Renderer>();
-            if (renderers.Length > 0)
-            {
-                Bounds combined = renderers[0].bounds;
-                foreach (var r in renderers)
-                    combined.Encapsulate(r.bounds);
-                pivotToBase = _selectedObject.position.y - combined.min.y;
-            }
-            
-            Vector3 targetPosition = new Vector3(
-                hit.point.x + _grabOffset.x,
-                hit.point.y + pivotToBase,
-                hit.point.z + _grabOffset.z
-            );
-
-            Vector3 direction = targetPosition - _selectedObject.position;
-            float   distance  = direction.magnitude;
-
-            if (distance > 0.001f)
-            {
-                var box = _selectedObject.GetComponent<BoxCollider>();
-                if (box != null)
-                {
-                    if (!Physics.BoxCast(
-                            _selectedObject.position,
-                            box.size * 0.45f,
-                            direction.normalized,
-                            out _,
-                            _selectedObject.rotation,
-                            distance,
-                            _wallMask))
-                    {
-                        _selectedObject.position = targetPosition;
-                    }
-                }
-                else
-                {
-                    _selectedObject.position = targetPosition;
-                }
-            }
+            combined = renderers[0].bounds;
+            foreach (var r in renderers)
+                combined.Encapsulate(r.bounds);
+            pivotToBase = _selectedObject.position.y - combined.min.y;
+            hasBounds   = true;
         }
+
+        Vector3 targetPosition = new Vector3(
+            hitPoint.x + _grabOffset.x,
+            _floorY + pivotToBase,
+            hitPoint.z + _grabOffset.z
+        );
+
+        // Clamp the item's footprint to the room so it stops at a wall but still
+        // slides ALONG it (clamping X leaves Z free, and vice-versa). Pure math,
+        // no physics — smooth, and it can't pass through walls.
+        if (_hasRoomBounds && hasBounds)
+        {
+            // wallMargin pulls the stop point IN from the floor edge so an item
+            // halts just before the wall instead of creeping into its thickness
+            // (the re-grab-at-wall bug). Tune to ~your wall thickness in the
+            // Inspector if needed.
+            float minX = _roomBounds.min.x + combined.extents.x + wallMargin;
+            float maxX = _roomBounds.max.x - combined.extents.x - wallMargin;
+            float minZ = _roomBounds.min.z + combined.extents.z + wallMargin;
+            float maxZ = _roomBounds.max.z - combined.extents.z - wallMargin;
+            if (minX <= maxX) targetPosition.x = Mathf.Clamp(targetPosition.x, minX, maxX);
+            if (minZ <= maxZ) targetPosition.z = Mathf.Clamp(targetPosition.z, minZ, maxZ);
+        }
+
+        _selectedObject.position = targetPosition;
     }
 
  

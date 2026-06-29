@@ -12,13 +12,26 @@ public class FurnitureSpawnManager : MonoBehaviour
     [Header("Dependencies")]
     [SerializeField] private FurnitureRegistry registry;
     [SerializeField] private FurniturePlacer   furniturePlacer;
-    
+
+    void Awake()
+    {
+        // Self-heal missing Inspector wiring (the cause of the
+        // "FurniturePlacer not assigned" error) by finding them in the scene.
+        if (furniturePlacer == null)
+            furniturePlacer = FindObjectOfType<FurniturePlacer>(true);
+        if (registry == null)
+            registry = FindObjectOfType<FurnitureRegistry>(true);
+    }
+
     // ---------------------------------------------------------------
     // CALLED BY RoomUIManager when Add to Room is tapped
     // ---------------------------------------------------------------
 
     public async void SpawnItem(string s3ModelUrl)
     {
+        if (furniturePlacer == null)
+            furniturePlacer = FindObjectOfType<FurniturePlacer>(true);
+
         if (furniturePlacer == null)
         {
             Debug.LogError("[FurnitureSpawnManager] FurniturePlacer not assigned.");
@@ -140,24 +153,53 @@ public class FurnitureSpawnManager : MonoBehaviour
                 child.gameObject.layer = layer;
         }
 
+        // FPS: stop placed furniture from CASTING real-time shadows. The shadow
+        // pass re-draws every mesh each frame — a big per-frame cost on mobile,
+        // and the low-res mobile shadow map is what made shadows look bad. They
+        // still RECEIVE shadows, so they're still lit by the room.
+        foreach (var r in go.GetComponentsInChildren<Renderer>())
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
         foreach (var col in go.GetComponentsInChildren<Collider>())
             Destroy(col);
 
+        // TWO collider roles:
+        //  • a ROOT BoxCollider, DISABLED — ObjectDragHandler reads its .size to
+        //    BoxCast against walls and stop the item (it passed through walls
+        //    when this box was missing). Disabled so it doesn't grab selection
+        //    raycasts; .size is still readable while disabled.
+        //  • non-convex MeshColliders per mesh, ENABLED — precise tap selection.
+        //    Non-convex has NO 256-poly limit (that's convex-only, the source of
+        //    the "Couldn't create a Convex Mesh" error) and works for raycasts;
+        //    movement is transform-based so it never needs to physically collide.
         Renderer[] renderers = go.GetComponentsInChildren<Renderer>();
-
         if (renderers.Length > 0)
         {
             Bounds combined = renderers[0].bounds;
             foreach (var r in renderers)
                 combined.Encapsulate(r.bounds);
-
-            var box    = go.AddComponent<BoxCollider>();
-            box.center = go.transform.InverseTransformPoint(combined.center);
-            box.size   = combined.size;
+            var box     = go.AddComponent<BoxCollider>();
+            box.center  = go.transform.InverseTransformPoint(combined.center);
+            box.size    = combined.size;
+            box.enabled = false;   // size-only, for the wall BoxCast
         }
-        else
+
+        int meshColliders = 0;
+        foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
         {
-            go.AddComponent<BoxCollider>();
+            if (mf.sharedMesh == null) continue;
+            var mc        = mf.gameObject.AddComponent<MeshCollider>();
+            mc.sharedMesh = mf.sharedMesh;
+            mc.convex     = false;
+            meshColliders++;
+        }
+
+        // No meshes at all → re-enable the box so selection still works.
+        if (meshColliders == 0)
+        {
+            var box = go.GetComponent<BoxCollider>();
+            if (box != null) box.enabled = true;
+            else go.AddComponent<BoxCollider>();
         }
 
         // Add Rigidbody so Unity physics engine respects colliders
@@ -176,7 +218,7 @@ public class FurnitureSpawnManager : MonoBehaviour
         furnitureRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
         Debug.Log($"[FurnitureSpawnManager] Initialized: {itemKey} " +
-                  $"| Collider: {go.GetComponent<BoxCollider>() != null} " +
+                  $"| Colliders: {go.GetComponentsInChildren<Collider>().Length} " +
                   $"| Rigidbody: {go.GetComponent<Rigidbody>() != null}");
     }
     

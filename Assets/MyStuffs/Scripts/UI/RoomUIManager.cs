@@ -31,9 +31,10 @@ public class RoomUIManager : MonoBehaviour
     private Button _storeButton;
     private bool _ignoreNextOverlayClick = false;
     private bool _addedToRoom            = false;
-    
-    private string _pendingS3ModelUrl = "";
-    
+
+    private string       _pendingS3ModelUrl   = "";   // chosen colour's GLB key
+    private ProductModel _selectedProduct;
+
     void OnEnable()
     {
         if (uiDocument == null)
@@ -76,6 +77,7 @@ public class RoomUIManager : MonoBehaviour
         {
             itemDetailSheetController.OnSheetClosed      += OnItemDetailClosed;
             itemDetailSheetController.OnAddToRoomClicked += OnAddToRoomHandler;
+            itemDetailSheetController.OnColorSelected    += OnColorSelected;
         }
 
         // Preload furniture catalog as soon as Room scene loads
@@ -223,23 +225,35 @@ public class RoomUIManager : MonoBehaviour
         SetRoomUIVisible(true);
     }
 
-    private void OnItemSelected(string itemData)
+    private void OnItemSelected(ProductModel product)
     {
-        var parts = itemData.Split('|');
-        if (parts.Length < 5) return;
+        if (product == null) return;
 
-        string emoji       = parts[0];
-        string productId   = parts[1];
-        string s3ModelUrl  = parts[2];
-        string name        = parts[3];
-        string description = parts[4];
-        string imageUrl    = parts.Length > 5 ? parts[5] : "";
+        _selectedProduct     = product;
+        _pendingS3ModelUrl   = product.S3ModelUrl;   // default = primary colour's GLB
 
-        _pendingS3ModelUrl = s3ModelUrl;
+        string emoji   = CategoryMapper.GetCategoryEmoji(product.CategoryId);
+        string variant = product.Description ?? "";
+        if (!string.IsNullOrEmpty(product.Name) && variant.StartsWith(product.Name))
+            variant = variant.Substring(product.Name.Length).Trim(' ', '-');
 
         SetDismissOverlayVisible(false);
         furniturePanelController?.HideWithoutReset();
-        itemDetailSheetController?.Open(emoji, name, description, productId, imageUrl);
+        itemDetailSheetController?.Open(
+            emoji, product.Name, variant, product.ProductId,
+            product.BestImageUrl, product.Variants);
+
+    }
+
+    // Fired when the user taps a colour swatch in the detail sheet. Each colour
+    // is its own GLB now, so the chosen colour just changes which model spawns
+    // (falling back to the primary if that colour didn't get a model).
+    private void OnColorSelected(ProductVariant variant)
+    {
+        if (variant == null) return;
+        _pendingS3ModelUrl = string.IsNullOrEmpty(variant.ModelUrl)
+            ? _selectedProduct?.S3ModelUrl ?? ""
+            : variant.ModelUrl;
     }
 
     // ---------------------------------------------------------------
@@ -250,6 +264,7 @@ public class RoomUIManager : MonoBehaviour
     {
         _addedToRoom = true;
         Debug.Log($"[RoomUIManager] Add to Room: {productId}");
+        // Spawn the chosen colour's own GLB.
         furnitureSpawnManager?.SpawnItem(_pendingS3ModelUrl);
     }
 

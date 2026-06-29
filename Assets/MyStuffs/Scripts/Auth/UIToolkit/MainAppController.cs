@@ -28,6 +28,7 @@ public class MainAppController : MonoBehaviour, IAuthUI
     private Label         _profilePanelName;
     private Label         _profilePanelEmail;
     private Button        _logoutButton;
+    private Label         _logoutLabel;
     private Button        _deleteAccountButton;
     private Button        _profileSettingsButton;
 
@@ -153,6 +154,17 @@ public class MainAppController : MonoBehaviour, IAuthUI
 
         _rootContainer = container;
 
+        // The home content fits one screen, so it must not be touch-draggable.
+        // The UXML flag wasn't taking effect at runtime, so force it here.
+        var mainScroll = container.Q<ScrollView>("MainScroll");
+        if (mainScroll != null)
+        {
+            mainScroll.mode                       = ScrollViewMode.Vertical;
+            mainScroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            mainScroll.touchScrollBehavior        = ScrollView.TouchScrollBehavior.Clamped;
+            mainScroll.elasticity                 = 0f;
+        }
+
         // Header
         _greetingText          = container.Q<Label>("GreetingText");
         _userNameText          = container.Q<Label>("UserNameText");
@@ -171,6 +183,7 @@ public class MainAppController : MonoBehaviour, IAuthUI
         _profilePanelName      = container.Q<Label>("ProfilePanelName");
         _profilePanelEmail     = container.Q<Label>("ProfilePanelEmail");
         _logoutButton          = container.Q<Button>("LogoutButton");
+        _logoutLabel           = container.Q<Label>("LogoutLabel");
         _deleteAccountButton   = container.Q<Button>("DeleteAccountButton");
         _profileSettingsButton = container.Q<Button>("ProfileSettingsButton");
 
@@ -389,19 +402,42 @@ public class MainAppController : MonoBehaviour, IAuthUI
 
     private void PopulateUserInfo()
     {
-        if (SessionManager.Instance == null) return;
+        bool loggedIn = SessionManager.Instance != null
+                        && SessionManager.Instance.IsLoggedIn;
+        string email  = loggedIn ? (SessionManager.Instance.Email ?? string.Empty)
+                                 : string.Empty;
 
-        string email       = SessionManager.Instance.Email ?? string.Empty;
-        string initials    = GetInitials(email);
-        string greeting    = GetTimeOfDayGreeting();
-        string displayName = email.Contains("@") ? email.Split('@')[0] : email;
+        string greeting = GetTimeOfDayGreeting();
+        string displayName, initials, panelEmail;
+
+        if (loggedIn && email.Contains("@"))
+        {
+            displayName = email.Split('@')[0];
+            initials    = GetInitials(email);
+            panelEmail  = email;
+        }
+        else
+        {
+            // Guest — no account signed in.
+            displayName = "Guest";
+            initials    = "G";
+            panelEmail  = "Not signed in";
+        }
 
         if (_greetingText        != null) _greetingText.text        = greeting;
         if (_userNameText        != null) _userNameText.text        = displayName;
         if (_profileInitials     != null) _profileInitials.text     = initials;
         if (_profilePanelInitials!= null) _profilePanelInitials.text= initials;
         if (_profilePanelName    != null) _profilePanelName.text    = displayName;
-        if (_profilePanelEmail   != null) _profilePanelEmail.text   = email;
+        if (_profilePanelEmail   != null) _profilePanelEmail.text   = panelEmail;
+
+        // Account action reflects state: guests get "Sign in", and "Delete
+        // account" is hidden (there's no account to delete).
+        if (_logoutLabel != null)
+            _logoutLabel.text = loggedIn ? "Sign out" : "Sign in";
+        if (_deleteAccountButton != null)
+            _deleteAccountButton.style.display =
+                loggedIn ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     private string GetInitials(string email)
@@ -466,7 +502,11 @@ public class MainAppController : MonoBehaviour, IAuthUI
     private async void OnLogoutClicked()
     {
         CloseProfilePanel();
-        await AuthService.Instance.Logout();
+        // The row is "Sign out" for a signed-in user and "Sign in" for a guest.
+        if (SessionManager.Instance != null && SessionManager.Instance.IsLoggedIn)
+            await AuthService.Instance.Logout();
+        else
+            ScreenNavigator.Instance.NavigateTo(ScreenName.Login);
     }
 
     private void OnDeleteAccountClicked()
@@ -499,14 +539,25 @@ public class MainAppController : MonoBehaviour, IAuthUI
     // AUTHSERVICE CALLBACKS
     // ---------------------------------------------------------------
 
+    // Guest-first: after signing out / deleting / a lost session, stay in the
+    // app as a guest and just refresh the menu (→ "Sign in", no Delete).
     private void OnLogoutSuccess(string message)
-        => ScreenNavigator.Instance.NavigateTo(ScreenName.Login);
+    {
+        ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
+        PopulateUserInfo();
+    }
 
     private void OnDeleteAccountSuccess(string message)
-        => ScreenNavigator.Instance.NavigateTo(ScreenName.Login);
+    {
+        ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
+        PopulateUserInfo();
+    }
 
     private void OnSessionExpiredOrInvalid()
-        => ScreenNavigator.Instance.NavigateTo(ScreenName.Login);
+    {
+        ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
+        PopulateUserInfo();
+    }
 
     private void OnNetworkLost()
         => UIManager.Instance.ShowNoConnectionBanner();

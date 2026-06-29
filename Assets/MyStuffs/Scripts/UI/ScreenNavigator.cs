@@ -16,7 +16,11 @@ public class ScreenNavigator : MonoBehaviour, INavigator
 
     // Animation duration in milliseconds
     private const int TransitionDurationMs = 200;
-    
+
+    // Guards against overlapping async navigations leaving two screens active
+    // (the "two panels on screen at once" bug).
+    private bool _isTransitioning = false;
+
     public bool HasBeenNavigated { get; private set; } = false;
 
     void Awake()
@@ -39,19 +43,29 @@ public class ScreenNavigator : MonoBehaviour, INavigator
 
         NavigateTo(ScreenName.Splash);
     }
+    // Removes the active class from EVERY screen so only the one we explicitly
+    // show stays visible. Class-based (not inline display) so it stays consistent
+    // with ShowScreen/HideScreen — inline display would override the USS classes.
     private void HideAllScreens()
     {
         foreach (ScreenName screen in System.Enum.GetValues(typeof(ScreenName)))
         {
             var container = UIManager.Instance?.GetScreenContainer(screen);
-            if (container != null)
-                container.style.display = DisplayStyle.None;
+            if (container == null)
+                continue;
+            container.RemoveFromClassList("screen--active");
+            container.RemoveFromClassList("screen-auth--active");
         }
     }
     // Navigates to a screen with a fade transition
     public async void NavigateTo(ScreenName targetScreen)
     {
         if (targetScreen == _currentScreen)
+            return;
+
+        // Ignore a new navigation while one is mid-transition — overlapping
+        // transitions are what left two panels active at once.
+        if (_isTransitioning)
             return;
 
         VisualElement currentContainer = UIManager.Instance
@@ -67,17 +81,25 @@ public class ScreenNavigator : MonoBehaviour, INavigator
             return;
         }
 
-        await FadeOut(currentContainer);
+        _isTransitioning = true;
+        try
+        {
+            await FadeOut(currentContainer);
 
-        HideScreen(currentContainer, _currentScreen);
-        ShowScreen(targetContainer, targetScreen);
+            // Definitively hide ALL screens, then show only the target.
+            HideAllScreens();
+            ShowScreen(targetContainer, targetScreen);
 
-        await FadeIn(targetContainer);
+            await FadeIn(targetContainer);
 
-        _currentScreen = targetScreen;
-        OnScreenChanged?.Invoke(_currentScreen);
-
-        Debug.Log($"[ScreenNavigator] Navigated to {targetScreen}");
+            _currentScreen = targetScreen;
+            OnScreenChanged?.Invoke(_currentScreen);
+            Debug.Log($"[ScreenNavigator] Navigated to {targetScreen}");
+        }
+        finally
+        {
+            _isTransitioning = false;
+        }
     }
 
     public void NavigateToImmediate(ScreenName targetScreen)
@@ -93,7 +115,7 @@ public class ScreenNavigator : MonoBehaviour, INavigator
         if (currentContainer == null || targetContainer == null)
             return;
 
-        HideScreen(currentContainer, _currentScreen);
+        HideAllScreens();
         ShowScreen(targetContainer, targetScreen);
 
         // Force full opacity to override any leftover fade state or CSS transition

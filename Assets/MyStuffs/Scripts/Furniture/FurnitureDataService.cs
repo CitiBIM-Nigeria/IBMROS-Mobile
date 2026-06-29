@@ -50,36 +50,54 @@ public class FurnitureDataService : MonoBehaviour
     // CATEGORIES
     // ---------------------------------------------------------------
 
-    public async Task LoadCategories()
-    {
-        
-        Debug.Log("[FurnitureDataService] LoadCategories called.");
-        Debug.Log($"[FurnitureDataService] Repository null: {FurnitureRepository.Instance == null}");
-        Debug.Log($"[FurnitureDataService] AwsManager null: {AwsManager.Instance == null}");
-        Debug.Log($"[FurnitureDataService] AWS initialized: {AwsManager.Instance?.IsInitialized}");
+    private Task               _categoriesTask;     // in-flight load (dedup)
+    private List<CategoryModel> _categoriesCache;    // last successful result
 
+    public Task LoadCategories()
+    {
+        // Already loaded this session → serve instantly, no network call.
+        if (_categoriesCache != null && _categoriesCache.Count > 0)
+        {
+            OnCategoriesLoaded?.Invoke(_categoriesCache);
+            return Task.CompletedTask;
+        }
+        // A load is already running (e.g. the room-entry preload) → reuse it
+        // instead of starting a second fetch (the bug the logs showed).
+        if (_categoriesTask != null && !_categoriesTask.IsCompleted)
+            return _categoriesTask;
+
+        _categoriesTask = LoadCategoriesInternal();
+        return _categoriesTask;
+    }
+
+    private async Task LoadCategoriesInternal()
+    {
         if (!IsReady()) return;
 
         OnLoadingChanged?.Invoke(true, "Loading categories...");
-
         var categories = await FurnitureRepository.Instance.GetCategories();
-
         OnLoadingChanged?.Invoke(false, string.Empty);
 
         if (categories == null || categories.Count == 0)
         {
-            Debug.LogWarning("[FurnitureDataService] No categories returned.");
             OnCategoriesFailed?.Invoke("No categories available. Please try again.");
             return;
         }
 
+        _categoriesCache = categories;
         Debug.Log($"[FurnitureDataService] Categories loaded: {categories.Count}");
         OnCategoriesLoaded?.Invoke(categories);
+
+        // Warm every category's products in the background so navigating is
+        // instant (the room-entry preload now warms the WHOLE catalog).
+        PreloadProducts(categories);
     }
 
     // ---------------------------------------------------------------
     // PRODUCTS BY CATEGORY
     // ---------------------------------------------------------------
+
+    private readonly Dictionary<string, List<ProductModel>> _productsCache = new();
 
     public async Task LoadProductsByCategory(string categoryId)
     {
@@ -88,6 +106,13 @@ public class FurnitureDataService : MonoBehaviour
         if (string.IsNullOrEmpty(categoryId))
         {
             OnProductsFailed?.Invoke("Invalid category.");
+            return;
+        }
+
+        // Served this session already → instant, no network call.
+        if (_productsCache.TryGetValue(categoryId, out var hit))
+        {
+            OnProductsLoaded?.Invoke(hit, categoryId);
             return;
         }
 
@@ -100,13 +125,37 @@ public class FurnitureDataService : MonoBehaviour
 
         if (products == null || products.Count == 0)
         {
-            Debug.LogWarning($"[FurnitureDataService] No products for {categoryId}.");
             OnProductsFailed?.Invoke("No products found in this category.");
             return;
         }
 
-        Debug.Log($"[FurnitureDataService] Products loaded: {products.Count}");
+        _productsCache[categoryId] = products;
         OnProductsLoaded?.Invoke(products, categoryId);
+    }
+
+    // Background pre-fetch: warm the product cache for every furniture type so
+    // opening any category later is instant. Called after categories load (room
+    // entry). Fire-and-forget; failures are harmless (it'll load on demand).
+    public async void PreloadProducts(List<CategoryModel> categories)
+    {
+        if (categories == null) return;
+        foreach (var room in categories)
+        {
+            if (room.Subcategories == null) continue;
+            foreach (var type in room.Subcategories)
+            {
+                if (_productsCache.ContainsKey(type.SubcategoryId)) continue;
+                try
+                {
+                    var products = await FurnitureRepository.Instance
+                        .GetProductsByCategory(type.SubcategoryId);
+                    if (products != null && products.Count > 0)
+                        _productsCache[type.SubcategoryId] = products;
+                }
+                catch { /* on-demand load will retry */ }
+            }
+        }
+        Debug.Log("[FurnitureDataService] Product preload complete.");
     }
 
     // ---------------------------------------------------------------

@@ -223,8 +223,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityGLTFScripts::UnityGLTF.GLTFSettings
   packageVersion: 
   shaderStrippingSettings:
-    stripPassesFromAllShaders: 0
-    stripPasses: 0
+    stripPassesFromAllShaders: 1
+    stripPasses: -1
   ImportPlugins:
   - {fileID: -5619823906185663066}
   - {fileID: 3974735005761422679}

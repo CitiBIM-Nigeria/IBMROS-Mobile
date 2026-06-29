@@ -9,6 +9,7 @@ public class LoginController : MonoBehaviour, IAuthUI
     private TextField _passwordInput;
     private Button _loginButton;
     private Button _goToSignUpButton;
+    private Button _backToAppButton;
     private Button _forgotPasswordButton;
     private Button _passwordToggle;
     private VisualElement _passwordInputRow;
@@ -105,6 +106,7 @@ public class LoginController : MonoBehaviour, IAuthUI
         _passwordInput = container.Q<TextField>("PasswordInput");
         _loginButton = container.Q<Button>("LoginButton");
         _goToSignUpButton = container.Q<Button>("GoToSignUpButton");
+        _backToAppButton = container.Q<Button>("BackToAppButton");
         _forgotPasswordButton = container.Q<Button>("ForgotPasswordButton");
         _passwordToggle = container.Q<Button>("PasswordToggle");
         _passwordInputRow = container.Q<VisualElement>("PasswordInputRow");
@@ -122,6 +124,9 @@ public class LoginController : MonoBehaviour, IAuthUI
         if (_goToSignUpButton != null)
             _goToSignUpButton.clicked -= OnGoToSignUpClicked;
 
+        if (_backToAppButton != null)
+            _backToAppButton.clicked -= OnBackToAppClicked;
+
         if (_forgotPasswordButton != null)
             _forgotPasswordButton.clicked -= OnForgotPasswordClicked;
 
@@ -136,6 +141,9 @@ public class LoginController : MonoBehaviour, IAuthUI
 
         if (_goToSignUpButton != null)
             _goToSignUpButton.clicked += OnGoToSignUpClicked;
+
+        if (_backToAppButton != null)
+            _backToAppButton.clicked += OnBackToAppClicked;
 
         if (_forgotPasswordButton != null)
             _forgotPasswordButton.clicked += OnForgotPasswordClicked;
@@ -162,6 +170,13 @@ public class LoginController : MonoBehaviour, IAuthUI
             _emailInput?.value.Trim(),
             _passwordInput?.value
         );
+    }
+
+    // Guest-first: leave the auth screens and use the app without signing in.
+    private void OnBackToAppClicked()
+    {
+        ClearFeedback();
+        ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
     }
 
     private void OnGoToSignUpClicked()

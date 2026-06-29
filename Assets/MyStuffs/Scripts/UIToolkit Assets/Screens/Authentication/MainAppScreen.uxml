@@ -2,34 +2,24 @@
     <Style src="project://database/Assets/MyStuffs/Scripts/UIToolkit%20Assets/Styles/IbmRosTheme.uss?fileID=7433441132597879392&amp;guid=934fe7e1c0c5c4bf4a36002625785e6f&amp;type=3#IbmRosTheme"/>
     <Style src="project://database/Assets/MyStuffs/Scripts/UIToolkit%20Assets/Styles/Authentication/MainAppScreen.uss?fileID=7433441132597879392&amp;guid=82a1af223fcd4d4696f8e6c0363f8263&amp;type=3#MainAppScreen"/>
     <Style src="project://database/Assets/MyStuffs/Scripts/UIToolkit%20Assets/Styles/SharedComponents.uss?fileID=7433441132597879392&amp;guid=3d127506307fe459a827bfc49b978dd4&amp;type=3#SharedComponents"/>
-
     <ui:VisualElement name="MainAppScreen" class="main-app-root">
-
-        <!-- ═══════════════════════════════════════════
-             NO CONNECTION BANNER
-        ═══════════════════════════════════════════ -->
         <ui:VisualElement name="NoConnectionBanner" class="no-connection-banner">
-            <ui:Label name="NoConnectionIcon"  text="⚠"                    class="no-connection-banner__icon"/>
-            <ui:Label name="NoConnectionText"  text="No internet connection" class="no-connection-banner__text"/>
+            <ui:Label name="NoConnectionIcon" text="⚠" class="no-connection-banner__icon"/>
+            <ui:Label name="NoConnectionText" text="No internet connection" class="no-connection-banner__text"/>
             <ui:Button name="RetryConnectionButton" class="no-connection-banner__retry">
                 <ui:Label text="RETRY"/>
             </ui:Button>
         </ui:VisualElement>
-
-        <!-- ═══════════════════════════════════════════
-             TOP HEADER
-        ═══════════════════════════════════════════ -->
         <ui:VisualElement name="TopHeader" class="main-header">
             <ui:VisualElement name="HeaderLeft" class="main-header__left">
                 <ui:VisualElement name="HeaderLogoMark" class="main-header__logo">
                     <ui:Label name="HeaderLogoText" text="IR" class="main-header__logo-text"/>
                 </ui:VisualElement>
                 <ui:VisualElement name="HeaderGreetingCol" class="main-header__greeting-col">
-                    <ui:Label name="GreetingText"  text="Good morning" class="main-header__greeting"/>
-                    <ui:Label name="UserNameText"  text=""              class="main-header__username"/>
+                    <ui:Label name="GreetingText" text="Good morning" class="main-header__greeting"/>
+                    <ui:Label name="UserNameText" text="" class="main-header__username"/>
                 </ui:VisualElement>
             </ui:VisualElement>
-
             <ui:VisualElement name="HeaderRight" class="main-header__right">
                 <ui:Button name="NotificationButton" class="main-header__icon-btn">
                     <ui:Label name="NotificationIcon" text="🔔" class="main-header__icon-label"/>
@@ -41,175 +31,106 @@
                 </ui:Button>
             </ui:VisualElement>
         </ui:VisualElement>
-
-        <!-- ═══════════════════════════════════════════
-             MAIN SCROLL
-        ═══════════════════════════════════════════ -->
-        <ui:ScrollView name="MainScroll"
-                       horizontal-scrolling-enabled="false"
-                       vertical-scrolling-enabled="true"
-                       mouse-wheel-scroll-size="80"
-                       class="main-scroll">
-            <ui:VisualElement name="MainContent" class="main-content">
-
-                <!-- MY ROOMS ─────────────────────── -->
-                <ui:VisualElement name="MyRoomsSection" class="main-section mt-8">
-                    <ui:VisualElement name="MyRoomsSectionHeader" class="main-section__header">
-                        <ui:Label name="MyRoomsTitle" text="My Rooms" class="text-h3"/>
-                        <ui:Button name="SeeAllRoomsButton" text="See all" class="btn-ghost main-section__see-all"/>
-                    </ui:VisualElement>
-
-                    <ui:ScrollView name="RoomsScroll"
-                                   horizontal-scrolling-enabled="true"
-                                   vertical-scrolling-enabled="false"
-                                   mouse-wheel-scroll-size="80"
-                                   class="main-rooms-scroll">
-                        <ui:VisualElement name="RoomsRow" class="main-rooms-row">
-
-                            <!-- Add Room card — always present -->
-                            <ui:Button name="AddRoomButton" class="main-room-card main-room-card--add">
-                                <ui:Label name="AddRoomIcon" text="+" class="main-room-card__add-icon"/>
-                                <ui:Label name="AddRoomText" text="New Room" class="main-room-card__add-text"/>
-                            </ui:Button>
-
-                            <!-- Saved room cards are injected here by C# at runtime -->
-                            <!-- Example structure C# should clone:
-                            <ui:VisualElement class="main-room-card">
-                                <ui:VisualElement class="main-room-card__image">
-                                    <ui:Label text="🏠" class="main-room-card__placeholder-icon"/>
-                                </ui:VisualElement>
-                                <ui:VisualElement class="main-room-card__footer">
-                                    <ui:Label text="Room name" class="main-room-card__name"/>
-                                    <ui:Label text="0 items"   class="main-room-card__count"/>
-                                </ui:VisualElement>
-                            </ui:VisualElement>
-                            -->
-
-                        </ui:VisualElement>
-                    </ui:ScrollView>
-
-                    <!-- Shown from C# when no saved rooms exist -->
-                    <ui:VisualElement name="RoomsEmptyHint" class="main-rooms-empty" style="display: none;">
-                        <ui:Label name="RoomsEmptyText"
-                                  text="Tap New Room to start designing your first space."
-                                  class="main-rooms-empty__text"/>
-                    </ui:VisualElement>
+        <ui:VisualElement name="MainContent" class="main-content" style="flex-grow: 1;">
+            <ui:VisualElement name="MyRoomsSection" class="main-section mt-8">
+                <ui:VisualElement name="MyRoomsSectionHeader" class="main-section__header">
+                    <ui:Label name="MyRoomsTitle" text="My Rooms" class="text-h3"/>
+                    <ui:Button name="SeeAllRoomsButton" text="See all" class="btn-ghost main-section__see-all"/>
                 </ui:VisualElement>
-
-                <ui:VisualElement name="BottomPad" class="main-bottom-pad"/>
+                <ui:ScrollView name="RoomsScroll" horizontal-scrolling-enabled="true" vertical-scrolling-enabled="false" mouse-wheel-scroll-size="80" class="main-rooms-scroll">
+                    <ui:VisualElement name="RoomsRow" class="main-rooms-row">
+                        <ui:Button name="AddRoomButton" class="main-room-card main-room-card--add">
+                            <ui:Label name="AddRoomIcon" text="+" class="main-room-card__add-icon"/>
+                            <ui:Label name="AddRoomText" text="New Room" class="main-room-card__add-text"/>
+                        </ui:Button>
+                    </ui:VisualElement>
+                </ui:ScrollView>
+                <ui:VisualElement name="RoomsEmptyHint" class="main-rooms-empty" style="display: none;">
+                    <ui:Label name="RoomsEmptyText" text="Tap New Room to start designing your first space." class="main-rooms-empty__text"/>
+                </ui:VisualElement>
             </ui:VisualElement>
-        </ui:ScrollView>
-
-        <!-- ═══════════════════════════════════════════
-             BOTTOM NAV  —  3 items
-        ═══════════════════════════════════════════ -->
+            <ui:VisualElement name="BottomPad" class="main-bottom-pad"/>
+        </ui:VisualElement>
         <ui:VisualElement name="BottomNavBar" class="main-bottom-nav">
             <ui:Button name="NavHomeButton" class="main-nav-item main-nav-item--active">
-                <ui:Label name="NavHomeIcon"  text="🏠"  class="main-nav-item__icon"/>
+                <ui:Label name="NavHomeIcon" text="🏠" class="main-nav-item__icon"/>
                 <ui:Label name="NavHomeLabel" text="Home" class="main-nav-item__label"/>
             </ui:Button>
             <ui:Button name="NavRoomsButton" class="main-nav-item">
-                <ui:Label name="NavRoomsIcon"  text="📐"   class="main-nav-item__icon"/>
+                <ui:Label name="NavRoomsIcon" text="📐" class="main-nav-item__icon"/>
                 <ui:Label name="NavRoomsLabel" text="Rooms" class="main-nav-item__label"/>
             </ui:Button>
             <ui:Button name="NavProfileButton" class="main-nav-item">
-                <ui:Label name="NavProfileIcon"  text="👤"    class="main-nav-item__icon"/>
+                <ui:Label name="NavProfileIcon" text="👤" class="main-nav-item__icon"/>
                 <ui:Label name="NavProfileLabel" text="Profile" class="main-nav-item__label"/>
             </ui:Button>
         </ui:VisualElement>
-
-        <!-- ═══════════════════════════════════════════
-             PROFILE PANEL BACKDROP
-        ═══════════════════════════════════════════ -->
         <ui:VisualElement name="ProfilePanelBackdrop" class="main-profile-backdrop"/>
-
-        <!-- ═══════════════════════════════════════════
-             PROFILE PANEL
-        ═══════════════════════════════════════════ -->
         <ui:VisualElement name="ProfilePanel" class="main-profile-panel">
-
-            <!-- User info -->
             <ui:VisualElement name="ProfilePanelHeader" class="main-profile-panel__header">
                 <ui:VisualElement name="ProfilePanelAvatar" class="avatar avatar--lg">
                     <ui:Label name="ProfilePanelInitials" text="" class="avatar__initials"/>
                 </ui:VisualElement>
                 <ui:VisualElement name="ProfilePanelInfo" class="main-profile-panel__info">
-                    <ui:Label name="ProfilePanelName"  text="" class="main-profile-panel__name"/>
+                    <ui:Label name="ProfilePanelName" text="" class="main-profile-panel__name"/>
                     <ui:Label name="ProfilePanelEmail" text="" class="main-profile-panel__email"/>
                 </ui:VisualElement>
             </ui:VisualElement>
-
             <ui:VisualElement name="ProfilePanelDivider1" class="divider"/>
-
-            <!-- Theme toggle -->
             <ui:VisualElement name="ThemeToggleRow" class="theme-toggle-row">
                 <ui:Label name="ThemeToggleLabel" text="Dark mode" class="theme-toggle-row__label"/>
                 <ui:VisualElement name="ThemeToggleTrack" class="theme-toggle-track">
                     <ui:VisualElement name="ThemeToggleThumb" class="theme-toggle-thumb"/>
                 </ui:VisualElement>
             </ui:VisualElement>
-
-            <!-- Accent colour picker -->
             <ui:VisualElement name="AccentPickerRow" class="accent-picker-row">
                 <ui:Label name="AccentPickerLabel" text="ACCENT COLOUR" class="accent-picker-label"/>
                 <ui:VisualElement name="AccentPickerDots" class="accent-picker-dots">
-                    <ui:Button name="AccentDotBlue"   class="accent-dot accent-dot--blue   accent-dot--selected">
-                        <ui:Label name="AccentDotBlueCheck"   text="✓" class="accent-dot__check"/>
+                    <ui:Button name="AccentDotBlue" class="accent-dot accent-dot--blue   accent-dot--selected">
+                        <ui:Label name="AccentDotBlueCheck" text="✓" class="accent-dot__check"/>
                     </ui:Button>
-                    <ui:Button name="AccentDotGreen"  class="accent-dot accent-dot--green">
-                        <ui:Label name="AccentDotGreenCheck"  text="✓" class="accent-dot__check"/>
+                    <ui:Button name="AccentDotGreen" class="accent-dot accent-dot--green">
+                        <ui:Label name="AccentDotGreenCheck" text="✓" class="accent-dot__check"/>
                     </ui:Button>
                     <ui:Button name="AccentDotPurple" class="accent-dot accent-dot--purple">
                         <ui:Label name="AccentDotPurpleCheck" text="✓" class="accent-dot__check"/>
                     </ui:Button>
-                    <ui:Button name="AccentDotAmber"  class="accent-dot accent-dot--amber">
-                        <ui:Label name="AccentDotAmberCheck"  text="✓" class="accent-dot__check"/>
+                    <ui:Button name="AccentDotAmber" class="accent-dot accent-dot--amber">
+                        <ui:Label name="AccentDotAmberCheck" text="✓" class="accent-dot__check"/>
                     </ui:Button>
-                    <ui:Button name="AccentDotRose"   class="accent-dot accent-dot--rose">
-                        <ui:Label name="AccentDotRoseCheck"   text="✓" class="accent-dot__check"/>
+                    <ui:Button name="AccentDotRose" class="accent-dot accent-dot--rose">
+                        <ui:Label name="AccentDotRoseCheck" text="✓" class="accent-dot__check"/>
                     </ui:Button>
                 </ui:VisualElement>
             </ui:VisualElement>
-
             <ui:VisualElement name="ProfilePanelDivider2" class="divider"/>
-
-            <!-- Standard items -->
             <ui:Button name="ProfileSettingsButton" class="main-profile-panel__item">
-                <ui:Label name="SettingsIcon"  text="⚙"        class="main-profile-panel__item-icon"/>
-                <ui:Label name="SettingsLabel" text="Settings"  class="main-profile-panel__item-label"/>
+                <ui:Label name="SettingsIcon" text="⚙" class="main-profile-panel__item-icon"/>
+                <ui:Label name="SettingsLabel" text="Settings" class="main-profile-panel__item-label"/>
             </ui:Button>
             <ui:Button name="ProfileWishlistButton" class="main-profile-panel__item">
-                <ui:Label name="WishlistIcon"  text="♡"         class="main-profile-panel__item-icon"/>
-                <ui:Label name="WishlistLabel" text="Wishlist"   class="main-profile-panel__item-label"/>
+                <ui:Label name="WishlistIcon" text="♡" class="main-profile-panel__item-icon"/>
+                <ui:Label name="WishlistLabel" text="Wishlist" class="main-profile-panel__item-label"/>
             </ui:Button>
             <ui:Button name="ProfileOrdersButton" class="main-profile-panel__item">
-                <ui:Label name="OrdersIcon"  text="📦"          class="main-profile-panel__item-icon"/>
-                <ui:Label name="OrdersLabel" text="Orders"       class="main-profile-panel__item-label"/>
+                <ui:Label name="OrdersIcon" text="📦" class="main-profile-panel__item-icon"/>
+                <ui:Label name="OrdersLabel" text="Orders" class="main-profile-panel__item-label"/>
             </ui:Button>
-
             <ui:VisualElement name="ProfilePanelDivider3" class="divider"/>
-
-            <!-- Danger items -->
             <ui:Button name="LogoutButton" class="main-profile-panel__item main-profile-panel__item--danger">
-                <ui:Label name="LogoutIcon"  text="→"           class="main-profile-panel__item-icon"/>
-                <ui:Label name="LogoutLabel" text="Sign out"     class="main-profile-panel__item-label--danger"/>
+                <ui:Label name="LogoutIcon" text="→" class="main-profile-panel__item-icon"/>
+                <ui:Label name="LogoutLabel" text="Sign out" class="main-profile-panel__item-label--danger"/>
             </ui:Button>
             <ui:Button name="DeleteAccountButton" class="main-profile-panel__item main-profile-panel__item--danger">
-                <ui:Label name="DeleteIcon"  text="🗑"           class="main-profile-panel__item-icon"/>
+                <ui:Label name="DeleteIcon" text="🗑" class="main-profile-panel__item-icon"/>
                 <ui:Label name="DeleteLabel" text="Delete account" class="main-profile-panel__item-label--danger"/>
             </ui:Button>
-
         </ui:VisualElement>
-
-        <!-- ═══════════════════════════════════════════
-             LOADING OVERLAY
-        ═══════════════════════════════════════════ -->
         <ui:VisualElement name="LoadingOverlay" class="loading-overlay">
             <ui:VisualElement name="LoadingCard" class="loading-card">
                 <ui:VisualElement name="LoadingSpinner" class="loading-spinner"/>
                 <ui:Label name="LoadingText" text="Please wait..." class="loading-text"/>
             </ui:VisualElement>
         </ui:VisualElement>
-
     </ui:VisualElement>
 </ui:UXML>

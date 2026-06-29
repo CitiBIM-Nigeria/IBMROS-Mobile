@@ -1,12 +1,14 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 public class ItemDetailSheetController : MonoBehaviour
 {
-    public event Action<string> OnAddToRoomClicked;
-    public event Action         OnSheetClosed;
+    public event Action<string>         OnAddToRoomClicked;
+    public event Action                 OnSheetClosed;
+    public event Action<ProductVariant> OnColorSelected;
 
     // ---------------------------------------------------------------
     // UI REFERENCES
@@ -102,7 +104,8 @@ public class ItemDetailSheetController : MonoBehaviour
     // ---------------------------------------------------------------
 
     public void Open(string emoji, string name, string description,
-        string productId, string imageUrl = "")
+        string productId, string imageUrl = "",
+        List<ProductVariant> variants = null)
     {
         _currentItemKey = productId;
 
@@ -134,7 +137,7 @@ public class ItemDetailSheetController : MonoBehaviour
         if (!string.IsNullOrEmpty(imageUrl) && _imageArea != null)
             LoadImageIntoArea(_imageArea, _emojiLabel, imageUrl);
 
-        BuildColorSwatches();
+        BuildColorSwatches(variants);
 
         _overlay.style.display = DisplayStyle.Flex;
         _isOpen = true;
@@ -184,17 +187,67 @@ public class ItemDetailSheetController : MonoBehaviour
     // variant data yet. Extend this once variant data is available.
     // ---------------------------------------------------------------
 
-    private void BuildColorSwatches()
+    private void BuildColorSwatches(List<ProductVariant> variants)
     {
         if (_colorRow == null) return;
         _colorRow.Clear();
+        if (variants == null || variants.Count == 0) return;
 
-        var swatch = new VisualElement();
-        swatch.AddToClassList("item-detail-color-swatch");
+        foreach (var v in variants)
+        {
+            // Only offer colours that actually have their own 3D model (the
+            // primary always does). IKEA only publishes models for some colours,
+            // so this keeps every swatch tap working instead of silently falling
+            // back to the default colour.
+            if (!v.IsPrimary && string.IsNullOrEmpty(v.ModelUrl))
+                continue;
+
+            var swatch = new VisualElement();
+            swatch.AddToClassList("item-detail-color-swatch");
+            if (v.IsPrimary)
+                swatch.AddToClassList("item-detail-color-swatch--selected");
+
+            // Prefer IKEA's fabric chip; fall back to the flat dominant colour.
+            if (!string.IsNullOrEmpty(v.SwatchUrl))
+                LoadSwatchImage(swatch, v.SwatchUrl);
+            else if (ColorUtility.TryParseHtmlString(
+                         string.IsNullOrEmpty(v.DominantColor) ? "#cccccc"
+                                                               : v.DominantColor,
+                         out var col))
+                swatch.style.backgroundColor = new StyleColor(col);
+
+            var captured = v;
+            swatch.RegisterCallback<ClickEvent>(evt =>
+            {
+                evt.StopPropagation();
+                SelectSwatch(swatch, captured);
+            });
+
+            _colorRow.Add(swatch);
+        }
+    }
+
+    private async void LoadSwatchImage(VisualElement swatch, string url)
+    {
+        var tex = await ImageCache.GetTexture(url);
+        if (tex != null)
+            swatch.style.backgroundImage = new StyleBackground(tex);
+    }
+
+    private void SelectSwatch(VisualElement swatch, ProductVariant variant)
+    {
+        // Highlight the chosen swatch.
+        foreach (var child in _colorRow.Children())
+            child.RemoveFromClassList("item-detail-color-swatch--selected");
         swatch.AddToClassList("item-detail-color-swatch--selected");
-        swatch.style.backgroundColor =
-            new StyleColor(new Color(0.95f, 0.95f, 0.95f));
-        _colorRow.Add(swatch);
+
+        // Update the big preview image to this colour.
+        string img = !string.IsNullOrEmpty(variant.DisplayUrl)
+            ? variant.DisplayUrl : variant.DisplayOriginalUrl;
+        if (!string.IsNullOrEmpty(img) && _imageArea != null)
+            LoadImageIntoArea(_imageArea, _emojiLabel, img);
+
+        OnColorSelected?.Invoke(variant);
     }
 
     // ---------------------------------------------------------------

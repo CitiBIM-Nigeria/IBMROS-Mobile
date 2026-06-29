@@ -29,6 +29,18 @@ public class ConfirmEmailController : MonoBehaviour
     // Resend cooldown state
     private bool _isResendOnCooldown = false;
     private const int ResendCooldownSeconds = 60;
+
+    // Wire events exactly once, and never let two confirm submissions overlap — a
+    // double submit re-uses the (now consumed) code and Cognito reports it
+    // "expired", bouncing the user back to sign-up.
+    private bool _eventsWired  = false;
+    // STATIC so the guard holds even if two ConfirmEmailController instances are
+    // alive (each would otherwise wire the same button and double-submit — the
+    // 2nd submit re-uses the consumed code and Cognito flashes "expired").
+    // Reset on entering the screen (ClearInputs / HandleScreenChanged).
+    private static bool _isConfirming = false;
+    private static bool _confirmed    = false;
+
     void OnEnable()
     {
         if (UIManager.Instance != null && UIManager.Instance.IsReady)
@@ -48,6 +60,22 @@ public class ConfirmEmailController : MonoBehaviour
     void OnDisable()
     {
         UIManager.OnScreensReady -= OnScreensReady;
+    }
+
+    void OnDestroy()
+    {
+        ScreenNavigator.OnScreenChanged -= HandleScreenChanged;
+    }
+
+    // When this screen becomes active, clear any stale code/latch so the user
+    // starts fresh (handles signing up again within the same app session).
+    private void HandleScreenChanged(ScreenName screen)
+    {
+        if (screen != ScreenName.ConfirmEmail)
+            return;
+        ClearFeedback();
+        ClearInputs();
+        LoadPendingEmail();
     }
 
     private void OnScreensReady()
@@ -96,6 +124,16 @@ public class ConfirmEmailController : MonoBehaviour
 
     private void WireEvents()
     {
+        // Guard against re-wiring — OnEnable/OnScreensReady can both run, and
+        // re-adding handlers is what caused the double confirm submit.
+        if (_eventsWired)
+            return;
+        _eventsWired = true;
+
+        // Reset the screen (latch + boxes) every time we navigate to it, so a
+        // second sign-up in the same session starts clean.
+        ScreenNavigator.OnScreenChanged += HandleScreenChanged;
+
         if (_confirmButton != null)
             _confirmButton.clicked += OnConfirmClicked;
 
@@ -114,6 +152,11 @@ public class ConfirmEmailController : MonoBehaviour
             if (box == null)
                 continue;
 
+            // The UXML caps each box at 1 char, which truncates a pasted code
+            // before the handler can spread it. Allow the full 6 so paste works;
+            // the handler keeps just one digit per box.
+            box.maxLength = 6;
+
             // Auto jump to next box when a digit is entered
             box.RegisterValueChangedCallback(evt =>
                 OnCodeBoxValueChanged(index, evt.newValue));
@@ -125,9 +168,10 @@ public class ConfirmEmailController : MonoBehaviour
             box.RegisterCallback<FocusOutEvent>(evt =>
                 SetCodeBoxFocused(index, false));
 
-            // Handle backspace to jump back to previous box
+            // Handle backspace ourselves. TrickleDown so we run BEFORE the
+            // TextField consumes the key (otherwise the handler never sees it).
             box.RegisterCallback<KeyDownEvent>(evt =>
-                OnCodeBoxKeyDown(index, evt));
+                OnCodeBoxKeyDown(index, evt), TrickleDown.TrickleDown);
         }
     }
 
@@ -168,53 +212,102 @@ public class ConfirmEmailController : MonoBehaviour
     private void OnCodeBoxValueChanged(int index, string newValue)
     {
         var box = _codeBoxes[index];
-
         if (box == null)
             return;
 
-        // Only allow digits
-        if (!string.IsNullOrEmpty(newValue))
-        {
-            string digit = newValue[newValue.Length - 1].ToString();
-
-            if (!char.IsDigit(digit[0]))
-            {
-                box.SetValueWithoutNotify(string.Empty);
-                return;
-            }
-
-            // Keep only one character
-            box.SetValueWithoutNotify(digit);
-
-            // Mark box as filled
-            box.AddToClassList("confirm-email-code-box--filled");
-            box.RemoveFromClassList("confirm-email-code-box--error");
-
-            // Jump to next box automatically
-            if (index < _codeBoxes.Length - 1)
-                _codeBoxes[index + 1]?.Focus();
-            else
-                _confirmButton?.Focus();
-        }
-        else
+        if (string.IsNullOrEmpty(newValue))
         {
             box.RemoveFromClassList("confirm-email-code-box--filled");
+            return;
         }
+
+        // Keep only the digits from whatever was typed or PASTED.
+        string digits = string.Empty;
+        foreach (char c in newValue)
+            if (char.IsDigit(c))
+                digits += c;
+
+        if (digits.Length == 0)
+        {
+            box.SetValueWithoutNotify(string.Empty);
+            return;
+        }
+
+        // A paste (or multi-character entry) spreads across the boxes from here on.
+        if (digits.Length > 1)
+        {
+            DistributeDigits(index, digits);
+            return;
+        }
+
+        // Single digit.
+        box.SetValueWithoutNotify(digits);
+        box.AddToClassList("confirm-email-code-box--filled");
+        box.RemoveFromClassList("confirm-email-code-box--error");
+
+        if (index < _codeBoxes.Length - 1)
+            _codeBoxes[index + 1]?.Focus();
+        // On the last box, keep focus here (don't jump to the button) so the
+        // user can still Backspace to edit the code.
+    }
+
+    // Fills boxes from startIndex with the given digits — lets the user paste the
+    // whole 6-digit code into any box and have it spread across all of them.
+    private void DistributeDigits(int startIndex, string digits)
+    {
+        int i = startIndex;
+        foreach (char d in digits)
+        {
+            if (i >= _codeBoxes.Length)
+                break;
+            var b = _codeBoxes[i];
+            if (b != null)
+            {
+                b.SetValueWithoutNotify(d.ToString());
+                b.AddToClassList("confirm-email-code-box--filled");
+                b.RemoveFromClassList("confirm-email-code-box--error");
+            }
+            i++;
+        }
+
+        if (i < _codeBoxes.Length)
+            _codeBoxes[i]?.Focus();
+        else
+            _codeBoxes[_codeBoxes.Length - 1]?.Focus();
     }
 
     private void OnCodeBoxKeyDown(int index, KeyDownEvent evt)
     {
-        // Jump back to previous box on backspace if current box is empty
-        if (evt.keyCode == KeyCode.Backspace)
-        {
-            var box = _codeBoxes[index];
+        if (evt.keyCode != KeyCode.Backspace)
+            return;
 
-            if (box != null && string.IsNullOrEmpty(box.value) && index > 0)
+        var box = _codeBoxes[index];
+        if (box == null)
+            return;
+
+        // We fully own Backspace (registered TrickleDown so we run before the
+        // TextField eats it). Filled box → clear this digit and stay; empty box →
+        // step back and clear the previous one. Repeated Backspace therefore
+        // deletes the whole code, one box per press, with no manual re-selecting.
+        if (!string.IsNullOrEmpty(box.value))
+        {
+            box.SetValueWithoutNotify(string.Empty);
+            box.RemoveFromClassList("confirm-email-code-box--filled");
+            box.RemoveFromClassList("confirm-email-code-box--error");
+        }
+        else if (index > 0)
+        {
+            var prev = _codeBoxes[index - 1];
+            if (prev != null)
             {
-                _codeBoxes[index - 1]?.Focus();
-                evt.StopPropagation();
+                prev.SetValueWithoutNotify(string.Empty);
+                prev.RemoveFromClassList("confirm-email-code-box--filled");
+                prev.RemoveFromClassList("confirm-email-code-box--error");
+                prev.Focus();
             }
         }
+
+        evt.StopPropagation();
     }
 
     private void SetCodeBoxFocused(int index, bool focused)
@@ -242,54 +335,86 @@ public class ConfirmEmailController : MonoBehaviour
 
     private async void OnConfirmClicked()
     {
-        ClearFeedback();
-
-        string code = GetFullCode();
-        string email = PlayerPrefs.GetString("ibm_ros_pending_email", string.Empty);
-
-        string validationError = InputValidator.ValidateConfirmationCode(code);
-        if (validationError != null)
-        {
-            ShowCodeError(validationError);
-            SetAllBoxesError();
+        // Already confirmed, or a submit is in flight → ignore. Together these stop
+        // the "success then expired bounce" completely.
+        if (_confirmed || _isConfirming)
             return;
-        }
+        _isConfirming = true;
 
-        if (string.IsNullOrEmpty(email))
+        try
         {
-            ShowError("Session expired. Please sign up again.");
-            await Task.Delay(2000);
-            GoBackToSignUp();
-            return;
-        }
+            ClearFeedback();
 
-        SetLoadingState(true);
+            string code = GetFullCode();
+            string email = PlayerPrefs.GetString("ibm_ros_pending_email", string.Empty);
 
-        AuthResult result = await AuthManager.Instance.ConfirmEmail(email, code);
-
-        SetLoadingState(false);
-
-        if (result.IsSuccess)
-        {
-            PlayerPrefs.DeleteKey("ibm_ros_pending_email");
-            PlayerPrefs.Save();
-
-            SetAllBoxesSuccess();
-            ShowSuccess(result.Message);
-
-            await Task.Delay(1500);
-            ScreenNavigator.Instance.NavigateTo(ScreenName.Login);
-        }
-        else
-        {
-            ShowError(result.Message);
-            SetAllBoxesError();
-
-            if (result.Error == AuthError.ExpiredConfirmationCode)
+            string validationError = InputValidator.ValidateConfirmationCode(code);
+            if (validationError != null)
             {
+                ShowCodeError(validationError);
+                SetAllBoxesError();
+                return;
+            }
+
+            if (string.IsNullOrEmpty(email))
+            {
+                ShowError("Session expired. Please sign up again.");
                 await Task.Delay(2000);
                 GoBackToSignUp();
+                return;
             }
+
+            SetLoadingState(true);
+
+            AuthResult result = await AuthManager.Instance.ConfirmEmail(email, code);
+
+            SetLoadingState(false);
+
+            if (result.IsSuccess)
+            {
+                _confirmed = true;   // latch — this screen will not submit again
+                PlayerPrefs.DeleteKey("ibm_ros_pending_email");
+                PlayerPrefs.Save();
+
+                SetAllBoxesSuccess();
+                ShowSuccess(result.Message);
+
+                await Task.Delay(1200);
+
+                // Auto sign-in with the password held from sign-up so the user
+                // lands straight in the app. Falls back to the Login screen (email
+                // already remembered) if the password isn't available — e.g. the
+                // app was restarted between signing up and confirming.
+                // NavigateToImmediate avoids the fade transition's in-progress
+                // guard silently dropping the navigation.
+                string pw = AuthService.Instance?.ConsumeSignupPassword() ?? string.Empty;
+                if (!string.IsNullOrEmpty(pw))
+                {
+                    AuthResult login = await AuthManager.Instance.Login(email, pw);
+                    if (login.IsSuccess)
+                    {
+                        ScreenNavigator.Instance.NavigateToImmediate(ScreenName.MainApp);
+                        return;
+                    }
+                }
+
+                ScreenNavigator.Instance.NavigateToImmediate(ScreenName.Login);
+            }
+            else
+            {
+                ShowError(result.Message);
+                SetAllBoxesError();
+
+                if (result.Error == AuthError.ExpiredConfirmationCode)
+                {
+                    await Task.Delay(2000);
+                    GoBackToSignUp();
+                }
+            }
+        }
+        finally
+        {
+            _isConfirming = false;
         }
     }
 
@@ -432,6 +557,10 @@ public class ConfirmEmailController : MonoBehaviour
 
     private void ClearInputs()
     {
+        // Fresh code-entry session → release the latches so the user can submit.
+        _confirmed    = false;
+        _isConfirming = false;
+
         if (_codeBoxes == null)
             return;
 

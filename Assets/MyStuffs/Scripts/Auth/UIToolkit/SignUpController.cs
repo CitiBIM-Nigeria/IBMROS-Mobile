@@ -59,6 +59,11 @@ public class SignUpController : MonoBehaviour, IAuthUI
 
     void OnEnable()
     {
+        // Clear the form every time this screen becomes active (not just the
+        // first time) so old email/password values never linger.
+        ScreenNavigator.OnScreenChanged -= OnScreenChanged;
+        ScreenNavigator.OnScreenChanged += OnScreenChanged;
+
         if (UIManager.Instance != null && UIManager.Instance.IsReady)
         {
             QueryElements();
@@ -75,6 +80,15 @@ public class SignUpController : MonoBehaviour, IAuthUI
     void OnDisable()
     {
         UIManager.OnScreensReady -= OnScreensReady;
+        ScreenNavigator.OnScreenChanged -= OnScreenChanged;
+    }
+
+    private void OnScreenChanged(ScreenName screen)
+    {
+        if (screen != ScreenName.SignUp)
+            return;
+        ClearFeedback();
+        OnScreenActivated();   // clears email / password / confirm fields
     }
 
     private void OnScreensReady()

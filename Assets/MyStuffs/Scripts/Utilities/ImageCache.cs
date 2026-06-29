@@ -25,6 +25,14 @@ public static class ImageCache
             return cached;
         }
 
+        // Disk cache — instant, no network. (Saved on first download.)
+        var fromDisk = LoadFromDisk(url);
+        if (fromDisk != null)
+        {
+            AddToMemory(url, fromDisk);
+            return fromDisk;
+        }
+
         // Wait if same URL is already downloading
         if (_inProgress.Contains(url))
         {
@@ -52,22 +60,7 @@ public static class ImageCache
             }
 
             if (texture != null)
-            {
-                // Evict oldest if at limit
-                if (_cache.Count >= MAX_TEXTURES && _accessOrder.Last != null)
-                {
-                    string oldest = _accessOrder.Last.Value;
-                    _accessOrder.RemoveLast();
-                    if (_cache.TryGetValue(oldest, out var evicted))
-                    {
-                        UnityEngine.Object.Destroy(evicted);
-                        _cache.Remove(oldest);
-                    }
-                }
-
-                _cache[url] = texture;
-                _accessOrder.AddFirst(url);
-            }
+                AddToMemory(url, texture);
 
             return texture;
         }
@@ -75,6 +68,40 @@ public static class ImageCache
         {
             _inProgress.Remove(url);
         }
+    }
+
+    // Add a texture to the in-memory LRU cache, evicting the oldest if at limit.
+    private static void AddToMemory(string url, Texture2D texture)
+    {
+        if (_cache.Count >= MAX_TEXTURES && _accessOrder.Last != null)
+        {
+            string oldest = _accessOrder.Last.Value;
+            _accessOrder.RemoveLast();
+            if (_cache.TryGetValue(oldest, out var evicted))
+            {
+                UnityEngine.Object.Destroy(evicted);
+                _cache.Remove(oldest);
+            }
+        }
+        _cache[url] = texture;
+        _accessOrder.AddFirst(url);
+    }
+
+    /// <summary>
+    /// Download + decode a texture WITHOUT putting it in the shared LRU cache.
+    /// Use for long-lived textures (e.g. textures applied to spawned 3D models)
+    /// that must not be Destroy()'d by cache eviction. Handles webp/png/jpg, with
+    /// the same .webp→.png fallback. Caller owns the returned Texture2D.
+    /// </summary>
+    public static async Task<Texture2D> LoadTextureUncached(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return null;
+        var fromDisk = LoadFromDisk(url);
+        if (fromDisk != null) return fromDisk;
+        var texture = await DownloadTexture(url);
+        if (texture == null && url.EndsWith(".webp"))
+            texture = await DownloadTexture(url.Replace(".webp", ".png"));
+        return texture;
     }
 
     private static async Task<Texture2D> DownloadTexture(string url)
@@ -106,35 +133,68 @@ public static class ImageCache
                 return null;
             }
 
-            // WebP — decode using netpyoung.webp
-            if (url.EndsWith(".webp"))
-            {
-                return DecodeWebP(data, url);
-            }
-
-            // PNG — use Unity's built-in loader
-            if (url.EndsWith(".png"))
-            {
-                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (tex.LoadImage(data))
-                    return tex;
-
-                UnityEngine.Object.Destroy(tex);
-                Debug.LogWarning($"[ImageCache] PNG decode failed: {url}");
-                return null;
-            }
-
-            // JPG or unknown — use Unity's built-in loader
-            var fallbackTex = new Texture2D(2, 2);
-            if (fallbackTex.LoadImage(data))
-                return fallbackTex;
-
-            UnityEngine.Object.Destroy(fallbackTex);
-            return null;
+            SaveToDisk(url, data);          // persist for instant load next launch
+            return DecodeBytes(data, url);
         }
         catch (Exception e)
         {
             Debug.LogWarning($"[ImageCache] Exception: {e.Message} | {url}");
+            return null;
+        }
+    }
+
+    // ── Decode raw image bytes (webp / png / jpg) into a Texture2D ──────────────
+    private static Texture2D DecodeBytes(byte[] data, string url)
+    {
+        if (data == null || data.Length == 0) return null;
+
+        if (url.EndsWith(".webp"))
+            return DecodeWebP(data, url);
+
+        var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        if (tex.LoadImage(data))          // handles PNG and JPG
+            return tex;
+        UnityEngine.Object.Destroy(tex);
+        Debug.LogWarning($"[ImageCache] decode failed: {url}");
+        return null;
+    }
+
+    // ── Disk cache: images persist across launches (no re-download) ─────────────
+    private static string DiskDir =>
+        System.IO.Path.Combine(Application.persistentDataPath, "ImageCache");
+
+    private static string DiskPath(string url)
+    {
+        string ext = url.EndsWith(".webp") ? ".webp"
+                   : url.EndsWith(".png")  ? ".png" : ".jpg";
+        uint h = 2166136261u;                              // FNV-1a hash of the URL
+        foreach (char c in url) { h ^= c; h *= 16777619u; }
+        return System.IO.Path.Combine(DiskDir, h.ToString("x8") + ext);
+    }
+
+    private static void SaveToDisk(string url, byte[] data)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(DiskDir);
+            System.IO.File.WriteAllBytes(DiskPath(url), data);
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[ImageCache] disk write failed: {e.Message}");
+        }
+    }
+
+    private static Texture2D LoadFromDisk(string url)
+    {
+        try
+        {
+            string p = DiskPath(url);
+            if (!System.IO.File.Exists(p)) return null;
+            return DecodeBytes(System.IO.File.ReadAllBytes(p), url);
+        }
+        catch
+        {
             return null;
         }
     }

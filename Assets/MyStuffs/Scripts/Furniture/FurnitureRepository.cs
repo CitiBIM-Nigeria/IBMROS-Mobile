@@ -63,12 +63,23 @@ public class FurnitureRepository : MonoBehaviour
 
             var response = await AwsManager.Instance.DynamoDBClient.QueryAsync(request);
 
-            // Parse every node once.
+            // Parse every node once. The pipeline writes a special
+            // "__live_types__" item listing the categories that have models, so
+            // we get that set FOR FREE here — no separate full-table scan.
             var nodes = new List<CatNode>();
+            HashSet<string> live = null;
             foreach (var item in response.Items)
             {
                 string id = GetString(item, "category_id");
                 if (string.IsNullOrEmpty(id)) continue;
+
+                if (id == "__live_types__")
+                {
+                    if (item.TryGetValue("live_types", out var lt) && lt.SS != null)
+                        live = new HashSet<string>(lt.SS);
+                    continue;   // not a real tree node
+                }
+
                 nodes.Add(new CatNode
                 {
                     Id     = id,
@@ -84,8 +95,17 @@ public class FurnitureRepository : MonoBehaviour
                 .GroupBy(n => n.Parent)
                 .ToDictionary(g => g.Key, g => g.OrderBy(n => n.Order).ToList());
 
-            var categories = nodes
-                .Where(n => n.Level == 1)
+            // Use the live set from the query; only fall back to the (cached)
+            // full-table scan for older data that lacks the __live_types__ item.
+            if (live == null)
+                live = await GetCategoryIdsWithModels();
+
+            // Top level = ROOMS (level 0). Their level-1 children (furniture
+            // types like Sofas/Beds) become the second tier; tapping one loads
+            // products by that type's id (= the product category_id). Empty
+            // types — and rooms left with none — are hidden.
+            var rooms = nodes
+                .Where(n => n.Level == 0)
                 .OrderBy(n => n.Order)
                 .Select(n => new CategoryModel
                 {
@@ -97,18 +117,21 @@ public class FurnitureRepository : MonoBehaviour
                     Subcategories = (childrenByParent.TryGetValue(n.Id, out var kids)
                         ? kids
                         : new List<CatNode>())
+                        .Where(c => live.Contains(c.Id))
+                        .OrderBy(c => c.Order)
                         .Select(c => new SubcategoryModel
                         {
-                            SubcategoryId   = c.Id,
+                            SubcategoryId   = c.Id,   // = product category_id
                             SubcategoryName = c.Name,
                             Icon            = c.Icon,
                         })
                         .ToList()
                 })
+                .Where(room => room.Subcategories.Count > 0)
                 .ToList();
 
-            Debug.Log($"[FurnitureRepository] Fetched {categories.Count} categories.");
-            return categories;
+            Debug.Log($"[FurnitureRepository] Fetched {rooms.Count} rooms.");
+            return rooms;
         }
         catch (Exception e)
         {
@@ -121,6 +144,68 @@ public class FurnitureRepository : MonoBehaviour
     {
         public string Id, Name, Icon, Parent;
         public int    Level, Order;
+    }
+
+    private const string LiveCatPrefsKey = "ros_live_categories_v1";
+
+    // Set of category_ids that have at least one product with a 3D model.
+    // CACHED: served instantly from PlayerPrefs (the full-table scan is the slow
+    // part of opening the catalog), then refreshed in the background so the next
+    // launch is current. Categories barely change, so the cache is near-always right.
+    private async Task<HashSet<string>> GetCategoryIdsWithModels()
+    {
+        string cached = PlayerPrefs.GetString(LiveCatPrefsKey, "");
+        if (!string.IsNullOrEmpty(cached))
+        {
+            _ = RefreshLiveCategories();                 // fire-and-forget refresh
+            return new HashSet<string>(cached.Split(','));
+        }
+        var fresh = await ScanCategoryIdsWithModels();   // first run: must scan once
+        if (fresh.Count > 0)
+            PlayerPrefs.SetString(LiveCatPrefsKey, string.Join(",", fresh));
+        return fresh;
+    }
+
+    private async Task RefreshLiveCategories()
+    {
+        var live = await ScanCategoryIdsWithModels();
+        if (live.Count > 0)
+            PlayerPrefs.SetString(LiveCatPrefsKey, string.Join(",", live));
+    }
+
+    private async Task<HashSet<string>> ScanCategoryIdsWithModels()
+    {
+        var live = new HashSet<string>();
+        try
+        {
+            Dictionary<string, AttributeValue> startKey = null;
+            do
+            {
+                var req = new ScanRequest
+                {
+                    TableName            = AwsConfig.FurnitureCatalogTableName,
+                    ProjectionExpression = "category_id, mesh_glb_url",
+                };
+                if (startKey != null) req.ExclusiveStartKey = startKey;
+
+                var resp = await AwsManager.Instance.DynamoDBClient.ScanAsync(req);
+                foreach (var it in resp.Items)
+                {
+                    string cat  = it.TryGetValue("category_id", out var c) ? c.S : null;
+                    string mesh = it.TryGetValue("mesh_glb_url", out var m) ? m.S : null;
+                    if (!string.IsNullOrEmpty(cat) && !string.IsNullOrEmpty(mesh))
+                        live.Add(cat);
+                }
+                startKey = (resp.LastEvaluatedKey != null && resp.LastEvaluatedKey.Count > 0)
+                    ? resp.LastEvaluatedKey : null;
+            }
+            while (startKey != null);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[FurnitureRepository] GetCategoryIdsWithModels error: {e.Message}");
+        }
+        return live;
     }
 
     // ---------------------------------------------------------------
@@ -154,7 +239,7 @@ public class FurnitureRepository : MonoBehaviour
 
             var products = response.Items
                 .Select(ParseProduct)
-                .Where(p => p != null)
+                .Where(p => p != null && p.HasModel)   // only placeable products
                 .ToList();
 
             Debug.Log($"[FurnitureRepository] Fetched {products.Count} " +
@@ -206,7 +291,7 @@ public class FurnitureRepository : MonoBehaviour
 
             var products = response.Items
                 .Select(ParseProduct)
-                .Where(p => p != null)
+                .Where(p => p != null && p.HasModel)   // only placeable products
                 .ToList();
 
             _productCache[cacheKey] = products;
@@ -283,7 +368,7 @@ public class FurnitureRepository : MonoBehaviour
 
             var products = response.Items
                 .Select(ParseProduct)
-                .Where(p => p != null)
+                .Where(p => p != null && p.HasModel)   // only placeable products
                 .ToList();
 
             Debug.Log($"[FurnitureRepository] Search '{searchTerm}' " +
@@ -305,6 +390,10 @@ public class FurnitureRepository : MonoBehaviour
     {
         try
         {
+            // Boss-review prune: hidden products stay in the DB but never show.
+            if (item.TryGetValue("hidden", out var h) && h.BOOL == true)
+                return null;
+
             var variants = ParseVariants(item);
             var primary  = variants.Find(v => v.IsPrimary)
                            ?? (variants.Count > 0 ? variants[0] : null);
@@ -355,10 +444,13 @@ public class FurnitureRepository : MonoBehaviour
             {
                 VariantId          = GetString(m, "variant_id"),
                 ColourName         = GetString(m, "colour_name"),
-                IsPrimary          = m.TryGetValue("is_primary", out var p) && p.BOOL,
+                IsPrimary          = m.TryGetValue("is_primary", out var p) && p.BOOL == true,
                 Price              = GetNumber(m, "price"),
-                BaseColorUrl       = GetString(m, "base_color_url"),
+                ModelUrl           = StripCloudFront(GetString(m, "model_url")),
+                SwatchUrl          = GetString(m, "swatch_url"),
+                DominantColor      = GetString(m, "dominant_color"),
                 DisplayUrl         = GetString(m, "display_url"),
+                DisplayThumbUrl    = GetString(m, "display_thumb_url"),
                 DisplayOriginalUrl = GetString(m, "display_original_url"),
             });
         }

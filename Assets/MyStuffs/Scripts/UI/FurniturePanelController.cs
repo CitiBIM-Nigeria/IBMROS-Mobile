@@ -9,7 +9,8 @@ using UnityEngine.Networking;
 public class FurniturePanelController : MonoBehaviour
 {
     public event System.Action OnPanelClosed;
-    public event System.Action<string> OnItemSelected;
+    // Carries the whole product so the detail sheet can build the colour picker.
+    public event System.Action<ProductModel> OnItemSelected;
 
     // ---------------------------------------------------------------
     // UI REFERENCES
@@ -74,6 +75,9 @@ public class FurniturePanelController : MonoBehaviour
 
         _panel?.RegisterCallback<ClickEvent>(evt => evt.StopPropagation());
 
+        // Single room view — hide the Room / Other Rooms tab bar entirely.
+        if (_tabs != null) _tabs.style.display = DisplayStyle.None;
+
         var categoryScroll = _panel?.Q<ScrollView>("FurniturePanelScroll");
         if (categoryScroll != null)
         {
@@ -128,19 +132,10 @@ public class FurniturePanelController : MonoBehaviour
             _ = FurnitureDataService.Instance.LoadCategories();
     }
 
-    // Departments shown under the "Other Rooms" tab; everything else (seating,
-    // tables, lighting, beds, …) shows under the main "Room" tab. Split is by the
-    // category's parent department id from ros-categories — adjust to taste.
-    private static readonly HashSet<string> OtherRoomDepartments = new()
-    {
-        "storage", "bathroom", "outdoor",
-    };
-
+    // The "Other Rooms" tab was removed — a single view lists every room.
     private List<CategoryModel> FilterCategoriesForTab(List<CategoryModel> all)
     {
-        return _isRoomTab
-            ? all.FindAll(c => !OtherRoomDepartments.Contains(c.ParentId))
-            : all.FindAll(c =>  OtherRoomDepartments.Contains(c.ParentId));
+        return all;
     }
 
     // ---------------------------------------------------------------
@@ -190,8 +185,10 @@ public class FurniturePanelController : MonoBehaviour
 
         UpdateHeader(sub.SubcategoryName);
 
+        // The 2nd tier is now a furniture TYPE — its id is the product
+        // category_id, so load products by category.
         _ = FurnitureDataService.Instance
-            .LoadProductsBySubcategory(categoryId, sub.SubcategoryId);
+            .LoadProductsByCategory(sub.SubcategoryId);
     }
 
     private void NavigateBack()
@@ -534,8 +531,9 @@ public class FurniturePanelController : MonoBehaviour
             if (favIcon != null) favIcon.text = "☆";
             favBtn?.SetEnabled(true);
 
-            if (!string.IsNullOrEmpty(product.BestImageUrl) && imageArea != null)
-                LoadImageIntoElement(imageArea, emojiLabel, product.BestImageUrl);
+            // Grid uses the small 400px thumbnail (not the full image) → ~50× less data.
+            if (!string.IsNullOrEmpty(product.BestThumbnailUrl) && imageArea != null)
+                LoadImageIntoElement(imageArea, emojiLabel, product.BestThumbnailUrl);
 
             card.UnregisterCallback<ClickEvent>(OnCardClicked);
             card.userData = product;
@@ -627,8 +625,7 @@ public class FurniturePanelController : MonoBehaviour
                 HideCategoryScroll();
 
                 _ = FurnitureDataService.Instance
-                    .LoadProductsBySubcategory(capturedCatId,
-                                               capturedSub.SubcategoryId);
+                    .LoadProductsByCategory(capturedSub.SubcategoryId);
             });
 
             chipsScroll.Add(chipBtn);
@@ -682,17 +679,8 @@ public class FurniturePanelController : MonoBehaviour
 
         evt.StopPropagation();
 
-        string emoji = CategoryMapper.GetCategoryEmoji(_activeCategoryId);
-
-        // Extract variant part for display in detail sheet
-        string variant = product.Description ?? "";
-        if (variant.StartsWith(product.Name))
-            variant = variant.Substring(product.Name.Length).Trim(' ', '-');
-
         Debug.Log($"[FurniturePanel] Item tapped: {product.Name}");
-        OnItemSelected?.Invoke(
-            $"{emoji}|{product.ProductId}|{product.S3ModelUrl}|" +
-            $"{product.Name}|{variant}|{product.BestImageUrl}");
+        OnItemSelected?.Invoke(product);
     }
 
     private void OnFavClicked(ClickEvent evt)
@@ -1005,8 +993,8 @@ public class FurniturePanelController : MonoBehaviour
     {
         foreach (var product in products)
         {
-            if (!string.IsNullOrEmpty(product.BestImageUrl))
-                await ImageCache.GetTexture(product.BestImageUrl);
+            if (!string.IsNullOrEmpty(product.BestThumbnailUrl))
+                await ImageCache.GetTexture(product.BestThumbnailUrl);
         }
     }
 
@@ -1053,12 +1041,12 @@ public class FurniturePanelController : MonoBehaviour
         Debug.Log($"[Prefetch] Starting parallel prefetch for " +
                   $"{category.CategoryName} — {category.Subcategories.Count} subcategories");
 
-        // Fire ALL subcategory queries simultaneously instead of one by one
+        // Prefetch each furniture type's products (its id is the category_id).
         var tasks = new List<Task>();
         foreach (var sub in category.Subcategories)
         {
-            tasks.Add(FurnitureRepository.Instance.GetProductsBySubcategory(
-                category.CategoryId, sub.SubcategoryId));
+            tasks.Add(FurnitureRepository.Instance.GetProductsByCategory(
+                sub.SubcategoryId));
         }
 
         await Task.WhenAll(tasks);

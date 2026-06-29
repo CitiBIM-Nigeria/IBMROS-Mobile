@@ -179,6 +179,10 @@ public class AuthService : MonoBehaviour
     // SIGN UP
     // ============================================
 
+    // Signup password held in MEMORY ONLY (never persisted) so the user can be
+    // signed straight in after confirming their email. Cleared immediately after.
+    private string _signupPassword;
+
     public async Task SignUp(string email, string password, string confirmPassword)
     {
         string validationError = InputValidator.ValidateSignUp(
@@ -200,6 +204,7 @@ public class AuthService : MonoBehaviour
         {
             PlayerPrefs.SetString("ibm_ros_pending_email", email);
             PlayerPrefs.Save();
+            _signupPassword = password;   // for auto-login after email confirm
 
             Debug.Log($"[AuthService] Sign up successful for {email}.");
             OnSignUpSuccess?.Invoke(result.Message);
@@ -209,6 +214,15 @@ public class AuthService : MonoBehaviour
             Debug.Log($"[AuthService] Sign up failed: {result.Error}");
             OnSignUpFailed?.Invoke(result.Message, result.Error ?? AuthError.UnknownError);
         }
+    }
+
+    // Returns the in-memory signup password (for post-confirm auto-login) and
+    // clears it. Empty if unavailable (e.g. app restarted between sign-up steps).
+    public string ConsumeSignupPassword()
+    {
+        string pw = _signupPassword;
+        _signupPassword = null;
+        return pw ?? string.Empty;
     }
 
     // ============================================

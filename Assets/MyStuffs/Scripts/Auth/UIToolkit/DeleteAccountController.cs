@@ -47,6 +47,11 @@ public class DeleteAccountController : MonoBehaviour, IAuthUI
 
     void OnEnable()
     {
+        // Clear the password field every time this screen becomes active so it
+        // never shows a previous entry.
+        ScreenNavigator.OnScreenChanged -= OnScreenChanged;
+        ScreenNavigator.OnScreenChanged += OnScreenChanged;
+
         if (UIManager.Instance != null && UIManager.Instance.IsReady)
         {
             QueryElements();
@@ -63,6 +68,15 @@ public class DeleteAccountController : MonoBehaviour, IAuthUI
     void OnDisable()
     {
         UIManager.OnScreensReady -= OnScreensReady;
+        ScreenNavigator.OnScreenChanged -= OnScreenChanged;
+    }
+
+    private void OnScreenChanged(ScreenName screen)
+    {
+        if (screen != ScreenName.DeleteAccount)
+            return;
+        ClearFeedback();
+        OnScreenActivated();   // clears the password field
     }
 
     private void OnScreensReady()
