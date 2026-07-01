@@ -13922,6 +13922,56 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1302631284}
   m_CullTransparentMesh: 1
+--- !u!1 &1303856263
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1303856265}
+  - component: {fileID: 1303856264}
+  m_Layer: 0
+  m_Name: Download Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1303856264
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1303856263}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 34ff9d6ef663148d189a48fcb7410a6b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VRModelDownloader
+  BaseUrl: https://d3lz5hvxtvmgbq.cloudfront.net/ikea/pendant_lamps/ackja-30558916/models/variants/60-cm/model.glb
+  CacheFolderName: VRModelCache
+  CacheVersion: v1
+  TimeoutSeconds: 60
+  MaxConcurrentDownloads: 3
+  ReplaceMagentaWithFallback: 1
+--- !u!4 &1303856265
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1303856263}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1.28519, y: -4.82762, z: 7.91204}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1311688971
 GameObject:
   m_ObjectHideFlags: 0
@@ -21641,8 +21691,7 @@ MonoBehaviour:
   logoutButton: {fileID: 212541891}
   deleteAccountButton: {fileID: 1707689432}
   profileSettingsButton: {fileID: 0}
-  profileWishlistButton: {fileID: 0}
-  profileOrdersButton: {fileID: 0}
+  addRoomButton: {fileID: 0}
   noConnectionBanner: {fileID: 0}
   retryConnectionButton: {fileID: 0}
   loadingOverlay: {fileID: 0}
@@ -23382,3 +23431,4 @@ SceneRoots:
   - {fileID: 1955431801}
   - {fileID: 1521614919}
   - {fileID: 1082643928}
+  - {fileID: 1303856265}

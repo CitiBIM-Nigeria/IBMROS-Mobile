@@ -5,6 +5,7 @@ using UnityEngine.UIElements;
 using System;
 using System.Threading.Tasks;
 using UnityEngine.Networking;
+using UnityEngine.Rendering;
 
 public class FurniturePanelController : MonoBehaviour
 {
@@ -54,6 +55,20 @@ public class FurniturePanelController : MonoBehaviour
     
     private Dictionary<VisualElement, bool> _shimmeringElements = new();
 
+    // Background prefetch of the current room's subcategories. Cancelled the
+    // instant the user taps a subcategory (or a filter chip) so the user's load
+    // owns the AWS connection instead of queueing behind warming work.
+    private System.Threading.CancellationTokenSource _prefetchCts;
+
+    // Click → list-render timing for the [CatLoad] trace.
+    private System.Diagnostics.Stopwatch _clickStopwatch;
+    private string _pendingLoadId;
+
+    // The ListView's live items + the list view itself (rebuilt on append, since
+    // a plain List doesn't notify the ListView of structural changes).
+    private List<ProductModel> _itemList;
+    private ListView _productListView;
+
     // ---------------------------------------------------------------
     // INITIALIZE
     // ---------------------------------------------------------------
@@ -94,15 +109,18 @@ public class FurniturePanelController : MonoBehaviour
         FurnitureDataService.OnCategoriesLoaded   += HandleCategoriesLoaded;
         FurnitureDataService.OnCategoriesFailed   += HandleDataFailed;
         FurnitureDataService.OnProductsLoaded     += HandleProductsLoaded;
+        FurnitureDataService.OnProductsAppended   += HandleProductsAppended;
         FurnitureDataService.OnProductsFailed     += HandleDataFailed;
         FurnitureDataService.OnLoadingChanged     += HandleLoadingChanged;
     }
 
     void OnDestroy()
     {
+        _prefetchCts?.Cancel();
         FurnitureDataService.OnCategoriesLoaded   -= HandleCategoriesLoaded;
         FurnitureDataService.OnCategoriesFailed   -= HandleDataFailed;
         FurnitureDataService.OnProductsLoaded     -= HandleProductsLoaded;
+        FurnitureDataService.OnProductsAppended   -= HandleProductsAppended;
         FurnitureDataService.OnProductsFailed     -= HandleDataFailed;
         FurnitureDataService.OnLoadingChanged     -= HandleLoadingChanged;
     }
@@ -187,8 +205,21 @@ public class FurniturePanelController : MonoBehaviour
 
         // The 2nd tier is now a furniture TYPE — its id is the product
         // category_id, so load products by category.
-        _ = FurnitureDataService.Instance
-            .LoadProductsByCategory(sub.SubcategoryId);
+        BeginUserCategoryLoad(sub.SubcategoryName, sub.SubcategoryId);
+    }
+
+    // Every user-initiated product load goes through here. It cancels any
+    // background prefetch FIRST (so the user's load isn't delayed by warming
+    // work) and starts the click→render timer used by the [CatLoad] trace.
+    private void BeginUserCategoryLoad(string subcategoryName, string subcategoryId)
+    {
+        _prefetchCts?.Cancel();
+
+        _pendingLoadId  = subcategoryId;
+        _clickStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Debug.Log($"[CatLoad] ▶ {subcategoryName} [{subcategoryId}] | clicked");
+
+        _ = FurnitureDataService.Instance.LoadProductsByCategory(subcategoryId);
     }
 
     private void NavigateBack()
@@ -265,13 +296,40 @@ public class FurniturePanelController : MonoBehaviour
     private void HandleProductsLoaded(List<ProductModel> products, string context)
     {
         _cachedProducts = products;
+
+        // Close out the click→render timer if this is the load the user kicked off.
+        if (_clickStopwatch != null && context == _pendingLoadId)
+        {
+            _clickStopwatch.Stop();
+            Debug.Log($"[CatLoad] ✓ {context} | list built | total {_clickStopwatch.ElapsedMilliseconds} ms | {products.Count} products");
+            _clickStopwatch = null;
+            _pendingLoadId  = null;
+        }
+
         CleanItemListViews();
         HideCategoryScroll();
         BuildItemList(products);
     }
 
+    private void HandleProductsAppended(List<ProductModel> added, string context)
+    {
+        // Only grow the list if the user is still viewing this category.
+        if (_itemList == null || context != _activeSubcategoryId) return;
+
+        _itemList.AddRange(added);
+        if (_cachedProducts != null) _cachedProducts.AddRange(added);
+        _productListView?.Rebuild();   // plain List → rebuild to show new items
+    }
+
     private void HandleDataFailed(string message)
     {
+        if (_clickStopwatch != null)
+        {
+            _clickStopwatch.Stop();
+            Debug.Log($"[CatLoad] ✗ {_pendingLoadId} | FAILED | {_clickStopwatch.ElapsedMilliseconds} ms | {message}");
+            _clickStopwatch = null;
+            _pendingLoadId  = null;
+        }
         ShowErrorState(message);
     }
 
@@ -543,7 +601,9 @@ public class FurniturePanelController : MonoBehaviour
             favBtn?.RegisterCallback<ClickEvent>(OnFavClicked);
         }
 
-        var listView = new ListView(products, 240, MakeItem, BindItem)
+        _itemList = new List<ProductModel>(products);
+
+        var listView = new ListView(_itemList, 240, MakeItem, BindItem)
         {
             name                       = "ProductListView",
             selectionType              = SelectionType.None,
@@ -561,6 +621,7 @@ public class FurniturePanelController : MonoBehaviour
         if (listScrollView != null)
             listScrollView.verticalScrollerVisibility = ScrollerVisibility.Hidden;
 
+        _productListView = listView;
         _body.Add(listView);
 
         // Preload images for visible items only
@@ -624,8 +685,7 @@ public class FurniturePanelController : MonoBehaviour
                 CleanItemListViews();
                 HideCategoryScroll();
 
-                _ = FurnitureDataService.Instance
-                    .LoadProductsByCategory(capturedSub.SubcategoryId);
+                BeginUserCategoryLoad(capturedSub.SubcategoryName, capturedSub.SubcategoryId);
             });
 
             chipsScroll.Add(chipBtn);
@@ -807,6 +867,7 @@ public class FurniturePanelController : MonoBehaviour
     private void CleanItemListViews()
     {
         if (_body == null) return;
+        _productListView = null;
         _body.Q<ListView>("ProductListView")?.RemoveFromHierarchy();
         _body.Q<ScrollView>("ItemListScroll")?.RemoveFromHierarchy();
         _body.Q<ScrollView>("FilterChipsScroll")?.RemoveFromHierarchy();
@@ -1038,20 +1099,57 @@ public class FurniturePanelController : MonoBehaviour
         if (category.Subcategories == null || category.Subcategories.Count == 0)
             return;
 
-        Debug.Log($"[Prefetch] Starting parallel prefetch for " +
-                  $"{category.CategoryName} — {category.Subcategories.Count} subcategories");
+        // Replace any previous room's prefetch with a fresh, cancellable one.
+        _prefetchCts?.Cancel();
+        _prefetchCts = new System.Threading.CancellationTokenSource();
+        var ct = _prefetchCts.Token;
 
-        // Prefetch each furniture type's products (its id is the category_id).
-        var tasks = new List<Task>();
+        Debug.Log($"[Prefetch] ▶ {category.CategoryName} | start | {category.Subcategories.Count} subcategories");
+
+        // Warm each furniture type's products ONE AT A TIME. Firing all 10 at once
+        // with Task.WhenAll stampedes the AWS SDK with concurrent DynamoDB/Cognito
+        // calls, which deadlocks on Android (it only "worked" in the editor because
+        // of its different threading + faster local network). Sequential keeps the
+        // connection free so the user's actual tap loads immediately, and each call
+        // is cached so navigating later is still instant. The token is checked
+        // between every item so a user tap cancels this near-instantly.
+        int warmed = 0, skipped = 0;
         foreach (var sub in category.Subcategories)
         {
-            tasks.Add(FurnitureRepository.Instance.GetProductsByCategory(
-                sub.SubcategoryId));
+            if (ct.IsCancellationRequested)
+            {
+                Debug.Log($"[Prefetch] ⊘ {category.CategoryName} | cancelled | {warmed} warmed, {skipped} skipped");
+                return;
+            }
+
+            // Already cached (maybe by a previous visit) → skip silently, no AWS call.
+            if (FurnitureRepository.Instance.IsCategoryCached(sub.SubcategoryId))
+            {
+                skipped++;
+                continue;
+            }
+
+            try
+            {
+                await FurnitureRepository.Instance.GetFirstPage(sub.SubcategoryId, FurnitureRepository.PageSize);
+                warmed++;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[Prefetch] {sub.SubcategoryId} failed: {e.Message}");
+            }
+
+            // Yield so a user tap can interleave instead of waiting for the whole
+            // category to finish warming.
+            if (ct.IsCancellationRequested)
+            {
+                Debug.Log($"[Prefetch] ⊘ {category.CategoryName} | cancelled | {warmed} warmed, {skipped} skipped");
+                return;
+            }
+            await Task.Yield();
         }
 
-        await Task.WhenAll(tasks);
-
-        Debug.Log($"[Prefetch] All done for {category.CategoryName}");
+        Debug.Log($"[Prefetch] ✓ {category.CategoryName} | done | {warmed} warmed, {skipped} already-cached");
     }
 
     private float EaseOutCubic(float t) => 1f - Mathf.Pow(1f - t, 3f);

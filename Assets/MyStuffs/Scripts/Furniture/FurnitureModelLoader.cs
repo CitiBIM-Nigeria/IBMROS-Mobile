@@ -93,19 +93,6 @@ public class FurnitureModelLoader : MonoBehaviour
 
             Debug.Log($"[FurnitureModelLoader] Requesting: {url}");
 
-            using var request = UnityWebRequest.Get(url);
-            request.downloadHandler = new DownloadHandlerBuffer();
-
-            var operation = request.SendWebRequest();
-            while (!operation.isDone)
-                await Task.Yield();
-
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError($"[FurnitureModelLoader] CloudFront error: {request.error}");
-                return false;
-            }
-
             // Create the local subdirectory if it does not exist
             string localDir = Path.GetDirectoryName(localPath);
             if (!string.IsNullOrEmpty(localDir) && !Directory.Exists(localDir))
@@ -114,7 +101,33 @@ public class FurnitureModelLoader : MonoBehaviour
                 Debug.Log($"[FurnitureModelLoader] Created cache directory: {localDir}");
             }
 
-            await File.WriteAllBytesAsync(localPath, request.downloadHandler.data);
+            using var request = UnityWebRequest.Get(url);
+
+            // Stream straight to disk instead of buffering the whole GLB in RAM and
+            // then writing it again. Halves the memory cost and removes the extra
+            // byte[]→file copy — the slow part on big meshes / low-memory phones.
+            // Write to a ".part" temp file and move it into place only on success,
+            // so a failed/cancelled download can never leave a half-written model
+            // in the cache (which would later load as a broken mesh).
+            string tmpPath = localPath + ".part";
+            request.downloadHandler = new DownloadHandlerFile(tmpPath)
+            {
+                removeFileOnAbort = true
+            };
+
+            var operation = request.SendWebRequest();
+            while (!operation.isDone)
+                await Task.Yield();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"[FurnitureModelLoader] CloudFront error: {request.error}");
+                try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+                return false;
+            }
+
+            if (File.Exists(localPath)) File.Delete(localPath);
+            File.Move(tmpPath, localPath);
             Debug.Log($"[FurnitureModelLoader] Downloaded and cached: {fileName}");
             return true;
         }

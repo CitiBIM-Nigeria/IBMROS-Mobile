@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Amazon;
 using Amazon.CognitoIdentity;
@@ -92,7 +93,7 @@ public class AwsManager : MonoBehaviour
             );
 
             S3Client = new AmazonS3Client(_credentials, region);
-            DynamoDBClient = new AmazonDynamoDBClient(_credentials, region);
+            DynamoDBClient = BuildDynamoDBClient(region);
 
             return true;
         }
@@ -110,7 +111,7 @@ public class AwsManager : MonoBehaviour
             var region = RegionEndpoint.GetBySystemName(AwsConfig.Region);
             _credentials.AddLogin(AwsConfig.CognitoProviderName, idToken);
             S3Client = new AmazonS3Client(_credentials, region);
-            DynamoDBClient = new AmazonDynamoDBClient(_credentials, region);
+            DynamoDBClient = BuildDynamoDBClient(region);
             Debug.Log("[AwsManager] Upgraded to authenticated credentials.");
         }
         catch (Exception e)
@@ -127,7 +128,7 @@ public class AwsManager : MonoBehaviour
             _credentials.ClearCredentials();
             var region = RegionEndpoint.GetBySystemName(AwsConfig.Region);
             S3Client = new AmazonS3Client(_credentials, region);
-            DynamoDBClient = new AmazonDynamoDBClient(_credentials, region);
+            DynamoDBClient = BuildDynamoDBClient(region);
             Debug.Log("[AwsManager] Downgraded to guest credentials.");
         }
         catch (Exception e)
@@ -150,11 +151,51 @@ public class AwsManager : MonoBehaviour
             Debug.LogError($"[AwsManager] Credential refresh failed: {e.Message}");
         }
     }
+
+    // Builds the DynamoDB client with the SDK's own retries DISABLED. The SDK
+    // retries silently by default (~4 attempts w/ backoff) — which is the most
+    // likely reason a "single" Query showed as ~11s in logcat with no visible
+    // explanation. FurnitureRepository runs its OWN logged retry loop instead
+    // (DbWithRetry), so every attempt and its timing appears in the log.
+    // Keeps DynamoDB client construction in one place. The AWS SDK's own retries
+    // (default Standard mode) are left ON — FurnitureRepository.DbWithRetry logs
+    // each call's total elapsed time, so a multi-second call on a small response
+    // reveals that the SDK retried internally.
+    private AmazonDynamoDBClient BuildDynamoDBClient(RegionEndpoint region)
+        => new AmazonDynamoDBClient(_credentials, region);
     
-    public async Task RefreshCredentialsIfNeeded()
+    // Serialises credential refreshes. Without this, 10 concurrent product
+    // fetches each recreated the shared _credentials / DynamoDBClient AND fired a
+    // Cognito GetCredentialsAsync at the same time — a data race that deadlocked
+    // on Android (the editor's different threading hid it). Now only ONE refresh
+    // runs at a time and the rest reuse its result.
+    private readonly SemaphoreSlim _refreshGate = new SemaphoreSlim(1, 1);
+    private DateTime _lastCredsRefreshUtc = DateTime.MinValue;
+
+    // Cognito credentials last ~1h; re-using them well within that is safe and
+    // avoids a Cognito round-trip (plus a client rebuild) before every query.
+    private const double CredsValidMinutes = 45;
+
+    // Returns true if credentials were actually refreshed (Cognito round-trip +
+    // client rebuild); false on the fast path (still fresh) or on error. Callers
+    // log this so a category-load trace shows whether a refresh was involved.
+    public async Task<bool> RefreshCredentialsIfNeeded()
     {
+        // Fast path: still fresh and clients exist → nothing to do.
+        if (DynamoDBClient != null &&
+            (DateTime.UtcNow - _lastCredsRefreshUtc).TotalMinutes < CredsValidMinutes)
+            return false;
+
+        // Single-flight: concurrent callers wait here; only the first refreshes.
+        await _refreshGate.WaitAsync();
         try
         {
+            // Re-check inside the lock — a caller ahead of us may have just done it.
+            if (DynamoDBClient != null &&
+                (DateTime.UtcNow - _lastCredsRefreshUtc).TotalMinutes < CredsValidMinutes)
+                return false;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var region = RegionEndpoint.GetBySystemName(AwsConfig.Region);
 
             // Create a completely new credentials object
@@ -167,21 +208,24 @@ public class AwsManager : MonoBehaviour
 
             // Rebuild clients with the fresh credentials
             S3Client       = new AmazonS3Client(_credentials, region);
-            DynamoDBClient = new AmazonDynamoDBClient(_credentials, region);
-
-            // If user is authenticated, re-add their login token
-            // so they do not lose their authenticated session
-            // (skip this block if you only use guest access)
-            // _credentials.AddLogin(AwsConfig.CognitoProviderName, savedIdToken);
+            DynamoDBClient = BuildDynamoDBClient(region);
 
             // Pre-fetch to confirm credentials work before returning
             await _credentials.GetCredentialsAsync();
 
-            Debug.Log("[AwsManager] Credentials refreshed successfully.");
+            _lastCredsRefreshUtc = DateTime.UtcNow;
+            sw.Stop();
+            Debug.Log($"[AwsManager] Credentials REFRESHED | {sw.ElapsedMilliseconds} ms");
+            return true;
         }
         catch (Exception e)
         {
             Debug.LogError($"[AwsManager] RefreshCredentials error: {e.Message}");
+            return false;
+        }
+        finally
+        {
+            _refreshGate.Release();
         }
     }
     

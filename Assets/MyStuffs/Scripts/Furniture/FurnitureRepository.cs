@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using Amazon.DynamoDBv2.Model;
+using Amazon.Runtime;
 using UnityEngine;
 
 /// <summary>
@@ -25,6 +27,41 @@ public class FurnitureRepository : MonoBehaviour
     private readonly Dictionary<string, List<ProductModel>> _productCache = new();
 
     private static string Merchant => AwsConfig.FurnitureCatalogMerchantId;
+
+    // DynamoDB reserves common words (e.g. "name"), so every attribute used in a
+    // ProjectionExpression / FilterExpression goes through an #placeholder. These
+    // shared maps keep the projections consistent (and reserved-word-safe) across
+    // queries. Pass a COPY to each request so the static maps are never mutated.
+    private static readonly Dictionary<string, string> ProductAttrNames = new()
+    {
+        { "#pid",  "product_id" },
+        { "#mid",  "merchant_id" },
+        { "#nm",   "name" },
+        { "#tn",   "type_name" },
+        { "#cid",  "category_id" },
+        { "#sid",  "subcategory_id" },
+        { "#mesh", "mesh_glb_url" },
+        { "#pmin", "price_min" },
+        { "#pmax", "price_max" },
+        { "#star", "star_rating" },
+        { "#rev",  "review_count" },
+        { "#hid",  "hidden" },
+        { "#var",  "variants" },
+    };
+    private const string ProductProjection =
+        "#pid, #mid, #nm, #tn, #cid, #sid, #mesh, #pmin, #pmax, #star, #rev, #hid, #var";
+
+    private static readonly Dictionary<string, string> CategoryAttrNames = new()
+    {
+        { "#cid", "category_id" },
+        { "#nm",  "name" },
+        { "#ico", "icon" },
+        { "#pid", "parent_category_id" },
+        { "#lvl", "level" },
+        { "#ord", "display_order" },
+        { "#lt",  "live_types" },
+    };
+    private const string CategoryProjection = "#cid, #nm, #ico, #pid, #lvl, #ord, #lt";
 
 
     void Awake()
@@ -55,13 +92,16 @@ public class FurnitureRepository : MonoBehaviour
             {
                 TableName              = AwsConfig.CategoriesTableName,
                 KeyConditionExpression = "merchant_id = :mid",
+                ProjectionExpression   = CategoryProjection,
+                ExpressionAttributeNames = new Dictionary<string, string>(CategoryAttrNames),
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
                     { ":mid", new AttributeValue { S = Merchant } }
                 }
             };
 
-            var response = await AwsManager.Instance.DynamoDBClient.QueryAsync(request);
+            var response = await DbWithRetry(
+                () => AwsManager.Instance.DynamoDBClient.QueryAsync(request), "categories");
 
             // Parse every node once. The pipeline writes a special
             // "__live_types__" item listing the categories that have models, so
@@ -188,7 +228,8 @@ public class FurnitureRepository : MonoBehaviour
                 };
                 if (startKey != null) req.ExclusiveStartKey = startKey;
 
-                var resp = await AwsManager.Instance.DynamoDBClient.ScanAsync(req);
+                var resp = await DbWithRetry(
+                    () => AwsManager.Instance.DynamoDBClient.ScanAsync(req), "live-categories-scan");
                 foreach (var it in resp.Items)
                 {
                     string cat  = it.TryGetValue("category_id", out var c) ? c.S : null;
@@ -210,76 +251,219 @@ public class FurnitureRepository : MonoBehaviour
 
     // ---------------------------------------------------------------
     // PRODUCTS BY CATEGORY  (category-index, merchant_category leaf key)
+    // PAGED: a fast first page renders immediately, the rest is paged in by
+    // FurnitureDataService in the background. One DynamoDB call per page,
+    // ProjectionExpression trims the payload, FilterExpression drops no-model
+    // items server-side, and DbWithRetry logs every attempt.
     // ---------------------------------------------------------------
 
-    public async Task<List<ProductModel>> GetProductsByCategory(string categoryId)
+    // How many raw items to read per page. The with-model count per page is
+    // lower (FilterExpression is applied after the Limit is read). Tunable.
+    // First page is small for fast first paint; later pages are large so the
+    // background fill-in needs fewer round trips over the high-RTT link.
+    public const int PageSize = 20;        // first page
+    public const int NextPageSize = 100;   // subsequent pages
+
+    // One page of results + the cursor for the next page (null = fully loaded).
+    public class ProductPage
     {
-        if (_productCache.TryGetValue(categoryId, out var cached))
+        public List<ProductModel> Items = new();
+        public Dictionary<string, AttributeValue> LastEvaluatedKey;
+        public bool HasMore => LastEvaluatedKey != null && LastEvaluatedKey.Count > 0;
+    }
+
+    // Accumulated products for a category + its pagination cursor. Grows page by
+    // page until NextKey is null (fully loaded).
+    private class CategoryCache
+    {
+        public List<ProductModel> Items = new();
+        public Dictionary<string, AttributeValue> NextKey;
+        public bool FullyLoaded => NextKey == null;
+    }
+
+    private readonly Dictionary<string, CategoryCache> _categoryCache = new();
+
+    // In-flight FIRST-page fetches, keyed by category. When the panel prefetch
+    // and the user's tap both ask for "sofas" at once, they share ONE query.
+    private readonly Dictionary<string, Task<List<ProductModel>>> _inFlightFirstPage = new();
+
+    // True once at least the first page is cached this session.
+    public bool IsCategoryCached(string categoryId)
+        => _categoryCache.TryGetValue(categoryId, out var c) && c.Items.Count > 0;
+
+    // True once every page has been fetched.
+    public bool IsCategoryFullyLoaded(string categoryId)
+        => _categoryCache.TryGetValue(categoryId, out var c) && c.FullyLoaded;
+
+    // All products fetched so far for a category (first page only, or the full
+    // set once background paging has caught up). null if never fetched. Returns
+    // a COPY so callers can never mutate the internal cache list.
+    public List<ProductModel> GetCachedCategoryItems(string categoryId)
+        => _categoryCache.TryGetValue(categoryId, out var c) ? new List<ProductModel>(c.Items) : null;
+
+    // Fetch (or reuse) the FIRST page. Dedup'd across concurrent callers. Caches
+    // the page. Returns all cached items for the category (the first page).
+    public Task<List<ProductModel>> GetFirstPage(string categoryId, int limit)
+    {
+        if (_categoryCache.TryGetValue(categoryId, out var c) && c.Items.Count > 0)
         {
-            Debug.Log($"[FurnitureRepository] CACHE HIT for category {categoryId}");
-            return cached;
+            Debug.Log($"[FurnRepo] {categoryId} | cache HIT first page ({c.Items.Count})");
+            return Task.FromResult(c.Items);
         }
 
+        if (_inFlightFirstPage.TryGetValue(categoryId, out var pending)
+            && !pending.IsFaulted && !pending.IsCanceled)
+        {
+            Debug.Log($"[FurnRepo] {categoryId} | in-flight reuse (first page)");
+            return pending;
+        }
+
+        Debug.Log($"[FurnRepo] {categoryId} | cache MISS → fetching first page");
+        var task = FetchFirstPage(categoryId, limit);
+        _inFlightFirstPage[categoryId] = task;
+        return task;
+    }
+
+    private async Task<List<ProductModel>> FetchFirstPage(string categoryId, int limit)
+    {
         try
         {
-            await AwsManager.Instance.RefreshCredentialsIfNeeded();
-
-            var request = new QueryRequest
+            var page = await QueryCategoryPage(categoryId, limit, null);
+            _categoryCache[categoryId] = new CategoryCache
             {
-                TableName              = AwsConfig.FurnitureCatalogTableName,
-                IndexName              = "category-index",
-                KeyConditionExpression = "merchant_category = :mc",
-                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-                {
-                    { ":mc", new AttributeValue { S = $"{Merchant}#{categoryId}" } }
-                }
+                Items   = page.Items,
+                NextKey = page.LastEvaluatedKey
             };
-
-            var response = await AwsManager.Instance.DynamoDBClient.QueryAsync(request);
-
-            var products = response.Items
-                .Select(ParseProduct)
-                .Where(p => p != null && p.HasModel)   // only placeable products
-                .ToList();
-
-            Debug.Log($"[FurnitureRepository] Fetched {products.Count} " +
-                      $"products for category {categoryId}.");
-
-            _productCache[categoryId] = products;
-            return products;
+            Debug.Log($"[FurnRepo] {categoryId} | first page cached ({page.Items.Count} items, " +
+                      $"{(page.HasMore ? "more available" : "fully loaded")})");
+            return new List<ProductModel>(_categoryCache[categoryId].Items);
         }
         catch (Exception e)
         {
-            Debug.LogError($"[FurnitureRepository] GetProductsByCategory error: {e.Message}");
+            Debug.LogError($"[FurnRepo] {categoryId} | first page error: {e.Message}");
             return new List<ProductModel>();
         }
+        finally
+        {
+            _inFlightFirstPage.Remove(categoryId);
+        }
+    }
+
+    // Fetch the NEXT page and append it to the cache. Returns only the newly
+    // added items (empty if already fully loaded). Owned by the DataService
+    // background loop — not dedup'd (the loop is single-threaded per category).
+    public async Task<List<ProductModel>> GetNextPage(string categoryId, int limit)
+    {
+        if (!_categoryCache.TryGetValue(categoryId, out var c))
+            return new List<ProductModel>();
+        if (c.FullyLoaded)
+            return new List<ProductModel>();
+
+        try
+        {
+            var page = await QueryCategoryPage(categoryId, limit, c.NextKey);
+            c.Items.AddRange(page.Items);
+            c.NextKey = page.LastEvaluatedKey;
+            Debug.Log($"[FurnRepo] {categoryId} | next page +{page.Items.Count} (total {c.Items.Count}, " +
+                      $"{(c.FullyLoaded ? "fully loaded" : "more available")})");
+            return page.Items;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[FurnRepo] {categoryId} | next page error: {e.Message}");
+            return new List<ProductModel>();
+        }
+    }
+
+    // One DynamoDB Query for one page. ProjectionExpression trims the payload to
+    // only what ParseProduct reads; FilterExpression drops no-model items
+    // server-side so they're never transferred.
+    private async Task<ProductPage> QueryCategoryPage(
+        string categoryId, int limit, Dictionary<string, AttributeValue> startKey)
+    {
+        bool refreshed = await AwsManager.Instance.RefreshCredentialsIfNeeded();
+        Debug.Log($"[FurnRepo] {categoryId} | credentials: {(refreshed ? "REFRESHED" : "fresh")}");
+
+        var request = new QueryRequest
+        {
+            TableName              = AwsConfig.FurnitureCatalogTableName,
+            IndexName              = "category-index",
+            KeyConditionExpression = "merchant_category = :mc",
+            FilterExpression       = "attribute_exists(#mesh)",
+            ProjectionExpression   = ProductProjection,
+            ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                { ":mc", new AttributeValue { S = $"{Merchant}#{categoryId}" } }
+            },
+            Limit = limit
+        };
+        if (startKey != null) request.ExclusiveStartKey = startKey;
+
+        var ctx = $"{categoryId} | page {(startKey == null ? "1" : "next")}";
+        var response = await DbWithRetry(
+            () => AwsManager.Instance.DynamoDBClient.QueryAsync(request), ctx);
+
+        var items = response.Items
+            .Select(ParseProduct)
+            .Where(p => p != null && p.HasModel)   // belt-and-suspenders; filter already applied
+            .ToList();
+
+        var lek = (response.LastEvaluatedKey != null && response.LastEvaluatedKey.Count > 0)
+            ? response.LastEvaluatedKey : null;
+
+        return new ProductPage { Items = items, LastEvaluatedKey = lek };
     }
 
     // ---------------------------------------------------------------
     // PRODUCTS BY SUBCATEGORY  (category-index + subcategory_id filter)
     // ---------------------------------------------------------------
 
-    public async Task<List<ProductModel>> GetProductsBySubcategory(
+    private readonly Dictionary<string, Task<List<ProductModel>>> _inFlightBySubcategory = new();
+
+    public Task<List<ProductModel>> GetProductsBySubcategory(
         string categoryId, string subcategoryId)
     {
         string cacheKey = $"{categoryId}_{subcategoryId}";
 
         if (_productCache.TryGetValue(cacheKey, out var cached))
         {
-            Debug.Log($"[FurnitureRepository] CACHE HIT — {cached.Count} products.");
-            return cached;
+            Debug.Log($"[FurnRepo] {cacheKey} | cache HIT ({cached.Count} products)");
+            return Task.FromResult(cached);
         }
 
+        if (_inFlightBySubcategory.TryGetValue(cacheKey, out var pending))
+        {
+            if (!pending.IsFaulted && !pending.IsCanceled)
+            {
+                Debug.Log($"[FurnRepo] {cacheKey} | in-flight reuse");
+                return pending;
+            }
+            _inFlightBySubcategory.Remove(cacheKey);
+        }
+
+        Debug.Log($"[FurnRepo] {cacheKey} | cache MISS → fetching");
+        var task = FetchProductsBySubcategory(categoryId, subcategoryId, cacheKey);
+        _inFlightBySubcategory[cacheKey] = task;
+        return task;
+    }
+
+    private async Task<List<ProductModel>> FetchProductsBySubcategory(
+        string categoryId, string subcategoryId, string cacheKey)
+    {
         try
         {
-            await AwsManager.Instance.RefreshCredentialsIfNeeded();
+            bool refreshed = await AwsManager.Instance.RefreshCredentialsIfNeeded();
+            Debug.Log($"[FurnRepo] {cacheKey} | credentials: {(refreshed ? "REFRESHED" : "fresh")}");
 
             var request = new QueryRequest
             {
                 TableName              = AwsConfig.FurnitureCatalogTableName,
                 IndexName              = "category-index",
                 KeyConditionExpression = "merchant_category = :mc",
-                FilterExpression       = "subcategory_id = :subId",
+                FilterExpression       = "attribute_exists(#mesh) AND #sid = :subId",
+                ProjectionExpression   = ProductProjection,
+                ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
                     { ":mc",    new AttributeValue { S = $"{Merchant}#{categoryId}" } },
@@ -287,23 +471,26 @@ public class FurnitureRepository : MonoBehaviour
                 }
             };
 
-            var response = await AwsManager.Instance.DynamoDBClient.QueryAsync(request);
+            var response = await DbWithRetry(
+                () => AwsManager.Instance.DynamoDBClient.QueryAsync(request), cacheKey);
 
             var products = response.Items
                 .Select(ParseProduct)
-                .Where(p => p != null && p.HasModel)   // only placeable products
+                .Where(p => p != null && p.HasModel)
                 .ToList();
 
             _productCache[cacheKey] = products;
-
-            Debug.Log($"[FurnitureRepository] Fetched {products.Count} " +
-                      $"products for subcategory {subcategoryId}.");
+            Debug.Log($"[FurnRepo] {cacheKey} | {response.Items.Count} raw → {products.Count} with-model");
             return products;
         }
         catch (Exception e)
         {
-            Debug.LogError($"[FurnitureRepository] GetProductsBySubcategory error: {e.Message}");
+            Debug.LogError($"[FurnRepo] {cacheKey} | GetProductsBySubcategory error: {e.Message}");
             return new List<ProductModel>();
+        }
+        finally
+        {
+            _inFlightBySubcategory.Remove(cacheKey);
         }
     }
 
@@ -318,6 +505,8 @@ public class FurnitureRepository : MonoBehaviour
             var request = new GetItemRequest
             {
                 TableName = AwsConfig.FurnitureCatalogTableName,
+                ProjectionExpression = ProductProjection,
+                ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
                 Key = new Dictionary<string, AttributeValue>
                 {
                     { "merchant_id", new AttributeValue { S = Merchant } },
@@ -325,7 +514,8 @@ public class FurnitureRepository : MonoBehaviour
                 }
             };
 
-            var response = await AwsManager.Instance.DynamoDBClient.GetItemAsync(request);
+            var response = await DbWithRetry(
+                () => AwsManager.Instance.DynamoDBClient.GetItemAsync(request), $"product:{productId}");
 
             if (!response.IsItemSet)
             {
@@ -353,18 +543,17 @@ public class FurnitureRepository : MonoBehaviour
             var request = new ScanRequest
             {
                 TableName        = AwsConfig.FurnitureCatalogTableName,
-                FilterExpression = "contains(#nm, :term)",
-                ExpressionAttributeNames = new Dictionary<string, string>
-                {
-                    { "#nm", "name" }
-                },
+                FilterExpression = "attribute_exists(#mesh) AND contains(#nm, :term)",
+                ProjectionExpression = ProductProjection,
+                ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
                     { ":term", new AttributeValue { S = searchTerm } }
                 }
             };
 
-            var response = await AwsManager.Instance.DynamoDBClient.ScanAsync(request);
+            var response = await DbWithRetry(
+                () => AwsManager.Instance.DynamoDBClient.ScanAsync(request), $"search:{searchTerm}");
 
             var products = response.Items
                 .Select(ParseProduct)
@@ -460,6 +649,47 @@ public class FurnitureRepository : MonoBehaviour
     // ---------------------------------------------------------------
     // HELPERS
     // ---------------------------------------------------------------
+
+    // Logs one DynamoDB call's elapsed time, HTTP status, and payload size. The
+    // AWS SDK retries internally (default Standard mode); this wrapper does NOT
+    // add its own retries on top, so the total elapsed time reveals whether the
+    // SDK retried (a multi-second call on a small response = it did). Explicit
+    // per-attempt logging would require disabling the SDK retries via the v4
+    // MaxAttempts API — held off until the exact property name is confirmed.
+    private async Task<T> DbWithRetry<T>(Func<Task<T>> op, string ctx)
+        where T : AmazonWebServiceResponse
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var resp = await op();
+            sw.Stop();
+            Debug.Log($"[FurnRepo] {ctx} | DB OK | {sw.ElapsedMilliseconds} ms" +
+                      $" | HTTP {resp.HttpStatusCode} | {resp.ContentLength} bytes");
+            return resp;
+        }
+        catch (AmazonServiceException ex)
+        {
+            sw.Stop();
+            Debug.LogWarning($"[FurnRepo] {ctx} | DB FAIL ({sw.ElapsedMilliseconds} ms)" +
+                             $" HTTP {ex.StatusCode} {ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+        catch (AmazonClientException ex)
+        {
+            sw.Stop();
+            Debug.LogWarning($"[FurnRepo] {ctx} | DB network FAIL ({sw.ElapsedMilliseconds} ms)" +
+                             $" {ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Debug.LogError($"[FurnRepo] {ctx} | DB FAIL ({sw.ElapsedMilliseconds} ms)" +
+                           $" {ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+    }
 
     private string GetString(Dictionary<string, AttributeValue> item, string key)
     {

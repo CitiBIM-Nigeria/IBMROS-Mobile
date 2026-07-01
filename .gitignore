@@ -75,3 +75,8 @@ ExportedObj/
 .DS_Store
 
 UIElementsSchema/
+
+# =========================
+# Claude Code (local-only settings)
+# =========================
+.claude/settings.local.json

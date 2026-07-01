@@ -22,6 +22,10 @@ public class FurnitureDataService : MonoBehaviour
     public static event Action<List<ProductModel>, string> OnProductsLoaded;
     public static event Action<string>                     OnProductsFailed;
 
+    // Additional products paged in AFTER the first page (background fill-in).
+    // string = categoryId (the subcategory id the user tapped).
+    public static event Action<List<ProductModel>, string> OnProductsAppended;
+
     public static event Action<ProductModel>               OnProductLoaded;
     public static event Action<string>                     OnProductFailed;
 
@@ -88,17 +92,27 @@ public class FurnitureDataService : MonoBehaviour
         Debug.Log($"[FurnitureDataService] Categories loaded: {categories.Count}");
         OnCategoriesLoaded?.Invoke(categories);
 
-        // Warm every category's products in the background so navigating is
-        // instant (the room-entry preload now warms the WHOLE catalog).
-        PreloadProducts(categories);
+        // NOTE: we deliberately DON'T warm the whole catalogue here. The furniture
+        // panel prefetches only the room the user opens (cancellable, cancelled on
+        // the user's next tap), and every other category loads on demand with
+        // in-flight de-duplication. A full up-front sweep just competed with user
+        // requests for the AWS connection — the second burst of categories in the
+        // logcat — and delayed the tapped item.
     }
 
     // ---------------------------------------------------------------
-    // PRODUCTS BY CATEGORY
+    // PRODUCTS BY CATEGORY  (paged: fast first page, then background fill-in)
     // ---------------------------------------------------------------
 
-    private readonly Dictionary<string, List<ProductModel>> _productsCache = new();
+    // The category whose products are currently on screen. Background paging for
+    // any other category is cancelled, so a user tap always wins the connection.
+    private string _activeCategory;
+    private System.Threading.CancellationTokenSource _pagingCts;
 
+    // User-initiated load. Shows the first page as fast as possible (instant if
+    // the panel prefetch already warmed it), then pages in the rest in the
+    // background, appending as each page arrives. Switching categories cancels
+    // the previous background paging.
     public async Task LoadProductsByCategory(string categoryId)
     {
         if (!IsReady()) return;
@@ -109,53 +123,79 @@ public class FurnitureDataService : MonoBehaviour
             return;
         }
 
-        // Served this session already → instant, no network call.
-        if (_productsCache.TryGetValue(categoryId, out var hit))
+        // Cancel any other category's background paging — this load wins.
+        _pagingCts?.Cancel();
+        _pagingCts = new System.Threading.CancellationTokenSource();
+        var ct = _pagingCts.Token;
+        _activeCategory = categoryId;
+
+        // First page already cached (maybe by the panel prefetch) → show instantly.
+        if (FurnitureRepository.Instance.IsCategoryCached(categoryId))
         {
-            OnProductsLoaded?.Invoke(hit, categoryId);
-            return;
+            var cached = FurnitureRepository.Instance.GetCachedCategoryItems(categoryId);
+            Debug.Log($"[CatLoad] {categoryId} | first page cache HIT ({cached.Count})");
+            OnProductsLoaded?.Invoke(cached, categoryId);
+        }
+        else
+        {
+            Debug.Log($"[CatLoad] {categoryId} | first page cache MISS → fetching");
+            OnLoadingChanged?.Invoke(true, "Loading products...");
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var firstPage = await FurnitureRepository.Instance
+                .GetFirstPage(categoryId, FurnitureRepository.PageSize);
+            sw.Stop();
+
+            OnLoadingChanged?.Invoke(false, string.Empty);
+
+            if (ct.IsCancellationRequested) return;          // user moved to another category
+            if (firstPage == null || firstPage.Count == 0)
+            {
+                Debug.LogWarning($"[CatLoad] {categoryId} | no products | {sw.ElapsedMilliseconds} ms");
+                OnProductsFailed?.Invoke("No products found in this category.");
+                return;
+            }
+
+            Debug.Log($"[CatLoad] {categoryId} | first page {firstPage.Count} | {sw.ElapsedMilliseconds} ms");
+            OnProductsLoaded?.Invoke(firstPage, categoryId);
         }
 
-        OnLoadingChanged?.Invoke(true, "Loading products...");
-
-        var products = await FurnitureRepository.Instance
-            .GetProductsByCategory(categoryId);
-
-        OnLoadingChanged?.Invoke(false, string.Empty);
-
-        if (products == null || products.Count == 0)
-        {
-            OnProductsFailed?.Invoke("No products found in this category.");
-            return;
-        }
-
-        _productsCache[categoryId] = products;
-        OnProductsLoaded?.Invoke(products, categoryId);
+        // Page in the rest in the background, appending as each page arrives.
+        // Auto-cancelled when the user loads a different category.
+        _ = PageRemainingProducts(categoryId, ct);
     }
 
-    // Background pre-fetch: warm the product cache for every furniture type so
-    // opening any category later is instant. Called after categories load (room
-    // entry). Fire-and-forget; failures are harmless (it'll load on demand).
-    public async void PreloadProducts(List<CategoryModel> categories)
+    private async Task PageRemainingProducts(string categoryId, System.Threading.CancellationToken ct)
     {
-        if (categories == null) return;
-        foreach (var room in categories)
+        while (!ct.IsCancellationRequested
+               && !FurnitureRepository.Instance.IsCategoryFullyLoaded(categoryId))
         {
-            if (room.Subcategories == null) continue;
-            foreach (var type in room.Subcategories)
+            if (_activeCategory != categoryId) return;       // user moved on
+
+            List<ProductModel> added;
+            try
             {
-                if (_productsCache.ContainsKey(type.SubcategoryId)) continue;
-                try
-                {
-                    var products = await FurnitureRepository.Instance
-                        .GetProductsByCategory(type.SubcategoryId);
-                    if (products != null && products.Count > 0)
-                        _productsCache[type.SubcategoryId] = products;
-                }
-                catch { /* on-demand load will retry */ }
+                added = await FurnitureRepository.Instance
+                    .GetNextPage(categoryId, FurnitureRepository.NextPageSize);
             }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[CatLoad] {categoryId} | paging error: {e.Message}");
+                return;
+            }
+
+            if (ct.IsCancellationRequested) return;
+            if (_activeCategory != categoryId) return;
+            if (added != null && added.Count > 0)
+            {
+                Debug.Log($"[CatLoad] {categoryId} | +{added.Count} appended");
+                OnProductsAppended?.Invoke(added, categoryId);
+            }
+            await Task.Yield();
         }
-        Debug.Log("[FurnitureDataService] Product preload complete.");
+
+        if (_activeCategory == categoryId && !ct.IsCancellationRequested)
+            Debug.Log($"[CatLoad] {categoryId} | fully loaded");
     }
 
     // ---------------------------------------------------------------
@@ -176,19 +216,21 @@ public class FurnitureDataService : MonoBehaviour
 
         OnLoadingChanged?.Invoke(true, "Loading products...");
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var products = await FurnitureRepository.Instance
             .GetProductsBySubcategory(categoryId, subcategoryId);
+        sw.Stop();
 
         OnLoadingChanged?.Invoke(false, string.Empty);
 
         if (products == null || products.Count == 0)
         {
-            Debug.LogWarning($"[FurnitureDataService] No products for {subcategoryId}.");
+            Debug.LogWarning($"[CatLoad] {categoryId}_{subcategoryId} | no products | {sw.ElapsedMilliseconds} ms");
             OnProductsFailed?.Invoke("No products found in this subcategory.");
             return;
         }
 
-        Debug.Log($"[FurnitureDataService] Products loaded: {products.Count}");
+        Debug.Log($"[CatLoad] {categoryId}_{subcategoryId} | repository returned {products.Count} products | {sw.ElapsedMilliseconds} ms");
         OnProductsLoaded?.Invoke(products, subcategoryId);
     }
 
