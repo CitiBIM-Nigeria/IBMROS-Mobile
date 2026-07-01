@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 /// <summary>
 /// Direct DynamoDB access layer for the furniture catalog.
@@ -84,10 +86,13 @@ public class FurnitureRepository : MonoBehaviour
 
     public async Task<List<CategoryModel>> GetCategories()
     {
+        var total = Stopwatch.StartNew();
         try
         {
-            await AwsManager.Instance.RefreshCredentialsIfNeeded();
+            bool refreshed = await AwsManager.Instance.RefreshCredentialsIfNeeded();
+            long credMs = AwsManager.Instance.LastRefreshElapsedMs;
 
+            long preQuery = total.ElapsedMilliseconds;
             var request = new QueryRequest
             {
                 TableName              = AwsConfig.CategoriesTableName,
@@ -102,7 +107,9 @@ public class FurnitureRepository : MonoBehaviour
 
             var response = await DbWithRetry(
                 () => AwsManager.Instance.DynamoDBClient.QueryAsync(request), "categories");
+            long queryMs = total.ElapsedMilliseconds - preQuery;
 
+            long preParse = total.ElapsedMilliseconds;
             // Parse every node once. The pipeline writes a special
             // "__live_types__" item listing the categories that have models, so
             // we get that set FOR FREE here — no separate full-table scan.
@@ -170,12 +177,22 @@ public class FurnitureRepository : MonoBehaviour
                 .Where(room => room.Subcategories.Count > 0)
                 .ToList();
 
-            Debug.Log($"[FurnitureRepository] Fetched {rooms.Count} rooms.");
+            long parseMs = total.ElapsedMilliseconds - preParse;
+            total.Stop();
+
+            int totalSubs = rooms.Sum(r => r.Subcategories.Count);
+            Debug.Log($"[FurnRepo] CATEGORIES" +
+                      $" | cred-refresh {credMs}ms ({(refreshed ? "REFRESHED" : "fresh")})" +
+                      $" | db-query {queryMs}ms" +
+                      $" | parse {parseMs}ms" +
+                      $" | TOTAL {total.ElapsedMilliseconds}ms" +
+                      $" | {rooms.Count} rooms, {totalSubs} subcategories");
             return rooms;
         }
         catch (Exception e)
         {
-            Debug.LogError($"[FurnitureRepository] GetCategories error: {e.Message}");
+            total.Stop();
+            Debug.LogError($"[FurnitureRepository] GetCategories error ({total.ElapsedMilliseconds}ms): {e.Message}");
             return new List<CategoryModel>();
         }
     }

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using GLTFast; // GLBs are now WebP-free, so glTFast loads them with correct
                // sRGB/Linear colour spaces + URP materials (no manual fixups).
 using UnityEngine;
 using UnityEngine.Networking;
+using Debug = UnityEngine.Debug;
 
 public class FurnitureModelLoader : MonoBehaviour
 {
@@ -51,39 +53,104 @@ public class FurnitureModelLoader : MonoBehaviour
     // Returns the loaded GameObject or null if it failed
     public async Task<GameObject> LoadModel(string fileName)
     {
+        var total = Stopwatch.StartNew();
         try
         {
             string localPath = Path.Combine(CachePath, fileName);
+            bool cacheHit = File.Exists(localPath);
+            string shortName = Path.GetFileName(fileName);
 
-            // Check if model is already cached locally
-            if (File.Exists(localPath))
+            long downloadMs = 0;
+            long fileSizeBytes = 0;
+            double speedMBps = 0;
+            long firstByteMs = 0;
+
+            if (cacheHit)
             {
-                Debug.Log($"[FurnitureModelLoader] Loading {fileName} from cache.");
-                return await LoadFromFile(localPath, fileName);
+                fileSizeBytes = new FileInfo(localPath).Length;
+            }
+            else
+            {
+                // Not cached, download from CloudFront
+                var dlResult = await DownloadFromCloudFront(fileName, localPath);
+
+                if (!dlResult.Success)
+                {
+                    total.Stop();
+                    Debug.LogError($"[ModelLoad] {shortName} | DOWNLOAD FAILED | {total.ElapsedMilliseconds}ms");
+                    return null;
+                }
+
+                downloadMs    = dlResult.ElapsedMs;
+                fileSizeBytes = dlResult.FileSizeBytes;
+                speedMBps     = dlResult.SpeedMBps;
+                firstByteMs   = dlResult.FirstByteMs;
             }
 
-            // Not cached, download from S3
-            Debug.Log($"[FurnitureModelLoader] Downloading {fileName} from S3.");
-            bool downloaded = await DownloadFromCloudFront(fileName, localPath);
+            // Load from file (disk read + parse + instantiate)
+            var loadResult = await LoadFromFile(localPath, fileName);
 
-            if (!downloaded)
+            total.Stop();
+
+            if (loadResult.Model == null)
             {
-                Debug.LogError($"[FurnitureModelLoader] Failed to download {fileName}.");
+                Debug.LogError($"[ModelLoad] {shortName} | PARSE FAILED | {total.ElapsedMilliseconds}ms");
                 return null;
             }
 
-            return await LoadFromFile(localPath, fileName);
+            // One summary log line for the entire pipeline
+            string sizeStr = FormatSize(fileSizeBytes);
+            if (cacheHit)
+            {
+                Debug.Log($"[ModelLoad] {shortName}" +
+                          $" | CACHE HIT | file {sizeStr}" +
+                          $" | disk-read {loadResult.DiskReadMs}ms" +
+                          $" | parse {loadResult.ParseMs}ms" +
+                          $" | instantiate {loadResult.InstantiateMs}ms" +
+                          $" | TOTAL {total.ElapsedMilliseconds}ms");
+            }
+            else
+            {
+                Debug.Log($"[ModelLoad] {shortName}" +
+                          $" | CACHE MISS" +
+                          $" | download {downloadMs}ms ({sizeStr}, {speedMBps:F1}MB/s, first-byte {firstByteMs}ms)" +
+                          $" | disk-read {loadResult.DiskReadMs}ms" +
+                          $" | parse {loadResult.ParseMs}ms" +
+                          $" | instantiate {loadResult.InstantiateMs}ms" +
+                          $" | TOTAL {total.ElapsedMilliseconds}ms");
+            }
+
+            return loadResult.Model;
         }
         catch (Exception e)
         {
-            Debug.LogError($"[FurnitureModelLoader] LoadModel error: {e.Message}");
+            total.Stop();
+            Debug.LogError($"[ModelLoad] LoadModel error ({total.ElapsedMilliseconds}ms): {e.Message}");
             return null;
         }
     }
 
-    // Downloads a file from S3 and saves it to the local cache
-    private async Task<bool> DownloadFromCloudFront(string fileName, string localPath)
+    private static string FormatSize(long bytes)
     {
+        if (bytes >= 1_048_576) return $"{bytes / 1_048_576.0:F1}MB";
+        if (bytes >= 1024)      return $"{bytes / 1024.0:F0}KB";
+        return $"{bytes}B";
+    }
+
+    // Result struct for download metrics
+    private struct DownloadResult
+    {
+        public bool   Success;
+        public long   ElapsedMs;
+        public long   FileSizeBytes;
+        public double SpeedMBps;
+        public long   FirstByteMs;
+    }
+
+    // Downloads a file from CloudFront and saves it to the local cache
+    private async Task<DownloadResult> DownloadFromCloudFront(string fileName, string localPath)
+    {
+        var result = new DownloadResult();
         try
         {
             // EscapeUriString encodes spaces but leaves slashes intact
@@ -91,15 +158,10 @@ public class FurnitureModelLoader : MonoBehaviour
             string encodedFileName = Uri.EscapeUriString(fileName);
             string url = $"{AwsConfig.CloudFrontDomain}/{encodedFileName}";
 
-            Debug.Log($"[FurnitureModelLoader] Requesting: {url}");
-
             // Create the local subdirectory if it does not exist
             string localDir = Path.GetDirectoryName(localPath);
             if (!string.IsNullOrEmpty(localDir) && !Directory.Exists(localDir))
-            {
                 Directory.CreateDirectory(localDir);
-                Debug.Log($"[FurnitureModelLoader] Created cache directory: {localDir}");
-            }
 
             using var request = UnityWebRequest.Get(url);
 
@@ -115,63 +177,117 @@ public class FurnitureModelLoader : MonoBehaviour
                 removeFileOnAbort = true
             };
 
+            var sw = Stopwatch.StartNew();
+            bool firstByteRecorded = false;
+
             var operation = request.SendWebRequest();
             while (!operation.isDone)
+            {
+                if (!firstByteRecorded && request.downloadProgress > 0)
+                {
+                    result.FirstByteMs = sw.ElapsedMilliseconds;
+                    firstByteRecorded = true;
+                }
                 await Task.Yield();
+            }
+            sw.Stop();
+
+            if (!firstByteRecorded)
+                result.FirstByteMs = sw.ElapsedMilliseconds;
+
+            result.ElapsedMs = sw.ElapsedMilliseconds;
 
             if (request.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"[FurnitureModelLoader] CloudFront error: {request.error}");
+                Debug.LogError($"[ModelLoad] CloudFront error | {request.responseCode} | {request.error}");
                 try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
-                return false;
+                return result;   // Success remains false
             }
 
             if (File.Exists(localPath)) File.Delete(localPath);
             File.Move(tmpPath, localPath);
-            Debug.Log($"[FurnitureModelLoader] Downloaded and cached: {fileName}");
-            return true;
+
+            result.Success       = true;
+            result.FileSizeBytes = (long)request.downloadedBytes;
+            result.SpeedMBps     = sw.ElapsedMilliseconds > 0
+                ? (result.FileSizeBytes / 1_048_576.0) / (sw.ElapsedMilliseconds / 1000.0)
+                : 0;
+
+            return result;
         }
         catch (Exception e)
         {
-            Debug.LogError($"[FurnitureModelLoader] CloudFront download error: {e.Message}");
-            return false;
+            Debug.LogError($"[ModelLoad] CloudFront download error: {e.Message}");
+            return result;   // Success remains false
         }
+    }
+
+    // Result struct for load-from-file metrics
+    private struct LoadFromFileResult
+    {
+        public GameObject Model;
+        public long       DiskReadMs;
+        public long       ParseMs;
+        public long       InstantiateMs;
     }
     
     // Loads a GLB file from a local path using glTFast
-    private async Task<GameObject> LoadFromFile(string localPath, string fileName)
+    private async Task<LoadFromFileResult> LoadFromFile(string localPath, string fileName)
     {
+        var result = new LoadFromFileResult();
         try
         {
             // glTFast loads the self-contained GLB (PNG/JPEG textures, no
             // EXT_texture_webp) and builds URP materials with correct colour
             // spaces — no shader-swap or texture re-application needed.
+            var sw = Stopwatch.StartNew();
             byte[] data = await File.ReadAllBytesAsync(localPath);
+            result.DiskReadMs = sw.ElapsedMilliseconds;
 
-            var gltf   = new GltfImport();
+            long preParse = sw.ElapsedMilliseconds;
+
+            GltfImport gltf;
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                // In Edit Mode, we cannot use the default GameObjectDeferAgent because it 
+                // calls DontDestroyOnLoad, which is strictly forbidden outside Play Mode.
+                gltf = new GltfImport(null, new UninterruptedDeferAgent());
+            }
+            else
+#endif
+            {
+                gltf = new GltfImport();
+            }
+
             bool loaded = await gltf.LoadGltfBinary(data);
+            result.ParseMs = sw.ElapsedMilliseconds - preParse;
+
             if (!loaded)
             {
-                Debug.LogError($"[FurnitureModelLoader] glTFast failed to load {fileName}.");
-                return null;
+                Debug.LogError($"[ModelLoad] glTFast parse failed: {fileName}");
+                return result;
             }
 
+            long preInst = sw.ElapsedMilliseconds;
             var root = new GameObject(fileName);
             bool ok  = await gltf.InstantiateMainSceneAsync(root.transform);
+            result.InstantiateMs = sw.ElapsedMilliseconds - preInst;
+
             if (!ok)
             {
-                Debug.LogError($"[FurnitureModelLoader] glTFast failed to instantiate {fileName}.");
+                Debug.LogError($"[ModelLoad] glTFast instantiate failed: {fileName}");
                 Destroy(root);
-                return null;
+                return result;
             }
 
-            Debug.Log($"[FurnitureModelLoader] Loaded (glTFast): {fileName}");
-            return root;
+            result.Model = root;
+            return result;
         }
         catch (Exception e)
         {
-            Debug.LogError($"[FurnitureModelLoader] LoadFromFile error: {e.Message}");
-            return null;
+            Debug.LogError($"[ModelLoad] LoadFromFile error: {e.Message}");
+            return result;
         }
     }
 

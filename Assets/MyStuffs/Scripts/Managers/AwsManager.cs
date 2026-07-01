@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Amazon;
@@ -8,6 +9,7 @@ using Amazon.S3;
 using Amazon.DynamoDBv2;
 using Amazon.Runtime;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 public class AwsManager : MonoBehaviour
 {
@@ -36,8 +38,11 @@ public class AwsManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+    private Stopwatch _startupStopwatch;
+
     async void Start()
     {
+        _startupStopwatch = Stopwatch.StartNew();
         await InitializeGuestWithRetry();
     }
 
@@ -50,19 +55,20 @@ public class AwsManager : MonoBehaviour
 
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            bool success = TryInitializeGuest();
+            bool success = TryInitializeGuest(attempt);
 
             if (success)
             {
                 _isInitialized = true;
-                Debug.Log("[AwsManager] Guest initialization successful.");
+                _startupStopwatch?.Stop();
+                Debug.Log($"[AwsManager] INIT OK | attempt {attempt} | total {_startupStopwatch?.ElapsedMilliseconds ?? 0}ms");
 
                 // Fire the event so all waiting scripts proceed
                 OnAwsReady?.Invoke();
                 return;
             }
 
-            Debug.LogWarning($"[AwsManager] Initialization attempt {attempt} failed. Retrying in {delayMs}ms...");
+            Debug.LogWarning($"[AwsManager] INIT attempt {attempt} FAILED | retrying in {delayMs}ms");
             await Task.Delay(delayMs);
 
             // Double the delay each retry: 1s, 2s, 4s, 8s, 16s
@@ -70,30 +76,45 @@ public class AwsManager : MonoBehaviour
         }
 
         // All retries failed
-        Debug.LogError("[AwsManager] AWS initialization failed after all retries. Check network connection.");
+        _startupStopwatch?.Stop();
+        Debug.LogError($"[AwsManager] INIT FAILED | all {maxRetries} attempts | {_startupStopwatch?.ElapsedMilliseconds ?? 0}ms");
         
         // Fire event even on failure so UI can show an error instead of freezing
         OnAwsReady?.Invoke();
     }
 
-    private bool TryInitializeGuest()
+    private bool TryInitializeGuest(int attempt = 1)
     {
         try
         {
+            var sw = Stopwatch.StartNew();
             var region = RegionEndpoint.GetBySystemName(AwsConfig.Region);
 
             _credentials = new CognitoAWSCredentials(
                 AwsConfig.IdentityPoolId,
                 region
             );
+            long credsMsec = sw.ElapsedMilliseconds;
 
             CognitoProvider = new AmazonCognitoIdentityProviderClient(
                 new AnonymousAWSCredentials(),
                 region
             );
+            long cognitoProviderMsec = sw.ElapsedMilliseconds - credsMsec;
 
             S3Client = new AmazonS3Client(_credentials, region);
+            long s3Msec = sw.ElapsedMilliseconds - credsMsec - cognitoProviderMsec;
+
             DynamoDBClient = BuildDynamoDBClient(region);
+            sw.Stop();
+            long dynamoMsec = sw.ElapsedMilliseconds - credsMsec - cognitoProviderMsec - s3Msec;
+
+            Debug.Log($"[AwsManager] INIT (cold) | attempt {attempt}" +
+                      $" | creds-ctor {credsMsec}ms" +
+                      $" | cognito-provider {cognitoProviderMsec}ms" +
+                      $" | s3-client {s3Msec}ms" +
+                      $" | dynamo-client {dynamoMsec}ms" +
+                      $" | TOTAL {sw.ElapsedMilliseconds}ms");
 
             return true;
         }
@@ -179,12 +200,20 @@ public class AwsManager : MonoBehaviour
     // Returns true if credentials were actually refreshed (Cognito round-trip +
     // client rebuild); false on the fast path (still fresh) or on error. Callers
     // log this so a category-load trace shows whether a refresh was involved.
+    // Returns the elapsed milliseconds of the last credential refresh. Other
+    // scripts (e.g. FurnitureRepository) read this to split their own timings
+    // without adding another stopwatch.
+    public long LastRefreshElapsedMs { get; private set; }
+
     public async Task<bool> RefreshCredentialsIfNeeded()
     {
         // Fast path: still fresh and clients exist → nothing to do.
         if (DynamoDBClient != null &&
             (DateTime.UtcNow - _lastCredsRefreshUtc).TotalMinutes < CredsValidMinutes)
+        {
+            LastRefreshElapsedMs = 0;
             return false;
+        }
 
         // Single-flight: concurrent callers wait here; only the first refreshes.
         await _refreshGate.WaitAsync();
@@ -193,9 +222,12 @@ public class AwsManager : MonoBehaviour
             // Re-check inside the lock — a caller ahead of us may have just done it.
             if (DynamoDBClient != null &&
                 (DateTime.UtcNow - _lastCredsRefreshUtc).TotalMinutes < CredsValidMinutes)
+            {
+                LastRefreshElapsedMs = 0;
                 return false;
+            }
 
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
             var region = RegionEndpoint.GetBySystemName(AwsConfig.Region);
 
             // Create a completely new credentials object
@@ -205,17 +237,30 @@ public class AwsManager : MonoBehaviour
                 AwsConfig.IdentityPoolId,
                 region
             );
+            long credsMsec = sw.ElapsedMilliseconds;
 
             // Rebuild clients with the fresh credentials
             S3Client       = new AmazonS3Client(_credentials, region);
+            long s3Msec = sw.ElapsedMilliseconds - credsMsec;
+
             DynamoDBClient = BuildDynamoDBClient(region);
+            long dynamoMsec = sw.ElapsedMilliseconds - credsMsec - s3Msec;
 
             // Pre-fetch to confirm credentials work before returning
+            long preGetCreds = sw.ElapsedMilliseconds;
             await _credentials.GetCredentialsAsync();
+            long getCredsMsec = sw.ElapsedMilliseconds - preGetCreds;
 
             _lastCredsRefreshUtc = DateTime.UtcNow;
             sw.Stop();
-            Debug.Log($"[AwsManager] Credentials REFRESHED | {sw.ElapsedMilliseconds} ms");
+            LastRefreshElapsedMs = sw.ElapsedMilliseconds;
+
+            Debug.Log($"[AwsManager] REFRESH" +
+                      $" | creds-ctor {credsMsec}ms" +
+                      $" | s3-client {s3Msec}ms" +
+                      $" | dynamo-client {dynamoMsec}ms" +
+                      $" | get-creds {getCredsMsec}ms" +
+                      $" | TOTAL {sw.ElapsedMilliseconds}ms");
             return true;
         }
         catch (Exception e)

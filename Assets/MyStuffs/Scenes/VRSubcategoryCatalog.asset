@@ -1,0 +1,97 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c60e04bbf9302441eb5f88a7b0242896, type: 3}
+  m_Name: VRSubcategoryCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::VRSubcategoryCatalog
+  entries:
+  - roomName: Living Room
+    displayName: Sofas
+    categoryId: sofas
+  - roomName: Living Room
+    displayName: Armchairs
+    categoryId: armchairs
+  - roomName: Living Room
+    displayName: Coffee Tables
+    categoryId: coffee_tables
+  - roomName: Living Room
+    displayName: Side Tables
+    categoryId: side_tables
+  - roomName: Living Room
+    displayName: TV Units
+    categoryId: tv_units
+  - roomName: Living Room
+    displayName: Bookshelves
+    categoryId: bookshelves
+  - roomName: Living Room
+    displayName: Footstools
+    categoryId: footstools
+  - roomName: Living Room
+    displayName: Floor Lamps
+    categoryId: floor_lamps
+  - roomName: Living Room
+    displayName: Table Lamps
+    categoryId: table_lamps
+  - roomName: Living Room
+    displayName: Pendant Lamps
+    categoryId: pendant_lamps
+  - roomName: Bedroom
+    displayName: Bed Frames
+    categoryId: bed_frames
+  - roomName: Bedroom
+    displayName: Bedside Tables
+    categoryId: nightstands
+  - roomName: Bedroom
+    displayName: Wardrobes
+    categoryId: wardrobes
+  - roomName: Bedroom
+    displayName: Chest of Drawers
+    categoryId: drawers
+  - roomName: Bedroom
+    displayName: Dressing Tables
+    categoryId: dressing_tables
+  - roomName: Dining Room
+    displayName: Dining Tables
+    categoryId: dining_tables
+  - roomName: Dining Room
+    displayName: Dining Chairs
+    categoryId: dining_chairs
+  - roomName: Dining Room
+    displayName: Bar Furniture
+    categoryId: bar_furniture
+  - roomName: Dining Room
+    displayName: Sideboards
+    categoryId: sideboards
+  - roomName: Home Office
+    displayName: Desks
+    categoryId: desk_tables
+  - roomName: Home Office
+    displayName: Office Chairs
+    categoryId: office_chairs
+  - roomName: Bathroom
+    displayName: Vanity Units
+    categoryId: bathroom_vanities
+  - roomName: Bathroom
+    displayName: Bathroom Storage
+    categoryId: bathroom_storage
+  - roomName: Outdoor
+    displayName: Garden Seating
+    categoryId: outdoor_seating
+  - roomName: Outdoor
+    displayName: Garden Tables
+    categoryId: outdoor_tables
+  - roomName: Kids Room
+    displayName: Kids Furniture
+    categoryId: kids_furniture
+  - roomName: Hallway
+    displayName: Hallway Furniture
+    categoryId: hallway_furniture
+  lastRefreshedUtc: 2026-07-01 10:11:29Z

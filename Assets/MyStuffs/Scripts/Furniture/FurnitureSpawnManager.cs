@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Threading.Tasks;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 /// <summary>
 /// Bridge between the furniture UI panel and the placement pipeline.
@@ -47,7 +49,8 @@ public class FurnitureSpawnManager : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[FurnitureSpawnManager] Loading GLB: {s3ModelUrl}");
+        var spawnSw = Stopwatch.StartNew();
+        string shortName = System.IO.Path.GetFileName(s3ModelUrl);
 
         // Show loading cube immediately so user gets instant feedback
         var loadingCube = CreatePlaceholderCube(s3ModelUrl, isLoading: true);
@@ -67,13 +70,14 @@ public class FurnitureSpawnManager : MonoBehaviour
         {
             if (fileName != s3ModelUrl) return;
             FurnitureService.OnModelLoadFailed -= OnFailed;
-            Debug.LogError($"[FurnitureSpawnManager] Load failed: {error}");
+            Debug.LogError($"[Spawn] {shortName} | load FAILED: {error}");
         }
 
         FurnitureService.OnModelLoaded     += OnLoaded;
         FurnitureService.OnModelLoadFailed += OnFailed;
 
         await FurnitureService.Instance.LoadModel(s3ModelUrl);
+        long loadMs = spawnSw.ElapsedMilliseconds;
 
         FurnitureService.OnModelLoaded     -= OnLoaded;
         FurnitureService.OnModelLoadFailed -= OnFailed;
@@ -92,13 +96,23 @@ public class FurnitureSpawnManager : MonoBehaviour
             loadedModel.transform.position = cubePosition;
             loadedModel.transform.rotation = cubeRotation;
 
+            var initSw = Stopwatch.StartNew();
             InitializeFurnitureItem(loadedModel, s3ModelUrl, null);
+            initSw.Stop();
+
             furniturePlacer.BeginPlacementFromInstance(loadedModel);
+
+            spawnSw.Stop();
+            Debug.Log($"[Spawn] {shortName}" +
+                      $" | load {loadMs}ms" +
+                      $" | init {initSw.ElapsedMilliseconds}ms" +
+                      $" | END-TO-END {spawnSw.ElapsedMilliseconds}ms");
             return;
         }
 
         // Model failed to load — loading cube stays as placeholder
-        Debug.LogWarning($"[FurnitureSpawnManager] Model failed, keeping placeholder cube.");
+        spawnSw.Stop();
+        Debug.LogWarning($"[Spawn] {shortName} | FAILED | kept placeholder | {spawnSw.ElapsedMilliseconds}ms");
         if (loadingCube != null)
             loadingCube.name = $"[Placeholder] {s3ModelUrl}";
     }
@@ -135,6 +149,8 @@ public class FurnitureSpawnManager : MonoBehaviour
     private void InitializeFurnitureItem(
         GameObject go, string itemKey, FurnitureRegistry.CatalogEntry entry)
     {
+        var sw = Stopwatch.StartNew();
+
         var item = go.GetComponent<FurnitureItem>()
                    ?? go.AddComponent<FurnitureItem>();
 
@@ -159,6 +175,8 @@ public class FurnitureSpawnManager : MonoBehaviour
         // still RECEIVE shadows, so they're still lit by the room.
         foreach (var r in go.GetComponentsInChildren<Renderer>())
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        long preColliders = sw.ElapsedMilliseconds;
 
         foreach (var col in go.GetComponentsInChildren<Collider>())
             Destroy(col);
@@ -202,11 +220,14 @@ public class FurnitureSpawnManager : MonoBehaviour
             else go.AddComponent<BoxCollider>();
         }
 
+        long colliderMs = sw.ElapsedMilliseconds - preColliders;
+
         // Add Rigidbody so Unity physics engine respects colliders
         // Kinematic = we control position manually via drag
         // FreezeAll = no physics rotation or movement
         // ContinuousSpeculative = detects collisions with static walls correctly
         // Remove any existing Rigidbodies from children first
+        long preRb = sw.ElapsedMilliseconds;
         foreach (var existingRb in go.GetComponentsInChildren<Rigidbody>())
             Destroy(existingRb);
 
@@ -216,10 +237,15 @@ public class FurnitureSpawnManager : MonoBehaviour
         furnitureRb.useGravity             = false;
         furnitureRb.constraints            = RigidbodyConstraints.FreezeAll;
         furnitureRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        long rbMs = sw.ElapsedMilliseconds - preRb;
 
-        Debug.Log($"[FurnitureSpawnManager] Initialized: {itemKey} " +
-                  $"| Colliders: {go.GetComponentsInChildren<Collider>().Length} " +
-                  $"| Rigidbody: {go.GetComponent<Rigidbody>() != null}");
+        sw.Stop();
+        int totalColliders = go.GetComponentsInChildren<Collider>().Length;
+        string shortName = System.IO.Path.GetFileName(itemKey);
+        Debug.Log($"[Spawn] {shortName}" +
+                  $" | colliders {colliderMs}ms ({meshColliders} mesh + 1 box)" +
+                  $" | rigidbody {rbMs}ms" +
+                  $" | TOTAL-INIT {sw.ElapsedMilliseconds}ms");
     }
     
     

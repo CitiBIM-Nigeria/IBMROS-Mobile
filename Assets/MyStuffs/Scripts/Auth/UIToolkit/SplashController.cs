@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Threading.Tasks;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 public class SplashController : MonoBehaviour
 {
@@ -7,6 +9,11 @@ public class SplashController : MonoBehaviour
     private bool _awsReady = false;
     private bool _splashTimerDone = false;
     private bool _hasNavigated = false;
+
+    // Startup timing
+    private Stopwatch _startupSw;
+    private long _awsReadyMs;
+    private long _sessionCheckStartMs;
 
     void OnEnable()
     {
@@ -30,12 +37,15 @@ public class SplashController : MonoBehaviour
         // SceneEntryPoint already handled navigation, do not run splash flow
         if (ScreenNavigator.Instance != null && ScreenNavigator.Instance.HasBeenNavigated)
             return;
+
+        _startupSw = Stopwatch.StartNew();
         
         StartSplashTimer();
 
         if (AwsManager.Instance != null && AwsManager.Instance.IsInitialized)
         {
            _awsReady = true;
+           _awsReadyMs = _startupSw.ElapsedMilliseconds;
             TryCheckSession();
         }
     }
@@ -63,6 +73,8 @@ public class SplashController : MonoBehaviour
     {
         AwsManager.OnAwsReady -= OnAwsReady;
         _awsReady = true;
+        _awsReadyMs = _startupSw?.ElapsedMilliseconds ?? 0;
+        Debug.Log($"[Startup] AWS ready at {_awsReadyMs}ms");
         TryCheckSession();
     }
 
@@ -77,7 +89,7 @@ public class SplashController : MonoBehaviour
         if (AuthService.Instance == null)
             return;
 
-        Debug.Log("[SplashController] Both conditions met. Checking session.");
+        _sessionCheckStartMs = _startupSw?.ElapsedMilliseconds ?? 0;
 
         // Do NOT set _hasNavigated here
         // Let OnSessionRestored and OnSessionExpiredOrInvalid set it
@@ -96,7 +108,7 @@ public class SplashController : MonoBehaviour
             return;
         }
 
-        Debug.Log("[SplashController] Navigating to MainApp.");
+        LogStartupSummary("session restored → MainApp");
         ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
     }
 
@@ -104,7 +116,6 @@ public class SplashController : MonoBehaviour
     {
         if (_hasNavigated)
         {
-            Debug.Log("[SplashController] Already navigated. Skipping.");
             return;
         }
 
@@ -119,8 +130,19 @@ public class SplashController : MonoBehaviour
         // Guest-first: no valid session → go straight into the app as a guest
         // (AwsManager already holds guest credentials). Sign-in is offered inside
         // the app and only required for premium actions — not as an entry wall.
-        Debug.Log("[SplashController] No session — entering as guest.");
+        LogStartupSummary("no session → guest entry");
         ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
+    }
+
+    private void LogStartupSummary(string outcome)
+    {
+        _startupSw?.Stop();
+        long totalMs = _startupSw?.ElapsedMilliseconds ?? 0;
+        long sessionCheckMs = totalMs - _sessionCheckStartMs;
+        Debug.Log($"[Startup] AWS ready {_awsReadyMs}ms" +
+                  $" | session check {sessionCheckMs}ms" +
+                  $" | navigated at {totalMs}ms" +
+                  $" | {outcome}");
     }
     
     

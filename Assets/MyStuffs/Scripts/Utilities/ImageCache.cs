@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
-using WebP;
+//using WebP;
 
 public static class ImageCache
 {
@@ -201,7 +201,7 @@ public static class ImageCache
 
     private static Texture2D DecodeWebP(byte[] data, string url)
     {
-        try
+        /*try
         {
             Error error = Error.Success;
             Texture2D tex = Texture2DExt.CreateTexture2DFromWebP(
@@ -231,7 +231,8 @@ public static class ImageCache
         {
             Debug.LogWarning($"[ImageCache] WebP exception: {e.Message} | {url}");
             return null;
-        }
+        }*/
+        return null;
     }
 
     public static void Clear()

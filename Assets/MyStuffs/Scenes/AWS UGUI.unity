@@ -2292,6 +2292,65 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RectMask2D
   m_Padding: {x: -8, y: -5, z: -8, w: -5}
   m_Softness: {x: 0, y: 0}
+--- !u!1 &212452959
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 212452961}
+  - component: {fileID: 212452960}
+  m_Layer: 0
+  m_Name: VR Socket (4)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &212452960
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 212452959}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
+  categoryId: bathroom_storage
+  displayLabel: "Bathroom \u203A Bathroom Storage"
+  catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
+  modelAnchor: {fileID: 212452961}
+  alignToFloor: 1
+  modelScale: 1
+  yawOffset: 0
+  infoPanel: {fileID: 0}
+  loadingIndicator: {fileID: 0}
+  errorIndicator: {fileID: 0}
+  autoLoadOnStart: 1
+  verboseLogging: 1
+  socketId: 1589bf76-b2b0-4c06-bf44-0bcdf9e1175a
+  selectedProductId: angsjon-40535076
+  selectedModelUrl: ikea/bathroom_storage/angsjon-40535076/models/variants/40x15x95-cm/model.glb
+--- !u!4 &212452961
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 212452959}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -1.07, y: 0, z: -5.22}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &212541889
 GameObject:
   m_ObjectHideFlags: 0
@@ -3798,6 +3857,65 @@ MonoBehaviour:
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls: []
+--- !u!1 &367655115
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 367655117}
+  - component: {fileID: 367655116}
+  m_Layer: 0
+  m_Name: VR Socket (3)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &367655116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 367655115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
+  categoryId: desk_tables
+  displayLabel: "Home Office \u203A Desks"
+  catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
+  modelAnchor: {fileID: 367655117}
+  alignToFloor: 1
+  modelScale: 1
+  yawOffset: 0
+  infoPanel: {fileID: 0}
+  loadingIndicator: {fileID: 0}
+  errorIndicator: {fileID: 0}
+  autoLoadOnStart: 1
+  verboseLogging: 1
+  socketId: df886fff-7009-4ce5-918e-eacfb160398c
+  selectedProductId: alex-10473555
+  selectedModelUrl: 
+--- !u!4 &367655117
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 367655115}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -11.01, y: 0, z: -0.57}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &406541525
 GameObject:
   m_ObjectHideFlags: 0
@@ -9408,6 +9526,65 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 908551689}
   m_CullTransparentMesh: 1
+--- !u!1 &915196824
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 915196826}
+  - component: {fileID: 915196825}
+  m_Layer: 0
+  m_Name: VR Socket (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &915196825
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 915196824}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
+  categoryId: coffee_tables
+  displayLabel: "Living Room \u203A Coffee Tables"
+  catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
+  modelAnchor: {fileID: 915196826}
+  alignToFloor: 1
+  modelScale: 1
+  yawOffset: 0
+  infoPanel: {fileID: 0}
+  loadingIndicator: {fileID: 0}
+  errorIndicator: {fileID: 0}
+  autoLoadOnStart: 1
+  verboseLogging: 1
+  socketId: 3b7711b7-a1fe-4fb5-a168-3e0cfd06b1ef
+  selectedProductId: hakanskar-70597162
+  selectedModelUrl: ikea/coffee_tables/hakanskar-70597162/models/variants/80x64-cm/model.glb
+--- !u!4 &915196826
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 915196824}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 5.44}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &931934452
 GameObject:
   m_ObjectHideFlags: 0
@@ -10585,6 +10762,65 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 987390590}
   m_CullTransparentMesh: 1
+--- !u!1 &1007155940
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1007155942}
+  - component: {fileID: 1007155941}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1007155941
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1007155940}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
+  categoryId: bathroom_storage
+  displayLabel: "Bathroom \u203A Bathroom Storage"
+  catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
+  modelAnchor: {fileID: 1007155942}
+  alignToFloor: 1
+  modelScale: 1
+  yawOffset: 0
+  infoPanel: {fileID: 0}
+  loadingIndicator: {fileID: 0}
+  errorIndicator: {fileID: 0}
+  autoLoadOnStart: 1
+  verboseLogging: 1
+  socketId: c4207235-47b5-4228-9473-75e585f74532
+  selectedProductId: altjarn-10523273
+  selectedModelUrl: 
+--- !u!4 &1007155942
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1007155940}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -10.49561, y: 0, z: 1.74677}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1032898486
 GameObject:
   m_ObjectHideFlags: 0
@@ -13931,32 +14167,14 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1303856265}
-  - component: {fileID: 1303856264}
+  - component: {fileID: 1303856266}
   m_Layer: 0
-  m_Name: Download Manager
+  m_Name: VR Socket
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1303856264
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1303856263}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 34ff9d6ef663148d189a48fcb7410a6b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::VRModelDownloader
-  BaseUrl: https://d3lz5hvxtvmgbq.cloudfront.net/ikea/pendant_lamps/ackja-30558916/models/variants/60-cm/model.glb
-  CacheFolderName: VRModelCache
-  CacheVersion: v1
-  TimeoutSeconds: 60
-  MaxConcurrentDownloads: 3
-  ReplaceMagentaWithFallback: 1
 --- !u!4 &1303856265
 Transform:
   m_ObjectHideFlags: 0
@@ -13966,12 +14184,39 @@ Transform:
   m_GameObject: {fileID: 1303856263}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.28519, y: -4.82762, z: 7.91204}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1303856266
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1303856263}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
+  categoryId: sofas
+  displayLabel: "Living Room \u203A Sofas"
+  catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
+  modelAnchor: {fileID: 1303856265}
+  alignToFloor: 1
+  modelScale: 1
+  yawOffset: 0
+  infoPanel: {fileID: 0}
+  loadingIndicator: {fileID: 0}
+  errorIndicator: {fileID: 0}
+  autoLoadOnStart: 1
+  verboseLogging: 1
+  socketId: ca8eee56-fca8-4a35-9377-1c823c87c13e
+  selectedProductId: friheten-29133542
+  selectedModelUrl: ikea/sofas/friheten-29133542/models/variants/bomstad-black/model.glb
 --- !u!1 &1311688971
 GameObject:
   m_ObjectHideFlags: 0
@@ -21774,10 +22019,11 @@ GameObject:
   - component: {fileID: 1955431798}
   - component: {fileID: 1955431803}
   - component: {fileID: 1955431802}
-  - component: {fileID: 1955431818}
   - component: {fileID: 1955431814}
   - component: {fileID: 1955431817}
   - component: {fileID: 1955431816}
+  - component: {fileID: 1955431818}
+  - component: {fileID: 1955431819}
   m_Layer: 0
   m_Name: AppManagers
   m_TagString: Untagged
@@ -21913,7 +22159,19 @@ MonoBehaviour:
   m_GameObject: {fileID: 1955431796}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fb2b8583d1cf461480b8375c79c8705b, type: 3}
+  m_Script: {fileID: 11500000, guid: c759f1023728473996437f3ea1698f07, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FurnitureRepository
+--- !u!114 &1955431819
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1955431796}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8796540a4de4525a97c828c75741754, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FurnitureModelLoader
 --- !u!1 &1955484181
@@ -22666,6 +22924,65 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2032514700}
   m_CullTransparentMesh: 1
+--- !u!1 &2042156033
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2042156035}
+  - component: {fileID: 2042156034}
+  m_Layer: 0
+  m_Name: VR Socket (2)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2042156034
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2042156033}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
+  categoryId: dressing_tables
+  displayLabel: "Bedroom \u203A Dressing Tables"
+  catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
+  modelAnchor: {fileID: 2042156035}
+  alignToFloor: 1
+  modelScale: 1
+  yawOffset: 0
+  infoPanel: {fileID: 0}
+  loadingIndicator: {fileID: 0}
+  errorIndicator: {fileID: 0}
+  autoLoadOnStart: 1
+  verboseLogging: 1
+  socketId: a796b134-a649-4d7a-80ef-32372f28ede5
+  selectedProductId: grafjallet-30570225
+  selectedModelUrl: ikea/dressing_tables/grafjallet-30570225/models/variants/100x42-cm/model.glb
+--- !u!4 &2042156035
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2042156033}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 6.98, y: 0, z: -2.77}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2049392003
 GameObject:
   m_ObjectHideFlags: 0
@@ -23432,3 +23749,8 @@ SceneRoots:
   - {fileID: 1521614919}
   - {fileID: 1082643928}
   - {fileID: 1303856265}
+  - {fileID: 915196826}
+  - {fileID: 2042156035}
+  - {fileID: 367655117}
+  - {fileID: 212452961}
+  - {fileID: 1007155942}

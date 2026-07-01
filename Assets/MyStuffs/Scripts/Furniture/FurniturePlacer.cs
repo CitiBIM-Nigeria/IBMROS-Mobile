@@ -34,9 +34,24 @@ public class FurniturePlacer : MonoBehaviour
 
     private float _pivotToBottomOffset = 0f;
 
+    private System.Collections.Generic.Dictionary<Renderer, Material[]> _originalMaterials = new System.Collections.Generic.Dictionary<Renderer, Material[]>();
+    private Material _ghostMaterial;
+
     void Awake()
     {
         _mainCamera = Camera.main;
+        
+        // Load from Resources to prevent the shader from being stripped in Android/iOS builds!
+        Shader ghostShader = Resources.Load<Shader>("Shaders/GhostPreview");
+        
+        if (ghostShader != null) 
+        {
+            _ghostMaterial = new Material(ghostShader);
+        }
+        else
+        {
+            Debug.LogError("[FurniturePlacer] Could not find GhostPreview shader in Resources!");
+        }
     }
 
     void OnEnable()
@@ -69,6 +84,7 @@ public class FurniturePlacer : MonoBehaviour
         _isPlacing          = false;
         _hasInitialPosition = false;
         _pivotToBottomOffset = 0f;
+        _originalMaterials.Clear();
 
         OnPlacementCancelled?.Invoke();
         Debug.Log("[FurniturePlacer] Placement cancelled.");
@@ -298,41 +314,48 @@ public class FurniturePlacer : MonoBehaviour
 
     private void SetPreviewMaterial(bool isPreview)
     {
-        if (_previewObject == null)
-            return;
+        if (_previewObject == null) return;
 
         Renderer[] renderers = _previewObject.GetComponentsInChildren<Renderer>();
 
-        foreach (var renderer in renderers)
+        if (isPreview)
         {
-            foreach (var mat in renderer.materials)
+            _originalMaterials.Clear();
+            foreach (var renderer in renderers)
             {
-                Color color = mat.color;
-                color.a = isPreview ? 0.5f : 1f;
-                mat.color = color;
-
-                if (isPreview)
+                _originalMaterials[renderer] = renderer.materials;
+                
+                if (_ghostMaterial != null)
                 {
-                    mat.SetFloat("_Mode", 3);
-                    mat.SetInt("_SrcBlend",
-                        (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                    mat.SetInt("_DstBlend",
-                        (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                    mat.SetInt("_ZWrite", 0);
-                    mat.EnableKeyword("_ALPHABLEND_ON");
-                    mat.renderQueue = 3000;
+                    Material[] ghostMats = new Material[renderer.materials.Length];
+                    for (int i = 0; i < ghostMats.Length; i++) ghostMats[i] = _ghostMaterial;
+                    renderer.materials = ghostMats;
                 }
-                else
+            }
+            
+            // Add blob shadow
+            if (_previewObject.GetComponent<BlobShadow>() == null)
+            {
+                _previewObject.AddComponent<BlobShadow>();
+            }
+        }
+        else
+        {
+            // Restore original materials
+            foreach (var renderer in renderers)
+            {
+                if (_originalMaterials.TryGetValue(renderer, out var origMats))
                 {
-                    mat.SetFloat("_Mode", 0);
-                    mat.SetInt("_SrcBlend",
-                        (int)UnityEngine.Rendering.BlendMode.One);
-                    mat.SetInt("_DstBlend",
-                        (int)UnityEngine.Rendering.BlendMode.Zero);
-                    mat.SetInt("_ZWrite", 1);
-                    mat.DisableKeyword("_ALPHABLEND_ON");
-                    mat.renderQueue = -1;
+                    renderer.materials = origMats;
                 }
+            }
+            _originalMaterials.Clear();
+            
+            // Keep the blob shadow instead of destroying it
+            var blob = _previewObject.GetComponent<BlobShadow>();
+            if (blob != null) 
+            {
+                // We keep it permanently
             }
         }
     }

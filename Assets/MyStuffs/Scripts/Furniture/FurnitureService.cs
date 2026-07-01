@@ -75,16 +75,12 @@ public class FurnitureService : MonoBehaviour
                 OnLoadingChanged?.Invoke(true, "Loading model...");
             }
 
-            Debug.Log($"[FurnitureService] Loading model: {fileName}");
-
             GameObject model = await FurnitureModelLoader.Instance.LoadModel(fileName);
 
             OnLoadingChanged?.Invoke(false, string.Empty);
 
             if (model != null)
             {
-                Debug.Log($"[FurnitureService] Model loaded: {fileName}");
-
                 if (!isCached)
                     OnModelDownloadComplete?.Invoke(fileName);
 
@@ -117,14 +113,10 @@ public class FurnitureService : MonoBehaviour
             return;
 
         if (FurnitureModelLoader.Instance.IsCached(fileName))
-        {
-            Debug.Log($"[FurnitureService] {fileName} already cached. Skipping preload.");
             return;
-        }
 
         try
         {
-            Debug.Log($"[FurnitureService] Preloading: {fileName}");
             OnModelDownloadStarted?.Invoke(fileName);
 
             GameObject model = await FurnitureModelLoader.Instance.LoadModel(fileName);
@@ -132,7 +124,6 @@ public class FurnitureService : MonoBehaviour
             if (model != null)
             {
                 OnModelDownloadComplete?.Invoke(fileName);
-                Debug.Log($"[FurnitureService] Preloaded: {fileName}");
 
                 // Destroy the instantiated object since we only wanted to cache
                 Destroy(model);
@@ -156,12 +147,10 @@ public class FurnitureService : MonoBehaviour
     public void ClearModelCache()
     {
         FurnitureModelLoader.Instance.ClearCache();
-        Debug.Log("[FurnitureService] Model cache cleared.");
     }
 
     public void RemoveModelFromCache(string fileName)
     {
         FurnitureModelLoader.Instance.DeleteFromCache(fileName);
-        Debug.Log($"[FurnitureService] Removed {fileName} from cache.");
     }
 }
