@@ -193,13 +193,32 @@ public class FurnitureSpawnManager : MonoBehaviour
         Renderer[] renderers = go.GetComponentsInChildren<Renderer>();
         if (renderers.Length > 0)
         {
-            Bounds combined = renderers[0].bounds;
+            Bounds combined = default;
+            bool hasBounds = false;
+            
             foreach (var r in renderers)
-                combined.Encapsulate(r.bounds);
-            var box     = go.AddComponent<BoxCollider>();
-            box.center  = go.transform.InverseTransformPoint(combined.center);
-            box.size    = combined.size;
-            box.enabled = false;   // size-only, for the wall BoxCast
+            {
+                if (r is ParticleSystemRenderer || r.gameObject.name == "DynamicBlobShadow")
+                    continue;
+
+                if (!hasBounds)
+                {
+                    combined = r.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    combined.Encapsulate(r.bounds);
+                }
+            }
+            
+            if (hasBounds)
+            {
+                var box     = go.AddComponent<BoxCollider>();
+                box.center  = go.transform.InverseTransformPoint(combined.center);
+                box.size    = combined.size;
+                box.enabled = false;   // size-only, for the wall BoxCast
+            }
         }
 
         int meshColliders = 0;

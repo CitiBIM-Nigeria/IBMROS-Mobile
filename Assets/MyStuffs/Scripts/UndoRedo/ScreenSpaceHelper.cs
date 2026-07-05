@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public static class ScreenSpaceHelper
 {
@@ -29,21 +29,8 @@ public static class ScreenSpaceHelper
     // Cache the 8 corners to avoid garbage collection
     private static Vector3[] _corners = new Vector3[8];
 
-    public static bool TryGetScreenSpaceBounds(Bounds bounds, Camera camera, out ObjectScreenBounds screenBounds)
+    public static bool TryGetScreenSpaceBounds(Renderer[] renderers, Camera camera, out ObjectScreenBounds screenBounds)
     {
-        // 1. Get the 8 corners of the World Space AABB
-        Vector3 center = bounds.center;
-        Vector3 ext = bounds.extents;
-
-        _corners[0] = center + new Vector3(ext.x, ext.y, ext.z);
-        _corners[1] = center + new Vector3(ext.x, ext.y, -ext.z);
-        _corners[2] = center + new Vector3(ext.x, -ext.y, ext.z);
-        _corners[3] = center + new Vector3(ext.x, -ext.y, -ext.z);
-        _corners[4] = center + new Vector3(-ext.x, ext.y, ext.z);
-        _corners[5] = center + new Vector3(-ext.x, ext.y, -ext.z);
-        _corners[6] = center + new Vector3(-ext.x, -ext.y, ext.z);
-        _corners[7] = center + new Vector3(-ext.x, -ext.y, -ext.z);
-
         float minX = float.MaxValue;
         float maxX = float.MinValue;
         float minY = float.MaxValue;
@@ -51,26 +38,84 @@ public static class ScreenSpaceHelper
         
         bool anyPointOnScreen = false;
 
-        // 2. Project all 8 corners to Screen Space
-        for (int i = 0; i < 8; i++)
+        foreach (var r in renderers)
         {
-            Vector3 screenPos = camera.WorldToScreenPoint(_corners[i]);
+            // Ignore particle systems and the dynamic shadow so they don't bloat the UI bounds
+            if (r is ParticleSystemRenderer || r.gameObject.name == "DynamicBlobShadow")
+                continue;
 
-            // Handle points behind the camera
-            if (screenPos.z < 0)
+            Bounds localBounds = default;
+            bool hasLocalBounds = false;
+            Matrix4x4 localToWorld = r.transform.localToWorldMatrix;
+
+            if (r is MeshRenderer && r.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null)
             {
-                // If a point is behind us, it "flips".
-                // Dealing with partial clipping is complex, but for UI panels, 
-                // we typically just want to know if the *bulk* is visible.
-                // We'll mark it invalid for Min/Max calculation to avoid flipping issues.
-                continue; 
+                localBounds = mf.sharedMesh.bounds;
+                hasLocalBounds = true;
+            }
+            else if (r is SkinnedMeshRenderer smr)
+            {
+                localBounds = smr.localBounds;
+                hasLocalBounds = true;
             }
 
-            anyPointOnScreen = true;
-            if (screenPos.x < minX) minX = screenPos.x;
-            if (screenPos.x > maxX) maxX = screenPos.x;
-            if (screenPos.y < minY) minY = screenPos.y;
-            if (screenPos.y > maxY) maxY = screenPos.y;
+            if (hasLocalBounds)
+            {
+                Vector3 center = localBounds.center;
+                Vector3 ext = localBounds.extents;
+
+                _corners[0] = center + new Vector3(ext.x, ext.y, ext.z);
+                _corners[1] = center + new Vector3(ext.x, ext.y, -ext.z);
+                _corners[2] = center + new Vector3(ext.x, -ext.y, ext.z);
+                _corners[3] = center + new Vector3(ext.x, -ext.y, -ext.z);
+                _corners[4] = center + new Vector3(-ext.x, ext.y, ext.z);
+                _corners[5] = center + new Vector3(-ext.x, ext.y, -ext.z);
+                _corners[6] = center + new Vector3(-ext.x, -ext.y, ext.z);
+                _corners[7] = center + new Vector3(-ext.x, -ext.y, -ext.z);
+
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 worldPos = localToWorld.MultiplyPoint3x4(_corners[i]);
+                    Vector3 screenPos = camera.WorldToScreenPoint(worldPos);
+
+                    if (screenPos.z < 0) continue; 
+
+                    anyPointOnScreen = true;
+                    if (screenPos.x < minX) minX = screenPos.x;
+                    if (screenPos.x > maxX) maxX = screenPos.x;
+                    if (screenPos.y < minY) minY = screenPos.y;
+                    if (screenPos.y > maxY) maxY = screenPos.y;
+                }
+            }
+            else
+            {
+                // Fallback to AABB
+                Bounds worldBounds = r.bounds;
+                Vector3 center = worldBounds.center;
+                Vector3 ext = worldBounds.extents;
+
+                _corners[0] = center + new Vector3(ext.x, ext.y, ext.z);
+                _corners[1] = center + new Vector3(ext.x, ext.y, -ext.z);
+                _corners[2] = center + new Vector3(ext.x, -ext.y, ext.z);
+                _corners[3] = center + new Vector3(ext.x, -ext.y, -ext.z);
+                _corners[4] = center + new Vector3(-ext.x, ext.y, ext.z);
+                _corners[5] = center + new Vector3(-ext.x, ext.y, -ext.z);
+                _corners[6] = center + new Vector3(-ext.x, -ext.y, ext.z);
+                _corners[7] = center + new Vector3(-ext.x, -ext.y, -ext.z);
+
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 screenPos = camera.WorldToScreenPoint(_corners[i]);
+
+                    if (screenPos.z < 0) continue; 
+
+                    anyPointOnScreen = true;
+                    if (screenPos.x < minX) minX = screenPos.x;
+                    if (screenPos.x > maxX) maxX = screenPos.x;
+                    if (screenPos.y < minY) minY = screenPos.y;
+                    if (screenPos.y > maxY) maxY = screenPos.y;
+                }
+            }
         }
 
         if (!anyPointOnScreen)
@@ -79,7 +124,6 @@ public static class ScreenSpaceHelper
             return false;
         }
 
-        // 3. Create the bounds from the Extremes
         float centerX = (minX + maxX) / 2f;
         screenBounds = new ObjectScreenBounds(maxY, minY, centerX);
         return true;

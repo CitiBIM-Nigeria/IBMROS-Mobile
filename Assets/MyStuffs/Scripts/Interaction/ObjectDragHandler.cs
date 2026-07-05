@@ -137,11 +137,25 @@ public class ObjectDragHandler : MonoBehaviour
         Renderer[] renderers = _selectedObject.GetComponentsInChildren<Renderer>();
         if (renderers.Length > 0)
         {
-            combined = renderers[0].bounds;
             foreach (var r in renderers)
-                combined.Encapsulate(r.bounds);
-            pivotToBase = _selectedObject.position.y - combined.min.y;
-            hasBounds   = true;
+            {
+                if (r is ParticleSystemRenderer || r.gameObject.name == "DynamicBlobShadow")
+                    continue;
+
+                if (!hasBounds)
+                {
+                    combined = r.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    combined.Encapsulate(r.bounds);
+                }
+            }
+            if (hasBounds)
+            {
+                pivotToBase = _selectedObject.position.y - combined.min.y;
+            }
         }
 
         Vector3 targetPosition = new Vector3(

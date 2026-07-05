@@ -323,25 +323,13 @@ public class ActionMenuController : MonoBehaviour
         if (_targetRenderer == null || _mainCamera == null)
             return;
 
-        // Use combined bounds for multi-part objects
-        Bounds boundsToUse = _hasCombinedBounds
-            ? _targetCombinedBounds
-            : _targetRenderer.bounds;
-
-        // Recalculate combined bounds every frame since object may have moved
-        if (_targetObject != null)
-        {
-            Renderer[] renderers = _targetObject.GetComponentsInChildren<Renderer>();
-            if (renderers.Length > 0)
-            {
-                boundsToUse = renderers[0].bounds;
-                foreach (var r in renderers)
-                    boundsToUse.Encapsulate(r.bounds);
-            }
-        }
+        // Pass the renderers array directly so ScreenSpaceHelper can use OBB projection
+        Renderer[] renderers = _targetObject != null 
+            ? _targetObject.GetComponentsInChildren<Renderer>() 
+            : new Renderer[] { _targetRenderer };
 
         bool isOnScreen = ScreenSpaceHelper.TryGetScreenSpaceBounds(
-            boundsToUse,
+            renderers,
             _mainCamera,
             out ScreenSpaceHelper.ObjectScreenBounds screenBounds
         );
