@@ -6,11 +6,21 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/MyStuffs/Scenes/OpenRoomPlanCapture.unity
+    guid: 28676c7ebcbed461cb09b04604c2fa79
+  - enabled: 1
+    path: Assets/MyStuffs/Scenes/RoomScanning.unity
+    guid: cac4da4f9e194b5fae5ce4f45231270d
+  - enabled: 1
     path: Assets/MyStuffs/Scenes/Main.unity
     guid: 4b72f2cc9939c4fc3ae8789377751192
   - enabled: 1
     path: Assets/MyStuffs/Scenes/Room.unity
     guid: ed3418a1c1b044fdcb7d59dbf75f8048
   m_configObjects:
+    UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 61003e0beb7674bc5a80736f6bba9685, type: 2}
+    UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: d5ada6f3f05144a8e86a6fda73971c84, type: 2}
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 198d467fae3a74929b0ee5f878e321ce, type: 2}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 926591917d8c147b69b84faea622240e, type: 2}

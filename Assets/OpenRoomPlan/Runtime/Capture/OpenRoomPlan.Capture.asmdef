@@ -1,0 +1,20 @@
+{
+    "name": "OpenRoomPlan.Capture",
+    "rootNamespace": "OpenRoomPlan.Capture",
+    "references": [
+        "OpenRoomPlan.Core",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems",
+        "Unity.XR.CoreUtils",
+        "Unity.Collections"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

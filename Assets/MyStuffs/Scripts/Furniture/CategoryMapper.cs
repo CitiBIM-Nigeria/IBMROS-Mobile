@@ -12,6 +12,19 @@ public static class CategoryMapper
     // First keyword found (in order) wins, so put more specific terms first.
     private static readonly (string keyword, string emoji)[] Keywords =
     {
+        // Department-level names (real IKEA tree: "Kitchens", "Outdoor", …)
+        ("kitchen",   "🍳"),
+        ("outdoor",   "🌳"),
+        ("garden",    "🌳"),
+        ("children",  "🧸"),
+        ("kids",      "🧸"),
+        ("baby",      "🧸"),
+        ("nursery",   "🧸"),
+        ("decoration","🖼️"),
+        ("laundry",   "🧺"),
+        ("textile",   "🧵"),
+        ("uncategor", "📦"),
+        // Type-level names
         ("sofa",      "🛋️"),
         ("armchair",  "🛋️"),
         ("footstool", "🛋️"),

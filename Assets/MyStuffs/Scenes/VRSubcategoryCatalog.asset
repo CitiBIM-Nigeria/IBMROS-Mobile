@@ -13,85 +13,319 @@ MonoBehaviour:
   m_Name: VRSubcategoryCatalog
   m_EditorClassIdentifier: Assembly-CSharp::VRSubcategoryCatalog
   entries:
-  - roomName: Living Room
-    displayName: Sofas
-    categoryId: sofas
-  - roomName: Living Room
-    displayName: Armchairs
-    categoryId: armchairs
-  - roomName: Living Room
-    displayName: Coffee Tables
-    categoryId: coffee_tables
-  - roomName: Living Room
-    displayName: Side Tables
-    categoryId: side_tables
-  - roomName: Living Room
-    displayName: TV Units
-    categoryId: tv_units
-  - roomName: Living Room
-    displayName: Bookshelves
-    categoryId: bookshelves
-  - roomName: Living Room
-    displayName: Footstools
-    categoryId: footstools
-  - roomName: Living Room
-    displayName: Floor Lamps
-    categoryId: floor_lamps
-  - roomName: Living Room
-    displayName: Table Lamps
-    categoryId: table_lamps
-  - roomName: Living Room
-    displayName: Pendant Lamps
-    categoryId: pendant_lamps
-  - roomName: Bedroom
-    displayName: Bed Frames
-    categoryId: bed_frames
-  - roomName: Bedroom
-    displayName: Bedside Tables
-    categoryId: nightstands
-  - roomName: Bedroom
-    displayName: Wardrobes
-    categoryId: wardrobes
-  - roomName: Bedroom
-    displayName: Chest of Drawers
-    categoryId: drawers
-  - roomName: Bedroom
-    displayName: Dressing Tables
-    categoryId: dressing_tables
-  - roomName: Dining Room
-    displayName: Dining Tables
-    categoryId: dining_tables
-  - roomName: Dining Room
-    displayName: Dining Chairs
-    categoryId: dining_chairs
-  - roomName: Dining Room
-    displayName: Bar Furniture
-    categoryId: bar_furniture
-  - roomName: Dining Room
-    displayName: Sideboards
-    categoryId: sideboards
-  - roomName: Home Office
-    displayName: Desks
-    categoryId: desk_tables
-  - roomName: Home Office
-    displayName: Office Chairs
-    categoryId: office_chairs
-  - roomName: Bathroom
-    displayName: Vanity Units
-    categoryId: bathroom_vanities
-  - roomName: Bathroom
-    displayName: Bathroom Storage
-    categoryId: bathroom_storage
-  - roomName: Outdoor
-    displayName: Garden Seating
-    categoryId: outdoor_seating
-  - roomName: Outdoor
-    displayName: Garden Tables
-    categoryId: outdoor_tables
-  - roomName: Kids Room
-    displayName: Kids Furniture
-    categoryId: kids_furniture
-  - roomName: Hallway
-    displayName: Hallway Furniture
-    categoryId: hallway_furniture
-  lastRefreshedUtc: 2026-07-01 10:11:29Z
+  - roomName: "Baby & children"
+    displayName: "Changing tables"
+    categoryId: 45783
+  - roomName: "Baby & children"
+    displayName: "Children's chairs"
+    categoryId: 18769
+  - roomName: "Baby & children"
+    displayName: "Children's clothes & shoes organisation"
+    categoryId: 20477
+  - roomName: "Baby & children"
+    displayName: "Children's desk chairs"
+    categoryId: 24715
+  - roomName: "Baby & children"
+    displayName: "Children's desks"
+    categoryId: 24714
+  - roomName: "Baby & children"
+    displayName: "Children's lighting"
+    categoryId: 18773
+  - roomName: "Baby & children"
+    displayName: "Children's outdoor furniture"
+    categoryId: 37899
+  - roomName: "Baby & children"
+    displayName: "Children's single beds"
+    categoryId: 45848
+  - roomName: "Baby & children"
+    displayName: "Children's stools & benches"
+    categoryId: 45816
+  - roomName: "Baby & children"
+    displayName: "Children's tables"
+    categoryId: 18768
+  - roomName: "Baby & children"
+    displayName: "Cots & bassinets"
+    categoryId: 45781
+  - roomName: "Baby & children"
+    displayName: "Kids armchairs"
+    categoryId: 20483
+  - roomName: "Baby & children"
+    displayName: "Physical play"
+    categoryId: 18736
+  - roomName: "Baby & children"
+    displayName: "Play tents"
+    categoryId: 20484
+  - roomName: "Baby & children"
+    displayName: "Potties & baby baths"
+    categoryId: 45924
+  - roomName: "Baby & children"
+    displayName: "Role play toys"
+    categoryId: 18737
+  - roomName: "Baby & children"
+    displayName: "SM\u00C5STAD combinations"
+    categoryId: 49142
+  - roomName: "Baby & children"
+    displayName: "TROFAST combinations"
+    categoryId: 700557
+  - roomName: "Baby & children"
+    displayName: "TROFAST frames & shelves"
+    categoryId: 700559
+  - roomName: "Baby & children"
+    displayName: "Toy boxes & shelves"
+    categoryId: 700560
+  - roomName: "Bathroom furniture & storage"
+    displayName: "Bathroom boxes & baskets"
+    categoryId: 16233
+  - roomName: "Bathroom furniture & storage"
+    displayName: "Bathroom tall cabinets & shelving units"
+    categoryId: 20804
+  - roomName: "Bathroom furniture & storage"
+    displayName: "Bathroom vanity units without basin"
+    categoryId: 54989
+  - roomName: "Bathroom furniture & storage"
+    displayName: "ENHET bathroom cabinets & shelves"
+    categoryId: 700486
+  - roomName: "Bathroom furniture & storage"
+    displayName: "ENHET vanity units without basin"
+    categoryId: 700492
+  - roomName: "Bathroom furniture & storage"
+    displayName: "HAVB\u00C4CK vanity units without basin"
+    categoryId: 700464
+  - roomName: "Bathroom furniture & storage"
+    displayName: "HEMNES vanity units without basin"
+    categoryId: 700480
+  - roomName: "Bathroom furniture & storage"
+    displayName: "Soap dispensers & soap dishes"
+    categoryId: 10656
+  - roomName: "Bathroom furniture & storage"
+    displayName: "T\u00C4NNFORSEN vanity units without basin"
+    categoryId: 700475
+  - roomName: "Beds & mattresses"
+    displayName: "Beds with storage"
+    categoryId: 25205
+  - roomName: "Beds & mattresses"
+    displayName: "Bunk beds"
+    categoryId: 19048
+  - roomName: "Beds & mattresses"
+    displayName: "Double beds"
+    categoryId: 16284
+  - roomName: "Beds & mattresses"
+    displayName: "Guest beds & day beds"
+    categoryId: 19037
+  - roomName: "Beds & mattresses"
+    displayName: "Single beds"
+    categoryId: 16285
+  - roomName: "Beds & mattresses"
+    displayName: "Under bed storage"
+    categoryId: 19059
+  - roomName: "Beds & mattresses"
+    displayName: "Upholstered beds"
+    categoryId: 49096
+  - roomName: "Decoration"
+    displayName: "Indoor lanterns"
+    categoryId: 54941
+  - roomName: "Home electronics"
+    displayName: "Bluetooth speakers"
+    categoryId: 46193
+  - roomName: "Home electronics"
+    displayName: "Mobile & tablet stands"
+    categoryId: 41068
+  - roomName: "Home storage & organisation"
+    displayName: "Desk organisers & accessories"
+    categoryId: 10573
+  - roomName: "Home storage & organisation"
+    displayName: "Racks & stands"
+    categoryId: 10455
+  - roomName: "Home storage & organisation"
+    displayName: "Shoe cabinets"
+    categoryId: 10456
+  - roomName: "Home storage & organisation"
+    displayName: "Shoe, coat & hat racks"
+    categoryId: 10454
+  - roomName: "Kitchens"
+    displayName: "Cutlery trays for 40cm drawers"
+    categoryId: 700172
+  - roomName: "Kitchens"
+    displayName: "Cutlery trays for 60cm drawers"
+    categoryId: 700173
+  - roomName: "Kitchens"
+    displayName: "VOXTORP kitchen fronts"
+    categoryId: 700359
+  - roomName: "Kitchenware & tableware"
+    displayName: "Knives"
+    categoryId: 15946
+  - roomName: "Lighting"
+    displayName: "Bases & cords"
+    categoryId: 10805
+  - roomName: "Lighting"
+    displayName: "Cabinet lighting"
+    categoryId: 700821
+  - roomName: "Lighting"
+    displayName: "Ceiling lamps"
+    categoryId: 18752
+  - roomName: "Lighting"
+    displayName: "Chandeliers"
+    categoryId: 59307
+  - roomName: "Lighting"
+    displayName: "Desk lamps"
+    categoryId: 20502
+  - roomName: "Lighting"
+    displayName: "Floor lamps"
+    categoryId: 10731
+  - roomName: "Lighting"
+    displayName: "LED lamps"
+    categoryId: 20516
+  - roomName: "Lighting"
+    displayName: "Pendant lights"
+    categoryId: 18751
+  - roomName: "Lighting"
+    displayName: "Rechargeable lamps"
+    categoryId: 700512
+  - roomName: "Lighting"
+    displayName: "Table lamps"
+    categoryId: 10732
+  - roomName: "Lighting"
+    displayName: "Wall lamps"
+    categoryId: 20504
+  - roomName: "Living room seating"
+    displayName: "2 seater sofas"
+    categoryId: 10668
+  - roomName: "Living room seating"
+    displayName: "3 seater sofa beds"
+    categoryId: 700630
+  - roomName: "Living room seating"
+    displayName: "Chaise sofas"
+    categoryId: 47388
+  - roomName: "Living room seating"
+    displayName: "Corner sofa beds"
+    categoryId: 20874
+  - roomName: "Living room seating"
+    displayName: "Corner sofas"
+    categoryId: 10671
+  - roomName: "Living room seating"
+    displayName: "Fabric footstools & pouffes"
+    categoryId: 20927
+  - roomName: "Living room seating"
+    displayName: "Leather & coated fabric footstools"
+    categoryId: 20928
+  - roomName: "Living room seating"
+    displayName: "Modular sofas"
+    categoryId: 31786
+  - roomName: "Living room seating"
+    displayName: "Sofa & armchair legs"
+    categoryId: 31785
+  - roomName: "Living room seating"
+    displayName: "Upholstered armchairs"
+    categoryId: 10687
+  - roomName: "Office furniture"
+    displayName: "Gaming desks"
+    categoryId: 47070
+  - roomName: "Office furniture"
+    displayName: "Home office desks"
+    categoryId: 20651
+  - roomName: "Office furniture"
+    displayName: "TROTTEN meeting tables"
+    categoryId: 700337
+  - roomName: "Office furniture"
+    displayName: "TROTTEN office desks & tables"
+    categoryId: 55993
+  - roomName: "Outdoor living"
+    displayName: "Garden coffee & side tables"
+    categoryId: 700192
+  - roomName: "Outdoor living"
+    displayName: "Garden dining chairs"
+    categoryId: 21966
+  - roomName: "Outdoor living"
+    displayName: "Garden dining sets"
+    categoryId: 21967
+  - roomName: "Outdoor living"
+    displayName: "Garden dining tables"
+    categoryId: 21965
+  - roomName: "Outdoor living"
+    displayName: "Garden lounge chairs"
+    categoryId: 21962
+  - roomName: "Outdoor living"
+    displayName: "Garden storage"
+    categoryId: 21958
+  - roomName: "Outdoor living"
+    displayName: "Modular outdoor sofas"
+    categoryId: 21961
+  - roomName: "Outdoor living"
+    displayName: "Outdoor floor lamps"
+    categoryId: 700615
+  - roomName: "Outdoor living"
+    displayName: "Outdoor plant pots"
+    categoryId: 30436
+  - roomName: "Outdoor living"
+    displayName: "Outdoor sofa sets"
+    categoryId: 21960
+  - roomName: "Outdoor living"
+    displayName: "Outdoor sofas"
+    categoryId: 21959
+  - roomName: "Pet products"
+    displayName: "Dogs"
+    categoryId: 39570
+  - roomName: "Plants & plant pots"
+    displayName: "Artificial desk & office plants"
+    categoryId: 700521
+  - roomName: "Plants & plant pots"
+    displayName: "Artificial wreaths & garlands"
+    categoryId: 700517
+  - roomName: "Storage furniture"
+    displayName: "Bedside tables"
+    categoryId: 20656
+  - roomName: "Storage furniture"
+    displayName: "Cabinets"
+    categoryId: 10409
+  - roomName: "Storage furniture"
+    displayName: "Chest of drawers"
+    categoryId: 10451
+  - roomName: "Storage furniture"
+    displayName: "Console tables"
+    categoryId: 16246
+  - roomName: "Storage furniture"
+    displayName: "Display cabinets"
+    categoryId: 10410
+  - roomName: "Storage furniture"
+    displayName: "Shelving units"
+    categoryId: 11465
+  - roomName: "Storage furniture"
+    displayName: "Sideboards & buffets"
+    categoryId: 10412
+  - roomName: "Storage furniture"
+    displayName: "Solitaire wardrobes"
+    categoryId: 43631
+  - roomName: "Storage furniture"
+    displayName: "TV benches"
+    categoryId: 10810
+  - roomName: "Tables & chairs"
+    displayName: "2 seater dining tables"
+    categoryId: 57297
+  - roomName: "Tables & chairs"
+    displayName: "4 seater dining tables"
+    categoryId: 21826
+  - roomName: "Tables & chairs"
+    displayName: "Bar stools & chairs"
+    categoryId: 20864
+  - roomName: "Tables & chairs"
+    displayName: "Bar tables"
+    categoryId: 20862
+  - roomName: "Tables & chairs"
+    displayName: "Coffee tables"
+    categoryId: 10716
+  - roomName: "Tables & chairs"
+    displayName: "Dining sets up to 2 seats"
+    categoryId: 36209
+  - roomName: "Tables & chairs"
+    displayName: "Extendable dining tables"
+    categoryId: 21829
+  - roomName: "Tables & chairs"
+    displayName: "Kitchen chairs"
+    categoryId: 25220
+  - roomName: "Tables & chairs"
+    displayName: "Round dining tables"
+    categoryId: 59244
+  - roomName: "Tables & chairs"
+    displayName: "Side tables"
+    categoryId: 10717
+  lastRefreshedUtc: 2026-07-14 21:53:27Z

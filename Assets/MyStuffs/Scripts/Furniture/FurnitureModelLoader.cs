@@ -77,7 +77,8 @@ public class FurnitureModelLoader : MonoBehaviour
                 if (!dlResult.Success)
                 {
                     total.Stop();
-                    Debug.LogError($"[ModelLoad] {shortName} | DOWNLOAD FAILED | {total.ElapsedMilliseconds}ms");
+                    Debug.LogError($"[ModelLoad] {shortName} | DOWNLOAD FAILED | " +
+                                   $"{total.ElapsedMilliseconds}ms | key: {fileName}");
                     return null;
                 }
 
@@ -199,7 +200,11 @@ public class FurnitureModelLoader : MonoBehaviour
 
             if (request.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"[ModelLoad] CloudFront error | {request.responseCode} | {request.error}");
+                // 403 from CloudFront almost always means the S3 object does
+                // not exist (stale/old-layout key) — log WHICH key so it's
+                // diagnosable instead of a bare status code.
+                Debug.LogError($"[ModelLoad] CloudFront error | {request.responseCode} | " +
+                               $"{request.error} | {url}");
                 try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
                 return result;   // Success remains false
             }

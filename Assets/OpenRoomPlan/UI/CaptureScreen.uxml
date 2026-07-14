@@ -1,0 +1,23 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="capture-root" picking-mode="Ignore" class="capture-root">
+        <ui:VisualElement name="top-panel" picking-mode="Ignore" class="top-panel">
+            <ui:Label name="title-label" text="OpenRoomPlan — Capture" picking-mode="Ignore" class="title" />
+            <ui:VisualElement name="stats-panel" picking-mode="Ignore" class="stats">
+                <ui:Label name="coverage-label" text="Coverage: 0 / 12 directions" picking-mode="Ignore" class="stat-line" />
+                <ui:VisualElement name="coverage-bar" picking-mode="Ignore" class="bar">
+                    <ui:VisualElement name="coverage-fill" picking-mode="Ignore" class="bar-fill" />
+                </ui:VisualElement>
+                <ui:Label name="counts-label" text="planes 0 · points 0 · frames 0" picking-mode="Ignore" class="stat-line small" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="spacer" picking-mode="Ignore" class="spacer" />
+
+        <ui:Label name="status-label" text="Idle — tap Record to scan a room" picking-mode="Ignore" class="status" />
+        <ui:VisualElement name="button-row" class="button-row">
+            <ui:Button name="record-button" text="● Record" class="btn btn-record" />
+            <ui:Button name="stop-button" text="■ Stop" class="btn btn-stop" />
+        </ui:VisualElement>
+        <ui:Label name="hint-label" text="Turn slowly to fill the coverage bar; keep walls in view." picking-mode="Ignore" class="hint" />
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b53eb457b59944f6abc67c6b17247522, type: 3}
+  m_Name: Indoor Models Settings
+  m_EditorClassIdentifier: 
+  indoorModels:
+  - category: 2
+    prefab: {fileID: 2313632529202082222, guid: fe5003525cb7d466c8a5bd15c6fa8c2a,
+      type: 3}
+  - category: 3
+    prefab: {fileID: 780828524387557818, guid: a93217d79a79546a19d8ee6f3495be15, type: 3}
+  - category: 7
+    prefab: {fileID: 3769746551387095576, guid: 0941b0f45464d4c84b578186751f9f22,
+      type: 3}
+  - category: 13
+    prefab: {fileID: 7771503422676173529, guid: c88ad926445e84c21bfc6f0489f62821,
+      type: 3}

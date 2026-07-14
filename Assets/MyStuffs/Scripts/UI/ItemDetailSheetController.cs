@@ -105,7 +105,8 @@ public class ItemDetailSheetController : MonoBehaviour
 
     public void Open(string emoji, string name, string description,
         string productId, string imageUrl = "",
-        List<ProductVariant> variants = null)
+        List<ProductVariant> variants = null,
+        ProductModel product = null)
     {
         _currentItemKey = productId;
 
@@ -114,15 +115,29 @@ public class ItemDetailSheetController : MonoBehaviour
         if (_nameLabel       != null) _nameLabel.text       = name;
         if (_favIcon         != null) _favIcon.text         = "☆";
 
-        // description here is already the variant part
-        // e.g. "2 seater sofa - Tibbleby beigegrey"
+        // Dimensions line: prefer the REAL page measurements ("Diameter 73 cm ·
+        // Height 70 cm"); fall back to the variant line for sparse products.
+        string measurements = product?.MeasurementsLine ?? string.Empty;
         if (_dimensionsLabel != null)
-            _dimensionsLabel.text = string.IsNullOrEmpty(description) ? "" : description;
+            _dimensionsLabel.text = !string.IsNullOrEmpty(measurements)
+                ? measurements
+                : (string.IsNullOrEmpty(description) ? "" : description);
 
+        // Description block: the product's real marketing description, plus a
+        // package line ("Delivered as 8 packages" / box size + weight) when
+        // available. Falls back to the old synthetic line.
         if (_descriptionLabel != null)
-            _descriptionLabel.text = string.IsNullOrEmpty(description)
-                ? "A quality furniture piece designed for comfort and durability."
-                : $"IKEA {name} {description}";
+        {
+            string body = product?.FullDescription;
+            if (string.IsNullOrEmpty(body))
+                body = string.IsNullOrEmpty(description)
+                    ? "A quality furniture piece designed for comfort and durability."
+                    : $"IKEA {name} {description}";
+            string packages = product?.PackagesLine;
+            if (!string.IsNullOrEmpty(packages))
+                body += $"\n\n📦 {packages}";
+            _descriptionLabel.text = body;
+        }
 
         if (_imageArea != null)
         {

@@ -14,12 +14,20 @@ using Debug = UnityEngine.Debug;
 /// Only this class talks to DynamoDB — nothing else should.
 ///
 /// Backend (set in AwsConfig): the ros-products / ros-categories generation
-/// written by ikea_pipeline.py.
-///   • ros-categories — category tree (departments=0, categories=1, breadcrumb
-///     subcategories=2). Names + icons come straight from here.
-///   • ros-products   — composite PK (merchant_id + product_id); products are
-///     indexed for browse on the `category-index` GSI keyed on
-///     merchant_category = "ikea#{category_id}".
+/// written by ikea_pipeline.py (merchant-ingestion redesign).
+///   • ros-categories — the merchant's REAL category tree, one node per
+///     breadcrumb crumb, unlimited depth. Node ids are IKEA's own category ids
+///     (e.g. "19086" = PAX system); each node stores its parent + level.
+///     The root node has id "products".
+///   • ros-products   — composite PK (merchant_id + product_id); each product
+///     attaches to the DEEPEST crumb (its leaf). Browse queries use the
+///     `category-index` GSI keyed on merchant_category = "ikea#{leaf_id}".
+///
+/// The app presents this N-level tree as a simple 2-tier UI:
+///   tier 1 = departments  (children of the "products" root node)
+///   tier 2 = that department's LEAF descendants, flattened
+/// Products only live at leaves, so flattening the leaves guarantees every
+/// product with a model is reachable in exactly two taps.
 /// </summary>
 public class FurnitureRepository : MonoBehaviour
 {
@@ -39,9 +47,9 @@ public class FurnitureRepository : MonoBehaviour
         { "#pid",  "product_id" },
         { "#mid",  "merchant_id" },
         { "#nm",   "name" },
-        { "#tn",   "type_name" },
+        { "#sub",  "subtitle" },
+        { "#desc", "description" },
         { "#cid",  "category_id" },
-        { "#sid",  "subcategory_id" },
         { "#mesh", "mesh_glb_url" },
         { "#pmin", "price_min" },
         { "#pmax", "price_max" },
@@ -49,9 +57,19 @@ public class FurnitureRepository : MonoBehaviour
         { "#rev",  "review_count" },
         { "#hid",  "hidden" },
         { "#var",  "variants" },
+        { "#meas", "measurements" },
+        { "#pkg",  "packages" },
+        { "#st",   "status" },     // catalogue lifecycle (sync engine)
     };
+
+    // Discontinued products (removed from the merchant's storefront and past
+    // the sync grace window) never show; rows without a status (pre-sync data)
+    // are treated as active.
+    private const string NotDiscontinued =
+        "(attribute_not_exists(#st) OR #st <> :disc)";
     private const string ProductProjection =
-        "#pid, #mid, #nm, #tn, #cid, #sid, #mesh, #pmin, #pmax, #star, #rev, #hid, #var";
+        "#pid, #mid, #nm, #sub, #desc, #cid, #mesh, #pmin, #pmax, #star, #rev, " +
+        "#hid, #var, #meas, #pkg";
 
     private static readonly Dictionary<string, string> CategoryAttrNames = new()
     {
@@ -78,10 +96,13 @@ public class FurnitureRepository : MonoBehaviour
     }
 
     // ---------------------------------------------------------------
-    // CATEGORIES  (read straight from the ros-categories tree)
-    // Top-level cards = level-1 categories; each carries its level-2
-    // breadcrumb subcategories. Departments (level 0) are not surfaced
-    // by the current 2-tier UI.
+    // CATEGORIES  (read straight from the ros-categories real tree)
+    // Tier 1 cards = departments (children of the "products" root node,
+    // plus any other root-level node such as "uncategorized").
+    // Tier 2 = the department's LEAF descendants, flattened — products
+    // attach only to leaves, so this covers the entire catalogue.
+    // Legacy seeded nodes (old rooms/types) are unreachable from the
+    // "products" root and are ignored automatically.
     // ---------------------------------------------------------------
 
     public async Task<List<CategoryModel>> GetCategories()
@@ -147,35 +168,58 @@ public class FurnitureRepository : MonoBehaviour
             if (live == null)
                 live = await GetCategoryIdsWithModels();
 
-            // Top level = ROOMS (level 0). Their level-1 children (furniture
-            // types like Sofas/Beds) become the second tier; tapping one loads
-            // products by that type's id (= the product category_id). Empty
-            // types — and rooms left with none — are hidden.
-            var rooms = nodes
-                .Where(n => n.Level == 0)
-                .OrderBy(n => n.Order)
-                .Select(n => new CategoryModel
+            // Tier 1 = DEPARTMENTS: children of the "products" root node,
+            // plus any other root-level node (e.g. "uncategorized"). Legacy
+            // seeded nodes hang off other parents and are never reached.
+            var departments = new List<CatNode>();
+            bool hasProductsRoot = nodes.Any(n => n.Id == "products");
+            foreach (var root in nodes.Where(n => n.Parent == "root")
+                                      .OrderBy(n => n.Order))
+            {
+                if (root.Id == "products")
                 {
-                    CategoryId   = n.Id,
-                    CategoryName = n.Name,
-                    Icon         = n.Icon,
-                    ParentId     = n.Parent,
-                    MerchantId   = Merchant,
-                    Subcategories = (childrenByParent.TryGetValue(n.Id, out var kids)
-                        ? kids
-                        : new List<CatNode>())
-                        .Where(c => live.Contains(c.Id))
-                        .OrderBy(c => c.Order)
-                        .Select(c => new SubcategoryModel
-                        {
-                            SubcategoryId   = c.Id,   // = product category_id
-                            SubcategoryName = c.Name,
-                            Icon            = c.Icon,
-                        })
-                        .ToList()
-                })
-                .Where(room => room.Subcategories.Count > 0)
-                .ToList();
+                    if (childrenByParent.TryGetValue("products", out var deps))
+                        departments.AddRange(deps);
+                }
+                else
+                {
+                    departments.Add(root);   // e.g. "uncategorized"
+                }
+            }
+            // Robustness for partial data: no "products" root yet → treat
+            // level-1 nodes as departments directly.
+            if (!hasProductsRoot && departments.Count == 0)
+                departments = nodes.Where(n => n.Level == 1)
+                                   .OrderBy(n => n.Order).ToList();
+
+            // Tier 2 = each department's LEAF descendants (flattened), kept
+            // only when they actually have products with models. Departments
+            // left with no live leaves are hidden.
+            var rooms = new List<CategoryModel>();
+            foreach (var dept in departments)
+            {
+                var leaves = CollectLeaves(dept, childrenByParent)
+                    .Where(l => live.Contains(l.Id))
+                    .OrderBy(l => l.Name)
+                    .Select(l => new SubcategoryModel
+                    {
+                        SubcategoryId   = l.Id,   // = product category_id (leaf)
+                        SubcategoryName = l.Name,
+                        Icon            = l.Icon,
+                    })
+                    .ToList();
+
+                if (leaves.Count == 0) continue;
+                rooms.Add(new CategoryModel
+                {
+                    CategoryId    = dept.Id,
+                    CategoryName  = dept.Name,
+                    Icon          = dept.Icon,
+                    ParentId      = dept.Parent,
+                    MerchantId    = Merchant,
+                    Subcategories = leaves,
+                });
+            }
 
             long parseMs = total.ElapsedMilliseconds - preParse;
             total.Stop();
@@ -186,7 +230,7 @@ public class FurnitureRepository : MonoBehaviour
                       $" | db-query {queryMs}ms" +
                       $" | parse {parseMs}ms" +
                       $" | TOTAL {total.ElapsedMilliseconds}ms" +
-                      $" | {rooms.Count} rooms, {totalSubs} subcategories");
+                      $" | {rooms.Count} departments, {totalSubs} leaf subcategories");
             return rooms;
         }
         catch (Exception e)
@@ -203,7 +247,35 @@ public class FurnitureRepository : MonoBehaviour
         public int    Level, Order;
     }
 
-    private const string LiveCatPrefsKey = "ros_live_categories_v1";
+    // Every LEAF node (no children) in the subtree under `dept`, including the
+    // department itself when it is childless (e.g. "uncategorized"). Iterative
+    // DFS with a visited-set so a malformed tree can never loop.
+    private static List<CatNode> CollectLeaves(
+        CatNode dept, Dictionary<string, List<CatNode>> childrenByParent)
+    {
+        var leaves  = new List<CatNode>();
+        var visited = new HashSet<string>();
+        var stack   = new Stack<CatNode>();
+        stack.Push(dept);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            if (!visited.Add(node.Id)) continue;
+            if (childrenByParent.TryGetValue(node.Id, out var kids) && kids.Count > 0)
+            {
+                foreach (var kid in kids) stack.Push(kid);
+            }
+            else
+            {
+                leaves.Add(node);
+            }
+        }
+        return leaves;
+    }
+
+    // v2: bumped when the backend moved to real IKEA category ids — a v1 cache
+    // holds the old flat ids and would filter every new leaf out.
+    private const string LiveCatPrefsKey = "ros_live_categories_v2";
 
     // Set of category_ids that have at least one product with a 3D model.
     // CACHED: served instantly from PlayerPrefs (the full-table scan is the slow
@@ -406,12 +478,13 @@ public class FurnitureRepository : MonoBehaviour
             TableName              = AwsConfig.FurnitureCatalogTableName,
             IndexName              = "category-index",
             KeyConditionExpression = "merchant_category = :mc",
-            FilterExpression       = "attribute_exists(#mesh)",
+            FilterExpression       = "attribute_exists(#mesh) AND " + NotDiscontinued,
             ProjectionExpression   = ProductProjection,
             ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
-                { ":mc", new AttributeValue { S = $"{Merchant}#{categoryId}" } }
+                { ":mc",   new AttributeValue { S = $"{Merchant}#{categoryId}" } },
+                { ":disc", new AttributeValue { S = "discontinued" } }
             },
             Limit = limit
         };
@@ -430,85 +503,6 @@ public class FurnitureRepository : MonoBehaviour
             ? response.LastEvaluatedKey : null;
 
         return new ProductPage { Items = items, LastEvaluatedKey = lek };
-    }
-
-    // ---------------------------------------------------------------
-    // PRODUCTS BY SUBCATEGORY  (category-index + subcategory_id filter)
-    // ---------------------------------------------------------------
-
-    private readonly Dictionary<string, Task<List<ProductModel>>> _inFlightBySubcategory = new();
-
-    public Task<List<ProductModel>> GetProductsBySubcategory(
-        string categoryId, string subcategoryId)
-    {
-        string cacheKey = $"{categoryId}_{subcategoryId}";
-
-        if (_productCache.TryGetValue(cacheKey, out var cached))
-        {
-            Debug.Log($"[FurnRepo] {cacheKey} | cache HIT ({cached.Count} products)");
-            return Task.FromResult(cached);
-        }
-
-        if (_inFlightBySubcategory.TryGetValue(cacheKey, out var pending))
-        {
-            if (!pending.IsFaulted && !pending.IsCanceled)
-            {
-                Debug.Log($"[FurnRepo] {cacheKey} | in-flight reuse");
-                return pending;
-            }
-            _inFlightBySubcategory.Remove(cacheKey);
-        }
-
-        Debug.Log($"[FurnRepo] {cacheKey} | cache MISS → fetching");
-        var task = FetchProductsBySubcategory(categoryId, subcategoryId, cacheKey);
-        _inFlightBySubcategory[cacheKey] = task;
-        return task;
-    }
-
-    private async Task<List<ProductModel>> FetchProductsBySubcategory(
-        string categoryId, string subcategoryId, string cacheKey)
-    {
-        try
-        {
-            bool refreshed = await AwsManager.Instance.RefreshCredentialsIfNeeded();
-            Debug.Log($"[FurnRepo] {cacheKey} | credentials: {(refreshed ? "REFRESHED" : "fresh")}");
-
-            var request = new QueryRequest
-            {
-                TableName              = AwsConfig.FurnitureCatalogTableName,
-                IndexName              = "category-index",
-                KeyConditionExpression = "merchant_category = :mc",
-                FilterExpression       = "attribute_exists(#mesh) AND #sid = :subId",
-                ProjectionExpression   = ProductProjection,
-                ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
-                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-                {
-                    { ":mc",    new AttributeValue { S = $"{Merchant}#{categoryId}" } },
-                    { ":subId", new AttributeValue { S = subcategoryId } }
-                }
-            };
-
-            var response = await DbWithRetry(
-                () => AwsManager.Instance.DynamoDBClient.QueryAsync(request), cacheKey);
-
-            var products = response.Items
-                .Select(ParseProduct)
-                .Where(p => p != null && p.HasModel)
-                .ToList();
-
-            _productCache[cacheKey] = products;
-            Debug.Log($"[FurnRepo] {cacheKey} | {response.Items.Count} raw → {products.Count} with-model");
-            return products;
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[FurnRepo] {cacheKey} | GetProductsBySubcategory error: {e.Message}");
-            return new List<ProductModel>();
-        }
-        finally
-        {
-            _inFlightBySubcategory.Remove(cacheKey);
-        }
     }
 
     // ---------------------------------------------------------------
@@ -560,12 +554,14 @@ public class FurnitureRepository : MonoBehaviour
             var request = new ScanRequest
             {
                 TableName        = AwsConfig.FurnitureCatalogTableName,
-                FilterExpression = "attribute_exists(#mesh) AND contains(#nm, :term)",
+                FilterExpression = "attribute_exists(#mesh) AND contains(#nm, :term) AND "
+                                   + NotDiscontinued,
                 ProjectionExpression = ProductProjection,
                 ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
-                    { ":term", new AttributeValue { S = searchTerm } }
+                    { ":term", new AttributeValue { S = searchTerm } },
+                    { ":disc", new AttributeValue { S = "discontinued" } }
                 }
             };
 
@@ -604,9 +600,12 @@ public class FurnitureRepository : MonoBehaviour
             var primary  = variants.Find(v => v.IsPrimary)
                            ?? (variants.Count > 0 ? variants[0] : null);
 
-            // UI variant line: "type_name - primary colour" (matches the format
-            // ItemDetailSheetController expects).
-            string type   = GetString(item, "type_name");
+            // UI variant line: "subtitle - primary colour" (matches the format
+            // ItemDetailSheetController expects). subtitle replaced the legacy
+            // type_name field; read the old name as fallback for un-migrated rows.
+            string type = GetString(item, "subtitle");
+            if (string.IsNullOrEmpty(type))
+                type = GetString(item, "type_name");
             string colour = primary?.ColourName ?? string.Empty;
             string desc =
                 !string.IsNullOrEmpty(type) && !string.IsNullOrEmpty(colour)
@@ -619,14 +618,16 @@ public class FurnitureRepository : MonoBehaviour
                 MerchantId       = GetString(item, "merchant_id"),
                 Name             = GetString(item, "name"),
                 Description      = desc,
+                FullDescription  = GetString(item, "description"),
                 CategoryId       = GetString(item, "category_id"),
-                SubcategoryId    = GetString(item, "subcategory_id"),
                 S3ModelUrl       = StripCloudFront(GetString(item, "mesh_glb_url")),
                 PriceMin         = GetNumber(item, "price_min"),
                 PriceMax         = GetNumber(item, "price_max"),
                 StarRatingValue  = GetNumber(item, "star_rating"),
                 ReviewCountValue = (int)GetNumber(item, "review_count"),
                 Variants         = variants,
+                Measurements     = ParseMeasurements(item),
+                Packages         = ParsePackages(item),
             };
         }
         catch (Exception e)
@@ -634,6 +635,64 @@ public class FurnitureRepository : MonoBehaviour
             Debug.LogError($"[FurnitureRepository] ParseProduct error: {e.Message}");
             return null;
         }
+    }
+
+    // Verbatim page measurements: list of {name, value} maps, labels exactly
+    // as IKEA writes them ("Width", "Free height under furniture", …).
+    private List<ProductMeasurement> ParseMeasurements(
+        Dictionary<string, AttributeValue> item)
+    {
+        var list = new List<ProductMeasurement>();
+        if (!item.TryGetValue("measurements", out var attr) || attr.L == null)
+            return list;
+        foreach (var entry in attr.L)
+        {
+            var m = entry.M;
+            if (m == null) continue;
+            list.Add(new ProductMeasurement
+            {
+                Name  = GetString(m, "name"),
+                Value = GetString(m, "value"),
+            });
+        }
+        return list;
+    }
+
+    // Shipping packages: map {count, packages: [{name, type, article_number,
+    // measurements: [{name, value}]}]}.
+    private List<ProductPackage> ParsePackages(
+        Dictionary<string, AttributeValue> item)
+    {
+        var list = new List<ProductPackage>();
+        if (!item.TryGetValue("packages", out var attr) || attr.M == null)
+            return list;
+        if (!attr.M.TryGetValue("packages", out var arr) || arr.L == null)
+            return list;
+        foreach (var entry in arr.L)
+        {
+            var m = entry.M;
+            if (m == null) continue;
+            var pkg = new ProductPackage
+            {
+                Name          = GetString(m, "name"),
+                TypeName      = GetString(m, "type"),
+                ArticleNumber = GetString(m, "article_number"),
+            };
+            if (m.TryGetValue("measurements", out var pm) && pm.L != null)
+            {
+                foreach (var me in pm.L)
+                {
+                    if (me.M == null) continue;
+                    pkg.Measurements.Add(new ProductMeasurement
+                    {
+                        Name  = GetString(me.M, "name"),
+                        Value = GetString(me.M, "value"),
+                    });
+                }
+            }
+            list.Add(pkg);
+        }
+        return list;
     }
 
     private List<ProductVariant> ParseVariants(Dictionary<string, AttributeValue> item)

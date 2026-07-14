@@ -199,42 +199,6 @@ public class FurnitureDataService : MonoBehaviour
     }
 
     // ---------------------------------------------------------------
-    // PRODUCTS BY SUBCATEGORY
-    // ---------------------------------------------------------------
-
-    public async Task LoadProductsBySubcategory(
-        string categoryId, string subcategoryId)
-    {
-        if (!IsReady()) return;
-
-        if (string.IsNullOrEmpty(categoryId) ||
-            string.IsNullOrEmpty(subcategoryId))
-        {
-            OnProductsFailed?.Invoke("Invalid category or subcategory.");
-            return;
-        }
-
-        OnLoadingChanged?.Invoke(true, "Loading products...");
-
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        var products = await FurnitureRepository.Instance
-            .GetProductsBySubcategory(categoryId, subcategoryId);
-        sw.Stop();
-
-        OnLoadingChanged?.Invoke(false, string.Empty);
-
-        if (products == null || products.Count == 0)
-        {
-            Debug.LogWarning($"[CatLoad] {categoryId}_{subcategoryId} | no products | {sw.ElapsedMilliseconds} ms");
-            OnProductsFailed?.Invoke("No products found in this subcategory.");
-            return;
-        }
-
-        Debug.Log($"[CatLoad] {categoryId}_{subcategoryId} | repository returned {products.Count} products | {sw.ElapsedMilliseconds} ms");
-        OnProductsLoaded?.Invoke(products, subcategoryId);
-    }
-
-    // ---------------------------------------------------------------
     // SINGLE PRODUCT
     // ---------------------------------------------------------------
 

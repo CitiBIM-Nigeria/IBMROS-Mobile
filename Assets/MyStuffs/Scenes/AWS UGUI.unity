@@ -2321,8 +2321,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
-  categoryId: bathroom_storage
-  displayLabel: "Bathroom \u203A Bathroom Storage"
+  categoryId: 700464
+  displayLabel: "Bathroom \u203A Vanity units"
   catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
   modelAnchor: {fileID: 212452961}
   alignToFloor: 1
@@ -2334,8 +2334,8 @@ MonoBehaviour:
   autoLoadOnStart: 1
   verboseLogging: 1
   socketId: 1589bf76-b2b0-4c06-bf44-0bcdf9e1175a
-  selectedProductId: angsjon-40535076
-  selectedModelUrl: ikea/bathroom_storage/angsjon-40535076/models/variants/40x15x95-cm/model.glb
+  selectedProductId: 
+  selectedModelUrl: 
 --- !u!4 &212452961
 Transform:
   m_ObjectHideFlags: 0
@@ -3886,8 +3886,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
-  categoryId: desk_tables
-  displayLabel: "Home Office \u203A Desks"
+  categoryId: 55993
+  displayLabel: "Home Office \u203A Office desks"
   catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
   modelAnchor: {fileID: 367655117}
   alignToFloor: 1
@@ -3899,7 +3899,7 @@ MonoBehaviour:
   autoLoadOnStart: 1
   verboseLogging: 1
   socketId: df886fff-7009-4ce5-918e-eacfb160398c
-  selectedProductId: alex-10473555
+  selectedProductId: 
   selectedModelUrl: 
 --- !u!4 &367655117
 Transform:
@@ -9555,8 +9555,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
-  categoryId: coffee_tables
-  displayLabel: "Living Room \u203A Coffee Tables"
+  categoryId: 10716
+  displayLabel: "Living Room \u203A Coffee tables"
   catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
   modelAnchor: {fileID: 915196826}
   alignToFloor: 1
@@ -9568,8 +9568,8 @@ MonoBehaviour:
   autoLoadOnStart: 1
   verboseLogging: 1
   socketId: 3b7711b7-a1fe-4fb5-a168-3e0cfd06b1ef
-  selectedProductId: hakanskar-70597162
-  selectedModelUrl: ikea/coffee_tables/hakanskar-70597162/models/variants/80x64-cm/model.glb
+  selectedProductId: 
+  selectedModelUrl: 
 --- !u!4 &915196826
 Transform:
   m_ObjectHideFlags: 0
@@ -10791,8 +10791,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
-  categoryId: bathroom_storage
-  displayLabel: "Bathroom \u203A Bathroom Storage"
+  categoryId: 16233
+  displayLabel: "Bathroom \u203A Boxes & baskets"
   catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
   modelAnchor: {fileID: 1007155942}
   alignToFloor: 1
@@ -10804,7 +10804,7 @@ MonoBehaviour:
   autoLoadOnStart: 1
   verboseLogging: 1
   socketId: c4207235-47b5-4228-9473-75e585f74532
-  selectedProductId: altjarn-10523273
+  selectedProductId: 
   selectedModelUrl: 
 --- !u!4 &1007155942
 Transform:
@@ -14202,8 +14202,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
-  categoryId: sofas
-  displayLabel: "Living Room \u203A Sofas"
+  categoryId: 10671
+  displayLabel: "Living Room \u203A Corner sofas"
   catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
   modelAnchor: {fileID: 1303856265}
   alignToFloor: 1
@@ -14215,8 +14215,8 @@ MonoBehaviour:
   autoLoadOnStart: 1
   verboseLogging: 1
   socketId: ca8eee56-fca8-4a35-9377-1c823c87c13e
-  selectedProductId: friheten-29133542
-  selectedModelUrl: ikea/sofas/friheten-29133542/models/variants/bomstad-black/model.glb
+  selectedProductId: 
+  selectedModelUrl: 
 --- !u!1 &1311688971
 GameObject:
   m_ObjectHideFlags: 0
@@ -22953,8 +22953,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 51dab4900cef942cb8acbc126fec54ac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VRFurnitureSocket
-  categoryId: dressing_tables
-  displayLabel: "Bedroom \u203A Dressing Tables"
+  categoryId: 20656
+  displayLabel: "Bedroom \u203A Bedside tables"
   catalog: {fileID: 11400000, guid: 929ed21d6380b45b38625bf173f2deb6, type: 2}
   modelAnchor: {fileID: 2042156035}
   alignToFloor: 1
@@ -22966,8 +22966,8 @@ MonoBehaviour:
   autoLoadOnStart: 1
   verboseLogging: 1
   socketId: a796b134-a649-4d7a-80ef-32372f28ede5
-  selectedProductId: grafjallet-30570225
-  selectedModelUrl: ikea/dressing_tables/grafjallet-30570225/models/variants/100x42-cm/model.glb
+  selectedProductId: 
+  selectedModelUrl: 
 --- !u!4 &2042156035
 Transform:
   m_ObjectHideFlags: 0

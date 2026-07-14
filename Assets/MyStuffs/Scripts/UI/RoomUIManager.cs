@@ -241,7 +241,7 @@ public class RoomUIManager : MonoBehaviour
         furniturePanelController?.HideWithoutReset();
         itemDetailSheetController?.Open(
             emoji, product.Name, variant, product.ProductId,
-            product.BestImageUrl, product.Variants);
+            product.BestImageUrl, product.Variants, product);
 
     }
 

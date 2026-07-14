@@ -18,6 +18,24 @@ public class ProductVariant
     public string DisplayOriginalUrl { get; set; }   // original .jpg
 }
 
+/// <summary>One verbatim measurement from the product page, exactly as IKEA
+/// labels it ("Width", "System depth", "Free height under furniture", …).</summary>
+public class ProductMeasurement
+{
+    public string Name  { get; set; }
+    public string Value { get; set; }
+}
+
+/// <summary>One shipping package ("4 × PAX · Wardrobe frame" + its box
+/// dimensions/weight). Products can ship as many packages.</summary>
+public class ProductPackage
+{
+    public string Name          { get; set; }   // "1 × AKTERSPRING"
+    public string TypeName      { get; set; }   // "Pendant lamp"
+    public string ArticleNumber { get; set; }
+    public List<ProductMeasurement> Measurements { get; set; } = new();
+}
+
 /// <summary>
 /// A catalog product, parsed from a ros-products DynamoDB item.
 /// </summary>
@@ -28,11 +46,17 @@ public class ProductModel
     public string Name           { get; set; }
 
     // Short variant line shown in the UI, e.g. "2 seater sofa - Lejde grey/black".
-    // Built from type_name + primary colour by FurnitureRepository.
+    // Built from subtitle + primary colour by FurnitureRepository.
     public string Description    { get; set; }
 
+    // The full marketing description from the product page.
+    public string FullDescription { get; set; }
+
     public string CategoryId     { get; set; }
-    public string SubcategoryId  { get; set; }
+
+    // Verbatim page measurements + shipping packages (rich detail screen data).
+    public List<ProductMeasurement> Measurements { get; set; } = new();
+    public List<ProductPackage>     Packages     { get; set; } = new();
 
     // Bucket KEY of the GLB (CloudFront domain stripped) so FurnitureModelLoader
     // can prepend the domain and use it as a local cache path, unchanged.
@@ -91,6 +115,50 @@ public class ProductModel
             if (PriceMin <= 0f)        return "Price unavailable";
             if (PriceMax > PriceMin)   return $"From £{PriceMin:F2}";
             return $"£{PriceMin:F2}";
+        }
+    }
+
+    // "Diameter 73 cm · Height 70 cm · Shade diameter 14 cm" — for the detail
+    // sheet's dimensions line. Empty when the page had no measurements.
+    public string MeasurementsLine
+    {
+        get
+        {
+            if (Measurements == null || Measurements.Count == 0) return string.Empty;
+            var parts = new List<string>();
+            foreach (var m in Measurements)
+                if (!string.IsNullOrEmpty(m.Name) && !string.IsNullOrEmpty(m.Value))
+                    parts.Add($"{m.Name} {m.Value}");
+            return string.Join("  ·  ", parts);
+        }
+    }
+
+    // "Delivered as 8 packages" / "1 package · 66×25×15 cm · 3.22 kg".
+    public string PackagesLine
+    {
+        get
+        {
+            if (Packages == null || Packages.Count == 0) return string.Empty;
+            if (Packages.Count > 1) return $"Delivered as {Packages.Count} packages";
+            var p = Packages[0];
+            string dims = "", weight = "";
+            string w = "", h = "", l = "";
+            foreach (var m in p.Measurements)
+            {
+                switch (m.Name)
+                {
+                    case "Width":  w = m.Value; break;
+                    case "Height": h = m.Value; break;
+                    case "Length": l = m.Value; break;
+                    case "Weight": weight = m.Value; break;
+                }
+            }
+            if (!string.IsNullOrEmpty(l) && !string.IsNullOrEmpty(w) && !string.IsNullOrEmpty(h))
+                dims = $"{l} × {w} × {h}".Replace(" cm ×", " ×");
+            var bits = new List<string> { "1 package" };
+            if (!string.IsNullOrEmpty(dims))   bits.Add(dims);
+            if (!string.IsNullOrEmpty(weight)) bits.Add(weight);
+            return string.Join("  ·  ", bits);
         }
     }
 }
