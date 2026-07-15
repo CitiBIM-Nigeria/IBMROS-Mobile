@@ -1,12 +1,5 @@
 {
   "dependencies": {
-    "com.netpyoung.webp": {
-      "version": "0.3.22",
-      "depth": 0,
-      "source": "registry",
-      "dependencies": {},
-      "url": "https://package.openupm.com"
-    },
     "com.singularitygroup.hotreload": {
       "version": "file:com.singularitygroup.hotreload",
       "depth": 0,

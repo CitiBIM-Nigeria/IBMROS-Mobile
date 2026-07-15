@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "com.netpyoung.webp": "0.3.22",
     "com.unity.ai.assistant": "2.7.0-pre.3",
     "com.unity.ai.inference": "2.6.1",
     "com.unity.ai.navigation": "2.0.12",
