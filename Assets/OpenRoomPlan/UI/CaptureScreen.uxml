@@ -19,6 +19,7 @@
                 <ui:Button name="record-button" text="● Record" class="btn btn-record" />
                 <ui:Button name="stop-button" text="■ Stop" class="btn btn-stop" />
             </ui:VisualElement>
+            <ui:Button name="export-button" text="⇪ Export last scan" class="btn btn-export" />
             <ui:Label name="hint-label" text="Turn slowly to fill the coverage bar; keep walls in view." picking-mode="Ignore" class="hint" />
         </ui:VisualElement>
     </ui:VisualElement>

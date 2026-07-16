@@ -21,9 +21,10 @@ namespace OpenRoomPlan.Capture
         [SerializeField] Camera arCamera;
 
         VisualElement _root, _coverageFill;
-        Button _record, _stop;
+        Button _record, _stop, _export;
         Label _status, _coverage, _counts;
         readonly bool[] _sectors = new bool[SectorCount];
+        bool _exporting;
 
         void Start()
         {
@@ -35,6 +36,7 @@ namespace OpenRoomPlan.Capture
 
             _record = _root.Q<Button>("record-button");
             _stop = _root.Q<Button>("stop-button");
+            _export = _root.Q<Button>("export-button");
             _status = _root.Q<Label>("status-label");
             _coverage = _root.Q<Label>("coverage-label");
             _counts = _root.Q<Label>("counts-label");
@@ -42,6 +44,7 @@ namespace OpenRoomPlan.Capture
 
             if (_record != null) _record.clicked += OnRecord;
             if (_stop != null) _stop.clicked += OnStop;
+            if (_export != null) _export.clicked += OnExport;
 
             // Safe area: recompute paddings whenever the panel lays out (handles rotation / notch).
             var safeTarget = _root.Q<VisualElement>("capture-root") ?? _root;
@@ -58,6 +61,7 @@ namespace OpenRoomPlan.Capture
         {
             if (_record != null) _record.clicked -= OnRecord;
             if (_stop != null) _stop.clicked -= OnStop;
+            if (_export != null) _export.clicked -= OnExport;
         }
 
         void ApplySafeArea(VisualElement target)
@@ -129,6 +133,29 @@ namespace OpenRoomPlan.Capture
             Refresh();
         }
 
+        void OnExport()
+        {
+            if (_exporting || recorder == null || recorder.IsRecording ||
+                string.IsNullOrEmpty(recorder.CurrentSessionId) || recorder.FrameCount == 0) return;
+
+            _exporting = true;
+            string sessionId = recorder.CurrentSessionId;
+            if (_status != null) _status.text = "Exporting…";
+            _export?.SetEnabled(false);
+
+            // Defer a frame so "Exporting…" paints before the (blocking) zip work.
+            _root.schedule.Execute(() =>
+            {
+                var res = SessionExporter.Export(sessionId);
+                if (_status != null)
+                    _status.text = res.ok
+                        ? $"✓ Exported — {res.userFacing}"
+                        : $"Export failed: {res.error}";
+                _exporting = false;
+                _export?.SetEnabled(true);
+            }).ExecuteLater(60);
+        }
+
         void Refresh()
         {
             bool rec = recorder != null && recorder.IsRecording;
@@ -144,18 +171,24 @@ namespace OpenRoomPlan.Capture
                 _counts.text = $"planes {planes} · points {CountPoints()} · frames {(recorder != null ? recorder.FrameCount : 0)}";
             }
 
+            bool hasScan = recorder != null && !rec &&
+                           !string.IsNullOrEmpty(recorder.CurrentSessionId) && recorder.FrameCount > 0;
+
             if (_status != null)
             {
                 if (rec)
                     _status.text = covered >= SectorCount
                         ? "● REC — full turn captured ✓ you can Stop"
                         : $"● REC — keep turning ({covered}/{SectorCount})";
+                else if (hasScan)
+                    _status.text = $"✓ Scan saved: {recorder.CurrentSessionId} · {recorder.FrameCount} frames — Export to share";
                 else
                     _status.text = "Idle — tap Record to scan a room";
             }
 
             _record?.SetEnabled(recorder != null && !rec);
             _stop?.SetEnabled(rec);
+            if (!_exporting) _export?.SetEnabled(hasScan);
         }
     }
 }
