@@ -35,7 +35,10 @@ room in the Editor (navigate: hold right-mouse + WASD). Tap **Record**, move aro
 Pull a session folder off the device (Xcode devices window / Android `adb pull` or Device File Explorer)
 for the offline benchmark and eval steps that follow.
 
-## 4. What's next (not built yet)
-- **Eval tool** (Editor): load a recorded session → run the reconstructor → view the point cloud +
-  reconstructed room + dimensions. This is what turns a capture into a Go/No-Go signal.
-- **Depth Anything V2-Small** provider (needs the ONNX model dropped into the project).
+## 4. What's next
+- **Eval tool** (Editor) — DONE: `OpenRoomPlan ▸ Eval Tool` loads a recorded session → runs the
+  reconstructor → point cloud + room + dimensions, optional LiDAR-GT overlay. Turns a capture into a
+  Go/No-Go signal.
+- **Depth Anything V2-Small** provider — DONE (code): `OpenRoomPlan.Depth` assembly + `OpenRoomPlan ▸
+  Bake Depth (DA-V2-S)`. Still needs the ONNX model dropped into a `Resources` folder — see
+  [Phase2_DepthProvider.md](Phase2_DepthProvider.md).

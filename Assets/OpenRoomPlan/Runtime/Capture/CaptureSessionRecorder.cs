@@ -43,6 +43,7 @@ namespace OpenRoomPlan.Capture
         float _lastCaptureTime;
         Vector3 _lastCapturePos;
         bool _loggedFormats;
+        readonly System.Collections.Generic.List<Vector3> _pointBuffer = new();
 
         void Reset() => cameraManager = GetComponent<ARCameraManager>();
 
@@ -173,10 +174,26 @@ namespace OpenRoomPlan.Capture
 
             _loggedFormats = true;
 
-            int sparse = 0;
+            // Sparse VIO feature points (world space) — metric anchors for offline scale-alignment
+            // (ScaleAligner.AlignToAnchors), the on-device path when no platform depth exists.
+            string pointsRel = "";
             if (pointCloudManager != null)
+            {
+                _pointBuffer.Clear();
                 foreach (var pc in pointCloudManager.trackables)
-                    if (pc.positions.HasValue) sparse += pc.positions.Value.Length;
+                    if (pc.positions.HasValue)
+                    {
+                        var arr = pc.positions.Value;
+                        for (int p = 0; p < arr.Length; p++) _pointBuffer.Add(arr[p]);
+                    }
+                if (_pointBuffer.Count > 0)
+                {
+                    SessionIO.WritePointsBin(
+                        Path.Combine(SessionIO.SessionDir(CurrentSessionId), "points", $"{idx:D6}.bin"),
+                        _pointBuffer);
+                    pointsRel = $"points/{idx:D6}.bin";
+                }
+            }
 
             var rec = new FrameRecord
             {
@@ -185,10 +202,11 @@ namespace OpenRoomPlan.Capture
                 intrinsics = scaledIntr,
                 cameraPose = new Pose(pos, arCamera.transform.rotation),
                 poseTracked = true,
-                sparsePointCount = sparse,
+                sparsePointCount = _pointBuffer.Count,
                 rgbFile = $"frames/{idx:D6}.jpg",
                 depthFile = depthRel,
                 lidarFile = lidarRel,
+                pointsFile = pointsRel,
             };
             SessionIO.AppendFrameRecord(CurrentSessionId, rec);
 

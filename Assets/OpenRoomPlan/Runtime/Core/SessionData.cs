@@ -59,5 +59,6 @@ namespace OpenRoomPlan.Core
         public string rgbFile;          // relative path, e.g. "frames/000123.jpg"
         public string depthFile;        // relative path, "" if none this frame
         public string lidarFile;        // relative path, "" if none
+        public string pointsFile;       // relative path to sparse VIO points (points/000123.bin), "" if none
     }
 }

@@ -5,6 +5,8 @@
         "OpenRoomPlan.Core",
         "OpenRoomPlan.Capture",
         "OpenRoomPlan.Reconstruction",
+        "OpenRoomPlan.Depth",
+        "Unity.InferenceEngine",
         "Unity.XR.ARFoundation",
         "Unity.XR.ARSubsystems",
         "Unity.XR.CoreUtils",

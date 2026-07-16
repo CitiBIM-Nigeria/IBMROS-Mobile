@@ -56,6 +56,10 @@ namespace OpenRoomPlan.Core
         public float[] depthMeters;       // row-major; NaN = invalid pixel
         public float[] confidence;        // optional, 0..1, null if unavailable
         public bool isMetric;             // false => ScaleAligner must run before fusion
+        // When !isMetric, whether the raw values are inverse (disparity-like, larger = nearer) rather than
+        // depth-like. DA-V2's affine-invariant output is disparity, so alignment must happen in that space
+        // (fit a*disp+b ≈ 1/metric, then depth = 1/(a*disp+b)). Ignored when isMetric is true.
+        public bool isInverseValues;
         public long timestampNs;
 
         public static DepthFrameResult Empty => new DepthFrameResult { depthMeters = null };

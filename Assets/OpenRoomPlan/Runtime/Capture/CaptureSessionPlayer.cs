@@ -40,6 +40,14 @@ namespace OpenRoomPlan.Capture
             int w = tex.width, h = tex.height;
             Object.DestroyImmediate(tex);
 
+            // Sparse VIO points (world space) if this session recorded them → scale-align anchors.
+            Vector3[] anchors = null;
+            if (!string.IsNullOrEmpty(f.pointsFile))
+            {
+                string pp = Path.Combine(SessionIO.SessionDir(_sessionId), f.pointsFile);
+                if (File.Exists(pp)) anchors = SessionIO.ReadPointsBin(pp);
+            }
+
             input = new DepthFrameInput
             {
                 frameIndex = f.index,
@@ -49,7 +57,7 @@ namespace OpenRoomPlan.Capture
                 intrinsics = f.intrinsics,
                 cameraPose = f.cameraPose,
                 timestampNs = f.timestampNs,
-                metricAnchorsWorld = null, // only counts were recorded; wire full VIO points later if needed
+                metricAnchorsWorld = anchors,
             };
             return true;
         }
@@ -64,6 +72,19 @@ namespace OpenRoomPlan.Capture
             string p = Path.Combine(SessionIO.SessionDir(_sessionId), f.depthFile);
             if (!File.Exists(p)) return false;
             depth = SessionIO.ReadDepthBin(p, out w, out h);
+            return true;
+        }
+
+        /// <summary>Recorded platform depth confidence (0..1) for a frame, if present. Grid matches depth_conf.</summary>
+        public bool TryLoadPlatformConfidence(int i, out float[] conf01, out int w, out int h)
+        {
+            conf01 = null; w = h = 0;
+            if (i < 0 || i >= _frames.Count) return false;
+            string p = Path.Combine(SessionIO.SessionDir(_sessionId), "depth_conf", $"{_frames[i].index:D6}.bin");
+            if (!File.Exists(p)) return false;
+            var raw = SessionIO.ReadConfidenceBin(p, out w, out h);
+            conf01 = new float[raw.Length];
+            for (int k = 0; k < raw.Length; k++) conf01[k] = raw[k] / 255f; // ARCore confidence is 0..255
             return true;
         }
 

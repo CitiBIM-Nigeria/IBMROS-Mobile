@@ -29,6 +29,7 @@ namespace OpenRoomPlan.Capture
             Directory.CreateDirectory(Path.Combine(root, "depth"));
             Directory.CreateDirectory(Path.Combine(root, "depth_conf"));
             Directory.CreateDirectory(Path.Combine(root, "lidar"));
+            Directory.CreateDirectory(Path.Combine(root, "points"));
             Directory.CreateDirectory(Path.Combine(root, "models"));
         }
 
@@ -79,6 +80,35 @@ namespace OpenRoomPlan.Capture
             bw.Write(width);
             bw.Write(height);
             bw.Write(conf, 0, conf.Length);
+        }
+
+        public static byte[] ReadConfidenceBin(string absPath, out int width, out int height)
+        {
+            using var br = new BinaryReader(File.Open(absPath, FileMode.Open));
+            width = br.ReadInt32();
+            height = br.ReadInt32();
+            return br.ReadBytes(width * height);
+        }
+
+        // ---- sparse VIO points (world space): [int32 count][float32 x,y,z]*count ----
+        public static void WritePointsBin(string absPath, System.Collections.Generic.IReadOnlyList<Vector3> pts)
+        {
+            using var bw = new BinaryWriter(File.Open(absPath, FileMode.Create));
+            bw.Write(pts.Count);
+            for (int i = 0; i < pts.Count; i++)
+            {
+                bw.Write(pts[i].x); bw.Write(pts[i].y); bw.Write(pts[i].z);
+            }
+        }
+
+        public static Vector3[] ReadPointsBin(string absPath)
+        {
+            using var br = new BinaryReader(File.Open(absPath, FileMode.Open));
+            int n = br.ReadInt32();
+            var pts = new Vector3[n];
+            for (int i = 0; i < n; i++)
+                pts[i] = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+            return pts;
         }
 
         /// <summary>Depth produced by an offline/cloud model, keyed under models/&lt;modelId&gt;/.</summary>
