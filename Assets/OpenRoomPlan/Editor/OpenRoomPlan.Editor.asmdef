@@ -11,6 +11,7 @@
         "Unity.XR.ARSubsystems",
         "Unity.XR.CoreUtils",
         "Unity.InputSystem",
+        "Unity.RenderPipelines.Universal.Runtime",
         "UnityEngine.UI"
     ],
     "includePlatforms": [
