@@ -27,6 +27,7 @@ namespace OpenRoomPlan.Editor
         float _minDepth = 0.3f, _maxDepth = 5f, _voxel = 0.03f;
         int _stride = 2;
         bool _flipV;
+        AccumulatorKind _accumulator = AccumulatorKind.RawPointCloud;
 
         string _result = "";
         Vector2 _scroll;
@@ -74,6 +75,9 @@ namespace OpenRoomPlan.Editor
             _stride = EditorGUILayout.IntSlider("Pixel stride", _stride, 1, 8);
             _voxel = EditorGUILayout.Slider("Voxel size (m)", _voxel, 0.01f, 0.1f);
             _flipV = EditorGUILayout.Toggle("Flip depth V (calibration)", _flipV);
+            _accumulator = (AccumulatorKind)EditorGUILayout.EnumPopup(
+                new GUIContent("Accumulator", "RawPointCloud = Phase-1 behaviour. Tsdf = weighted running-" +
+                    "average fusion; denoises motion-stereo/net depth before the solver."), _accumulator);
 
             EditorGUILayout.Space();
             using (new EditorGUI.DisabledScope(_sessions.Length == 0))
@@ -110,7 +114,8 @@ namespace OpenRoomPlan.Editor
             preview.candidate = candidate; preview.hasCandidate = true;
             preview.groundTruth = gt; preview.hasGroundTruth = overlayGT && hasGT;
 
-            _result = Format(sessionId, player, candidate, points?.Length ?? 0, usedFrames,
+            _result = $"Accumulator: {_accumulator}\n" +
+                      Format(sessionId, player, candidate, points?.Length ?? 0, usedFrames,
                              overlayGT && hasGT, gt);
 
             Selection.activeGameObject = preview.gameObject;
@@ -125,7 +130,7 @@ namespace OpenRoomPlan.Editor
         RoomModel BuildModel(CaptureSessionPlayer player, string sessionId, DepthSource src,
                              out Vector3[] points, out int usedFrames, out bool anyDepth)
         {
-            var recon = new RoomReconstructor(_voxel);
+            var recon = new RoomReconstructor(_voxel, _accumulator);
             usedFrames = 0; anyDepth = false;
             int total = player.Frames.Count;
             try

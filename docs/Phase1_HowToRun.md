@@ -41,6 +41,11 @@ for the offline benchmark and eval steps that follow.
   prints the **Level-B decision metrics** (median/mean corner error, wall angle error, wall offset,
   floorplan IoU, dimension error, wall-match completeness) and the per-room **Go/No-Go tier**
   (GREEN ≤8 cm & ≤3° & IoU ≥0.90 / YELLOW / RED) straight from the spec §2 table (`RoomEval.cs`).
+  An **Accumulator** dropdown selects RawPointCloud (Phase-1 behaviour) or **Tsdf** — a voxel-hashed
+  semantic TSDF (`TsdfVolume.cs`) that fuses depth as a weighted running average, denoising
+  motion-stereo/net depth before the solver. Same session + both accumulators = a direct read on how
+  much fusion buys. The TSDF also carries a per-voxel `SemanticClass` channel and a BEV density
+  rasterizer, ready for Phase-2b segmentation and the wall line-net.
 - **Depth Anything V2-Small** provider — DONE (code): `OpenRoomPlan.Depth` assembly + `OpenRoomPlan ▸
   Bake Depth (DA-V2-S)`. Still needs the ONNX model dropped into a `Resources` folder — see
   [Phase2_DepthProvider.md](Phase2_DepthProvider.md).
