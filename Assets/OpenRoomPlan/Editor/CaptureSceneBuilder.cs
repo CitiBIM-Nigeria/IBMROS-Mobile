@@ -23,7 +23,8 @@ namespace OpenRoomPlan.Editor
     public static class CaptureSceneBuilder
     {
         const string ScenePath = "Assets/MyStuffs/Scenes/OpenRoomPlanCapture.unity";
-        const string PanelSettingsPath = "Assets/UI Toolkit/PanelSettings.asset";
+        const string SharedPanelSettingsPath = "Assets/UI Toolkit/PanelSettings.asset";
+        const string CapturePanelSettingsPath = "Assets/OpenRoomPlan/UI/CapturePanelSettings.asset";
         const string UxmlPath = "Assets/OpenRoomPlan/UI/CaptureScreen.uxml";
         const string UssPath = "Assets/OpenRoomPlan/UI/CaptureScreen.uss";
 
@@ -74,10 +75,9 @@ namespace OpenRoomPlan.Editor
             SetRef(rec, "arCamera", cam);
 
             // --- UI Toolkit record screen ---
-            var panelSettings = AssetDatabase.LoadAssetAtPath<PanelSettings>(PanelSettingsPath);
+            var panelSettings = GetOrCreateCapturePanelSettings();
             var uxml = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(UxmlPath);
             var uss = AssetDatabase.LoadAssetAtPath<StyleSheet>(UssPath);
-            if (panelSettings == null) Debug.LogWarning($"[ORP] PanelSettings not found at {PanelSettingsPath}");
             if (uxml == null) Debug.LogWarning($"[ORP] UXML not found at {UxmlPath}");
 
             var uiGO = new GameObject("Capture UI");
@@ -108,6 +108,34 @@ namespace OpenRoomPlan.Editor
                 "• Device: enable ARCore/ARKit in XR Plug-in Management, then Build & Run.\n\n" +
                 "Recordings are saved under Application.persistentDataPath/OpenRoomPlan/Sessions.",
                 "OK");
+        }
+
+        /// <summary>
+        /// The capture screen gets its OWN PanelSettings: the app's shared asset targets a 1200x800
+        /// landscape reference, which blows this portrait phone UI up until buttons overflow the screen.
+        /// Reference here is a 393x852 portrait phone, match-width, so USS px behave as logical points.
+        /// The theme is copied from the shared asset so visuals stay consistent with the app.
+        /// </summary>
+        static PanelSettings GetOrCreateCapturePanelSettings()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<PanelSettings>(CapturePanelSettingsPath);
+            if (existing != null) return existing;
+
+            var ps = ScriptableObject.CreateInstance<PanelSettings>();
+            ps.name = "CapturePanelSettings";
+            ps.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            ps.referenceResolution = new Vector2Int(393, 852);
+            ps.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
+            ps.match = 0f; // match width — one-column portrait UI
+
+            var shared = AssetDatabase.LoadAssetAtPath<PanelSettings>(SharedPanelSettingsPath);
+            if (shared != null && shared.themeStyleSheet != null)
+                ps.themeStyleSheet = shared.themeStyleSheet;
+            else
+                Debug.LogWarning("[ORP] Shared PanelSettings/theme not found; capture panel has no theme.");
+
+            AssetDatabase.CreateAsset(ps, CapturePanelSettingsPath);
+            return ps;
         }
 
         static void SetRef(Component c, string field, Object value)
