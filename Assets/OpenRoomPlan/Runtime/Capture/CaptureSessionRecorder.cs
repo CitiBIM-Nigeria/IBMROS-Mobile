@@ -18,7 +18,10 @@ namespace OpenRoomPlan.Capture
     /// NOTE (device tuning): frame throttling, output resolution, and the depth/confidence image formats
     /// vary by device/provider — validate the plane formats on the first on-device run (logged below).
     /// </summary>
-    [RequireComponent(typeof(ARCameraManager))]
+    // NOTE: deliberately no [RequireComponent(ARCameraManager)] — the recorder lives on its own
+    // GameObject and CONSUMES the rig's managers via the serialized references below. RequireComponent
+    // here would force a second ARCameraManager (and its required Camera) onto this object, off the
+    // XR rig, fighting ARCore for the camera.
     public sealed class CaptureSessionRecorder : MonoBehaviour
     {
         [Header("AR references")]
@@ -45,12 +48,17 @@ namespace OpenRoomPlan.Capture
         bool _loggedFormats;
         readonly System.Collections.Generic.List<Vector3> _pointBuffer = new();
 
-        void Reset() => cameraManager = GetComponent<ARCameraManager>();
+        void Reset() => cameraManager = FindAnyObjectByType<ARCameraManager>();
 
         void Awake()
         {
-            if (cameraManager == null) cameraManager = GetComponent<ARCameraManager>();
+            // Fallbacks find the XR rig's managers in the scene; never add components to this object.
+            if (cameraManager == null) cameraManager = FindAnyObjectByType<ARCameraManager>();
+            if (occlusionManager == null) occlusionManager = FindAnyObjectByType<AROcclusionManager>();
+            if (pointCloudManager == null) pointCloudManager = FindAnyObjectByType<ARPointCloudManager>();
             if (arCamera == null) arCamera = cameraManager != null ? cameraManager.GetComponent<Camera>() : Camera.main;
+            if (cameraManager == null)
+                Debug.LogError("[ORP] CaptureSessionRecorder: no ARCameraManager found in scene — recording will not work.");
         }
 
         public void StartRecording(string roomNotes = "")

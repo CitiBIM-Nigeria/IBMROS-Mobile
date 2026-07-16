@@ -66,9 +66,8 @@ namespace OpenRoomPlan.Editor
             var planeManager = originGO.AddComponent<ARPlaneManager>();
             SetRef(planeManager, "m_PlanePrefab", GetOrCreatePlanePrefab());
 
-            // --- Recorder ---
-            var recGO = new GameObject("Capture Recorder");
-            var rec = recGO.AddComponent<CaptureSessionRecorder>();
+            // --- Recorder (on the AR Camera, beside the managers it consumes) ---
+            var rec = camGO.AddComponent<CaptureSessionRecorder>();
             SetRef(rec, "cameraManager", camManager);
             SetRef(rec, "occlusionManager", occ);
             SetRef(rec, "pointCloudManager", pcm);
