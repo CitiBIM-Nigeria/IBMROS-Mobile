@@ -37,8 +37,10 @@ for the offline benchmark and eval steps that follow.
 
 ## 4. What's next
 - **Eval tool** (Editor) — DONE: `OpenRoomPlan ▸ Eval Tool` loads a recorded session → runs the
-  reconstructor → point cloud + room + dimensions, optional LiDAR-GT overlay. Turns a capture into a
-  Go/No-Go signal.
+  reconstructor → point cloud + room + dimensions, optional LiDAR-GT overlay. With the GT overlay it now
+  prints the **Level-B decision metrics** (median/mean corner error, wall angle error, wall offset,
+  floorplan IoU, dimension error, wall-match completeness) and the per-room **Go/No-Go tier**
+  (GREEN ≤8 cm & ≤3° & IoU ≥0.90 / YELLOW / RED) straight from the spec §2 table (`RoomEval.cs`).
 - **Depth Anything V2-Small** provider — DONE (code): `OpenRoomPlan.Depth` assembly + `OpenRoomPlan ▸
   Bake Depth (DA-V2-S)`. Still needs the ONNX model dropped into a `Resources` folder — see
   [Phase2_DepthProvider.md](Phase2_DepthProvider.md).

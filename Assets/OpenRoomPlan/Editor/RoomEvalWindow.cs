@@ -195,8 +195,17 @@ namespace OpenRoomPlan.Editor
                 sb.AppendLine($"LiDAR GT dimensions: {gt.dimensions.x:F2} × {gt.dimensions.y:F2} × {gt.dimensions.z:F2} m");
                 if (m.valid)
                 {
-                    Vector3 d = m.dimensions - gt.dimensions;
-                    sb.AppendLine($"  Δ vs GT: {Mathf.Abs(d.x)*100f:F1} / {Mathf.Abs(d.y)*100f:F1} / {Mathf.Abs(d.z)*100f:F1} cm");
+                    // Level-B decision metrics (spec §6) + Go/No-Go tier (spec §2).
+                    var eval = RoomEval.Compare(m, gt);
+                    sb.AppendLine();
+                    sb.AppendLine("— Level-B metrics vs GT —");
+                    sb.AppendLine($"  Corner error:   median {eval.medianCornerErrorMeters * 100f:F1} cm   mean {eval.meanCornerErrorMeters * 100f:F1} cm");
+                    sb.AppendLine($"  Wall angle err: {eval.meanWallAngleErrorDeg:F1}°");
+                    sb.AppendLine($"  Wall offset:    {eval.meanWallOffsetMeters * 100f:F1} cm");
+                    sb.AppendLine($"  Floorplan IoU:  {eval.floorplanIoU:F3}");
+                    sb.AppendLine($"  Dimension err:  {eval.dimensionErrorPct:F1} %");
+                    sb.AppendLine($"  Wall match:     {eval.wallCompletenessPct:F0} % of GT walls within 10 cm / 10°");
+                    sb.AppendLine($"  Go/No-Go tier (this room): {RoomEval.Tier(eval)}");
                 }
             }
             return sb.ToString();
