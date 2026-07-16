@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.InputSystem.XR;
 using UnityEngine.Rendering;
@@ -56,11 +57,18 @@ namespace OpenRoomPlan.Editor
             var camManager = camGO.AddComponent<ARCameraManager>();
             camGO.AddComponent<ARCameraBackground>();
             var occ = camGO.AddComponent<AROcclusionManager>();
-            camGO.AddComponent<TrackedPoseDriver>();
+            ConfigureTrackedPoseInput(camGO.AddComponent<TrackedPoseDriver>());
 
             origin.Camera = cam;
             origin.CameraFloorOffsetObject = offset;
+            // Handheld AR: session-space tracking, no VR-style standing-height offset. Leaving the
+            // XROrigin defaults (NotSpecified + 1.1176) lifts the camera 1.12 m above the trackables.
+            origin.RequestedTrackingOriginMode = XROrigin.TrackingOriginMode.Device;
+            origin.CameraYOffset = 0f;
             var pcm = originGO.AddComponent<ARPointCloudManager>();
+            var pointCloudPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabDir + "/AR Default Point Cloud.prefab");
+            if (pointCloudPrefab != null) SetRef(pcm, "m_PointCloudPrefab", pointCloudPrefab);
+            else Debug.LogWarning("[ORP] No point-cloud viz prefab found; feature points will be invisible (data still recorded).");
 
             // Plane detection + visualization (surfaces light up as they're scanned).
             var planeManager = originGO.AddComponent<ARPlaneManager>();
@@ -107,6 +115,32 @@ namespace OpenRoomPlan.Editor
                 "• Device: enable ARCore/ARKit in XR Plug-in Management, then Build & Run.\n\n" +
                 "Recordings are saved under Application.persistentDataPath/OpenRoomPlan/Sessions.",
                 "OK");
+        }
+
+        /// <summary>
+        /// AddComponent&lt;TrackedPoseDriver&gt; from script leaves the input actions with NO bindings
+        /// (the editor "XR Origin (Mobile AR)" preset is what normally supplies them), so the AR camera's
+        /// transform never updates on device: overlays look glued to the screen, the recorder's motion
+        /// gate never passes (frames stuck at 1), coverage never fills. Bind the standard XR/handheld-AR
+        /// controls explicitly. ARInputManager (on the AR Session) publishes these devices.
+        /// </summary>
+        static void ConfigureTrackedPoseInput(TrackedPoseDriver tpd)
+        {
+            var pos = new InputAction("Position", InputActionType.Value, expectedControlType: "Vector3");
+            pos.AddBinding("<XRHMD>/centerEyePosition");
+            pos.AddBinding("<HandheldARInputDevice>/devicePosition");
+
+            var rot = new InputAction("Rotation", InputActionType.Value, expectedControlType: "Quaternion");
+            rot.AddBinding("<XRHMD>/centerEyeRotation");
+            rot.AddBinding("<HandheldARInputDevice>/deviceRotation");
+
+            var state = new InputAction("Tracking State", InputActionType.Value, expectedControlType: "Integer");
+            state.AddBinding("<XRHMD>/trackingState");
+            state.AddBinding("<HandheldARInputDevice>/trackingState");
+
+            tpd.positionInput = new InputActionProperty(pos);
+            tpd.rotationInput = new InputActionProperty(rot);
+            tpd.trackingStateInput = new InputActionProperty(state);
         }
 
         /// <summary>
