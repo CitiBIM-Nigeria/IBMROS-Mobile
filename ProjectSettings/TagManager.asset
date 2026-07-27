@@ -4,6 +4,14 @@
 TagManager:
   serializedVersion: 3
   tags:
+  - Outside
+  - Roof
+  - ExteriorWall
+  - Module
+  - Floor
+  - Room
+  - Wall
+  - Ceil
   - ScaleHandle
   layers:
   - Default
@@ -14,18 +22,18 @@ TagManager:
   - UI
   - Interactable
   - Floor
-  - ScaleHandle
+  - FX
+  - Floor
   - Wall
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
+  - Join
+  - RoomBox
+  - Ghost
+  - Ceil
+  - Area
+  - Module
+  - ExteriorWall
+  - Roof
+  - Outside
   - 
   - 
   - 
