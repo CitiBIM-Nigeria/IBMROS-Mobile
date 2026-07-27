@@ -1,0 +1,569 @@
+# Exoa Local Patch Ledger — all IBMROS modifications to vendor source
+# Baseline: Downloads copy (post font/URP fixes, pre-migration). Upstream deprecated; no pristine archive.
+# Regenerate: this exact command block lives in docs (P1.6). Generated: 2026-07-18
+
+--- ./Common/Scripts/Serialization/FloorMapReader.cs	2023-03-05 07:54:05
++++ /Users/samuelshonubi/Documents/Dev/IBMROS Mobile/Assets/Exoa/./Common/Scripts/Serialization/FloorMapReader.cs	2026-07-18 06:51:01
+@@ -109,7 +109,41 @@
+             SaveSystem.Create(SaveSystem.Mode.FILE_SYSTEM).LoadFileItem(name, GetFolderName(), (string json) =>
+             {
+                 //FileName = name;
+-                DeserializeToScene(json);
++                // IBMROS: corrupt-save guard. The scene was already cleared above, so a parse
++                // exception here used to leave an empty editor with no feedback. We now catch it,
++                // try the rolling backups (.bak1..3 written by SaveSystem), and alert on failure.
++                bool parsedOk = false;
++                try
++                {
++                    DeserializeToScene(json);
++                    parsedOk = true;
++                }
++                catch (System.Exception e)
++                {
++                    HDLogger.LogError("Corrupt floor map '" + name + "': " + e.Message, HDLogger.LogCategory.Building);
++                    SaveSystem ss = SaveSystem.Create(SaveSystem.Mode.FILE_SYSTEM);
++                    string basePath = ss.GetBasePath(GetFolderName());
++                    for (int i = 1; i <= 3 && !parsedOk; i++)
++                    {
++                        string bakPath = basePath + name + ".json.bak" + i;
++                        if (!System.IO.File.Exists(bakPath))
++                            continue;
++                        try
++                        {
++                            DeserializeToScene(System.IO.File.ReadAllText(bakPath));
++                            parsedOk = true;
++                            AlertPopup.ShowAlert("ibmrosRecovered", "Recovered From Backup",
++                                "'" + name + "' was damaged and has been restored from backup " + i + ". Save now to make the recovery permanent.");
++                        }
++                        catch { }
++                    }
++                    if (!parsedOk)
++                    {
++                        AlertPopup.ShowAlert("ibmrosCorrupt", "Corrupt File",
++                            "'" + name + "' could not be loaded (" + e.Message + "). The file on disk was not modified.");
++                        return;
++                    }
++                }
+                 floorMapLoaded = true;
+                 string screenshotName = "Building_" + name + "_persp.png";
+                 ThumbnailGeneratorUtils.TakeAndSaveScreenshot(transform, screenshotName, false, new Vector3(1, -1, 1));
+--- ./Common/Scripts/Saving/SaveSystem.cs	2023-03-05 07:54:05
++++ /Users/samuelshonubi/Documents/Dev/IBMROS Mobile/Assets/Exoa/./Common/Scripts/Saving/SaveSystem.cs	2026-07-18 06:50:07
+@@ -69,6 +69,7 @@
+             HDLogger.Log("LoadFileItem " + GetBasePath(subFolderName) + "/" + fileName, HDLogger.LogCategory.FileSystem);
+ 
+             string content = null;
++            string loadError = null; // IBMROS: see deferred alert below
+ 
+             try
+             {
+@@ -87,8 +88,26 @@
+             catch (System.Exception e)
+             {
+                 HDLogger.LogError("Error loading " + subFolderName + "/" + fileName + " " + e.Message, HDLogger.LogCategory.FileSystem);
+-                AlertPopup.ShowAlert("error", "Error", "Error loading " + subFolderName + "/" + fileName + " " + e.Message);
++                // IBMROS: alert deferred — backup recovery below is attempted first
++                loadError = e.Message;
+             }
++
++            // IBMROS: recovery — if the primary file is missing/unreadable, fall back to the
++            // newest rolling backup written by SaveFileItem before surfacing an error.
++            if (string.IsNullOrEmpty(content) && mode == Mode.FILE_SYSTEM)
++            {
++                for (int i = 1; i <= 3 && string.IsNullOrEmpty(content); i++)
++                {
++                    string bakPath = GetBasePath(subFolderName) + fileName + ext + ".bak" + i;
++                    if (!File.Exists(bakPath))
++                        continue;
++                    try { content = File.ReadAllText(bakPath); } catch { }
++                    if (!string.IsNullOrEmpty(content))
++                        HDLogger.LogWarning("Recovered " + fileName + " from backup .bak" + i, HDLogger.LogCategory.FileSystem);
++                }
++            }
++            if (!string.IsNullOrEmpty(loadError) && string.IsNullOrEmpty(content))
++                AlertPopup.ShowAlert("error", "Error", "Error loading " + subFolderName + "/" + fileName + " " + loadError);
+ 
+             if (!string.IsNullOrEmpty(content))
+                 pCallback?.Invoke(content);
+@@ -147,7 +166,9 @@
+ 
+         public void SaveFileItem(string fileName, string subFolderName, string json, Action<string> pCallback = null)
+         {
+-            byte[] bytes = Encoding.ASCII.GetBytes(json);
++            // IBMROS: was Encoding.ASCII, which silently corrupted any non-ASCII character
++            // (e.g. non-Latin room names) to '?' on disk. UTF-8 is a strict superset for ASCII content.
++            byte[] bytes = Encoding.UTF8.GetBytes(json);
+             SaveFileItem(fileName, subFolderName, bytes, pCallback);
+         }
+         public void SaveFileItem(string fileName, string subFolderName, byte[] bytes, Action<string> pCallback = null)
+@@ -163,7 +184,22 @@
+             bool success = false;
+             try
+             {
+-                File.WriteAllBytes(GetBasePath(subFolderName) + fileName, bytes);
++                // IBMROS: atomic write — write to a temp file then swap, with rolling backups
++                // (.bak1..3) for .json files, so a crash mid-write or a bad save can never
++                // destroy the user's only copy. Previously this wrote straight over the target.
++                string path = GetBasePath(subFolderName) + fileName;
++                string tmpPath = path + ".tmp";
++                File.WriteAllBytes(tmpPath, bytes);
++                if (fileName.EndsWith(".json") && File.Exists(path))
++                {
++                    for (int i = 2; i >= 1; i--)
++                        if (File.Exists(path + ".bak" + i))
++                            File.Copy(path + ".bak" + i, path + ".bak" + (i + 1), true);
++                    File.Copy(path, path + ".bak1", true);
++                }
++                if (File.Exists(path))
++                    File.Delete(path);
++                File.Move(tmpPath, path);
+ 
+                 if (mode == Mode.RESOURCES)
+                 {
+--- ./Common/Scripts/Procedural/ProceduralRoom.cs	2023-03-05 07:54:05
++++ /Users/samuelshonubi/Documents/Dev/IBMROS Mobile/Assets/Exoa/./Common/Scripts/Procedural/ProceduralRoom.cs	2026-07-16 21:29:05
+@@ -292,7 +292,9 @@
+ 
+             md.Add(wall);
+             md.uv = MathUtils.GenerateUVs(md.vertices, magnitude, height, MathUtils.PlanType.XY);
+-            md.Rotate(Quaternion.FromToRotation(Vector3.right, vec.normalized));
++            // Rotate around Y only: FromToRotation is undefined for opposite vectors,
++            // so a wall running in exact -X got an arbitrary 180° axis and flipped upside down.
++            md.Rotate(Quaternion.AngleAxis(Vector3.SignedAngle(Vector3.right, vec.normalized, Vector3.up), Vector3.up));
+             md.Move(p0);
+ 
+             return md;
+@@ -324,7 +326,8 @@
+             }
+ 
+             md.AddQuad(points[0], points[1], points[2], points[3], true, uvs[0], uvs[1], uvs[2], uvs[3]);
+-            md.Rotate(Quaternion.FromToRotation(Vector3.right, vec.normalized));
++            // Same fix as CreateWallWithOpening: constrain the rotation to the Y axis
++            md.Rotate(Quaternion.AngleAxis(Vector3.SignedAngle(Vector3.right, vec.normalized, Vector3.up), Vector3.up));
+             md.Move(p0);
+ 
+             return md;
+### REMOVED in IBMROS: Assets/Exoa/Common/WelcomeScreen/Editor/HomeDesignerWelcomeScreen.cs
+
+### Files only in IBMROS copy:
+
+# ============================================================================
+# A1 — Observable Document (2026-07-18, architecture ownership track)
+# Every mutation now announces itself on IBMROS.Core.DocumentEvents, raised at
+# the mutation source. All edits tagged `// IBMROS:`. Summary (see files for
+# exact hunks; regenerate against a pristine copy is no longer possible —
+# upstream deprecated — so entries from here on are descriptive):
+#
+# Common/Scripts/Controllers/SpaceController.cs
+#   + OnControlPointsChanged: RaiseChanged(Geometry, "Edit Shape")
+#   + OnPathChanged:          RaiseChanged(Geometry, "Draw")
+#   + OnChangeSequenceSettings: RaiseChanged(ItemSettings, "Change Settings")
+#
+# Common/Scripts/Controllers/OutsideController.cs
+#   + Rebuild(): fires GameEditorEvents.OnRequestRebuildBuilding after Generate —
+#     parity with RoomController; outside areas were the only space type whose
+#     rebuild never announced itself at building level.
+#
+# FloorMapDesigner/Scripts/Controllers/OpeningController.cs
+#   + OnControlPointsChanged: RaiseChanged(Opening, "Move Opening")
+#   + OnPathChanged:          RaiseChanged(Opening, "Place Opening")
+#   + OnChangeSettings:       RaiseChanged(ItemSettings, "Edit Opening")
+#
+# FloorMapDesigner/Scripts/UI/UIBaseItem.cs
+#   + OnChangeName: RaiseChanged(Rename, "Rename")  — was an EMPTY handler: renames
+#     mutated saved data with zero events (silent mutation, root cause of undo polling)
+#   + OnClickDuplicate: RaiseChanged(Duplicate, "Duplicate")
+#   + Delete():         RaiseChanged(Delete, "Delete")
+#
+# FloorMapDesigner/Scripts/Serialization/FloorMapSerializer.cs
+#   + OnRequestFloorActionHandler: RaiseChanged(Floor, "<action> Floor") for
+#     Add/Duplicate/Remove (Select is navigation, not a mutation)
+# ============================================================================
+
+# ============================================================================
+# A2 step 1 — Document Model Extraction (2026-07-18)
+#
+# FloorMapDesigner/Scripts/Serialization/FloorMapSerializer.cs
+#   * private FloorMapV2 currentFloorMapFile  →  IBMROS.Core.FloorPlanDocument document
+#     (public Document property exposed — the A3 gateway seam)
+#   * AddFloor/DuplicateFloor/RemoveFloor/GetFloorById → delegate to the model,
+#     which raises the DocumentEvents.Floor events itself (A1 raise block in
+#     OnRequestFloorActionHandler removed — model announces its own mutations)
+#   * DeserializeToScene → document.LoadFromJson + DeserializeProjectUI(document.Data)
+#   * SerializeScene → gathers UI state as before (A2 step 2 will invert this),
+#     enters it via document.SetFloors/SetSettings, serializes via document.ToJson
+#   * IsSceneEmpty/SerializeEmpty/Clear → document.IsEmpty/CreateEmpty/Reset
+#   Behavior-preserving refactor; struct copy semantics (incl. DuplicateFloor's
+#   shared spaces-list reference) reproduced exactly and pinned by dotnet tests.
+#
+# Known vendor quirk pinned (not fixed): IsSceneEmpty inspects floors[0] only —
+# a doc with blank first floor + populated later floors counts "empty" and can
+# skip UISaving save prompts. Registered for A2 step 2.
+# ============================================================================
+
+# ============================================================================
+# Color-determinism fix (2026-07-18, user-reported bug from live testing)
+#
+# FloorMapDesigner/Scripts/Controllers/ControlPointsController.cs
+#   * Awake(): color index was FindObjectsOfType<UIBaseItem>().Length — counts
+#     items pending deferred destruction, so every load/undo restore re-rolled
+#     all floor colors (floors flipping brown/green/yellow on undo). Now uses
+#     the sibling index in the freshly-created ControlPointsControllers
+#     container: deterministic per document order, immune to dying objects.
+#     Long-term: persist a color index in the document (A2 schema note).
+# ============================================================================
+
+# ============================================================================
+# A4 — Service Lifecycle & Statics Hygiene + A2 step 2a — Item Identity
+# (2026-07-18, A-track acceleration batch)
+#
+# Common/Scripts/Events/GameEditorEvents.cs
+# TouchCameraLite/Scripts/Events/CameraEvents.cs
+# Common/Scripts/Controllers/AppController.cs
+#   + ResetStatics() [RuntimeInitializeOnLoadMethod(SubsystemRegistration)]:
+#     static delegates/instances survive disabled domain reload between play
+#     sessions (documented Exoa issue, duplicate handlers); reset per session.
+#
+# Common/Scripts/Controllers/FloorController.cs
+# FloorMapDesigner/Scripts/Controllers/ControlPointsController.cs
+#   * GetGrid(): was FindObjectOfType<Grid>() per call on rebuild hot paths;
+#     now cached in a static field (grid never changes at runtime).
+#
+# Common/Scripts/Data/DataModel.cs
+#   + FloorMapItem.uniqueId (additive schema, R4) + GenerateUniqueId() —
+#     stable per-item identity; old saves carry null, id assigned lazily on
+#     load and persisted on next save. Foundation for A2 write-through UI,
+#     A3 gateway addressing, A5 dirty-scoped rebuilds.
+#
+# FloorMapDesigner/Scripts/UI/UIBaseItem.cs
+#   + itemUniqueId field + public ItemUniqueId; GetData() emits it, SetData()
+#     adopts persisted id (generates when missing).
+#
+# FloorMapDesigner/Scripts/UI/UIFloorMapMenu.cs
+#   + OnDuplicateUIItem clears s.uniqueId — duplicates never share identity.
+# ============================================================================
+
+# ============================================================================
+# A2 step 2b (partial) — document as query model + IsEmpty fix
+# A3 full (partial) — settings/query gateway ops
+# (2026-07-18, A-track acceleration batch 2)
+#
+# All-first-party (no new vendor edits this batch):
+#   Assets/IBMROSBridge/Core/FloorPlanDocument.cs
+#     * IsEmpty: was floors[0]-only (vendor bug — blank ground + populated upper
+#       floor read "empty", could skip UISaving save prompt); now scans all floors.
+#     + GetAllItemIds() / GetItemById(id, out found): query surface over the model.
+#   Assets/IBMROSBridge/Core/FloorPlanEditor.cs
+#     + SetItemSettings(id, width?/height?/ypos?/window params) — flows through the
+#       widget onValueChanged -> BroadcastChange path; one undo step.
+#     + SetBuildingSettings(...) — folds the UIBuildingSettings mutation; one undo step.
+#     + GetItemIds()/GetItemJson(id) — read via SyncedDocument() (SerializeScene
+#       refreshes document from UI, then query the model — zero drift risk; becomes a
+#       passthrough when A2 2c flips serialize-authority to the document).
+#   Assets/IBMROSBridge/Stability/ApiSmokeTest.cs — +5 assertions (query, set item,
+#       set building settings rebuild, persistence).
+#
+# NOT YET DONE (A2 step 2c, needs interactive play-test): flip SerializeScene to read
+# the document instead of walking UI (widget-as-store fully retired); requires
+# verifying slider-drag + floor-switch sync paths a human must exercise.
+# ============================================================================
+
+# ============================================================================
+# Undo regressions fix (2026-07-18, live-testing feedback)
+#
+# REMOVED (first-party): IBMROSBridge/UI/PlanModeToggleHud.cs (redundant — the
+#   existing toolbar camera button is an ActionButton with camAction=SwitchPerspective;
+#   my earlier "HDInputs.ChangePlanMode is dead code" note missed the ActionButton path)
+#   and IBMROSBridge/UndoRedo/RestoreVeil.cs (the screenshot veil desynced from a
+#   still-moving camera on undo -> "scene shifts up then settles" jolt; net worse than
+#   the small rebuild flicker it tried to hide).
+#
+# Common/Scripts/Controllers/AppController.cs
+#   + static SuppressNextFocusOnLoad flag; OnFileLoaded skips the 0.5s DelayedFocus
+#     when set (undo restore uses the file-load path but must not move the viewpoint).
+#     Replaces the racy CancelInvoke("DelayedFocus") approach.
+#
+# IBMROSBridge/UndoRedo/UndoRedoService.cs
+#   * Restore(): drop RestoreVeil; set AppController.SuppressNextFocusOnLoad before
+#     firing OnFileLoaded.
+#
+# Residual: undo still does full clear+deserialize (brief rebuild flicker on geometry
+# changes). Real fix = A5 diff-based/scoped restore using A2 item identity — next phase.
+# ============================================================================
+
+# ============================================================================
+# A5 v1 — scoped undo restore (2026-07-18)
+#
+# First-party only (IBMROSBridge/UndoRedo/UndoRedoService.cs):
+#   * Restore() now tries TryScopedRestore() before FullRestore(). Scoped path
+#     handles the common case where the undo/redo target differs from the live
+#     scene ONLY in item scalars/names: single floor, same floor id, identical
+#     settings, identical item id set, geometry equal within 1e-4 epsilon. It
+#     applies target scalars to the matching live UIBaseItems in place —
+#     rename fires no rebuild, resize fires only that item's localized rebuild —
+#     so there is NO scene teardown and NO flicker for refinement undos.
+#   * Any structural difference (geometry change, item add/remove, floor change,
+#     settings change, id mismatch, live/document divergence) or any exception
+#     falls back to the always-correct full clear+deserialize path.
+#   Proven headless: ApiSmokeTest asserts a rename-undo AND rename-redo keep the
+#   SAME RoomController GameObject instance id (a full rebuild would recreate it).
+#
+# Remaining (A5 v2, needs interactive play-test): scoped restore for GEOMETRY
+# changes (point drag) via per-item recreate/in-place control-point update — the
+# most common undo during active drawing still uses the full path for now.
+# ============================================================================
+
+# ============================================================================
+# Undo lifecycle fix + A5 v2 Reconcile Restore (2026-07-18) — first-party only
+#
+# ROOT CAUSE (owner-reported "undo works once / redo dies in seconds"):
+# serialize(deserialize(S)) != S — on load, stored opening `directions` are never
+# applied (recomputed later by ReSnap) and floats drift, so every restore was
+# followed by a phantom capture that truncated redo and wedged undo.
+#
+# IBMROSBridge/UndoRedo/SnapshotHistory.cs
+#   + ReplaceCurrent(state): overwrite current entry (cursor/redo/label intact).
+# IBMROSBridge/UndoRedo/UndoRedoService.cs
+#   + ResyncBaselineAfterRestore(): after rebuilds settle, adopt the scene's own
+#     serialization as the canonical current entry (self-stabilizing history).
+#   * Undo(): commit-pending only when a change signal actually arrived.
+#   * Restore(): uses RestoreReconciler; full path only as fallback.
+#   + StepCount/CursorIndex diagnostics.
+# IBMROSBridge/UndoRedo/RestoreReconciler.cs (new)
+#   Identity-keyed diff-and-reconcile restore (Unreal-transaction / Figma-reconcile
+#   pattern): scalars in place, geometry via in-place control-point moves, per-item
+#   add/remove; unchanged items untouched. Falls back for multi-floor/settings/
+#   identity-less/type-morph/divergence cases.
+# IBMROSBridge/Core/FloorPlanEditor.cs
+#   + MoveItemPoints(id, pointsMeters) — A3 op, same in-place recipe.
+# IBMROSBridge/Stability/ApiSmokeTest.cs — lifecycle regression suite: redo
+#   survives 6.5s idle after undo; full undo-walk to empty + redo-walk forward;
+#   room GameObject survives door-delete-undo and geometry-undo.
+# ============================================================================
+
+# ============================================================================
+# Opening 90° rotation on undo + redo-death, real root cause (2026-07-18)
+#
+# ROOT: FloorMapDesigner/Scripts/Controllers/ControlPointsController.cs
+# CreateControlPointBasedOnNormalizedPosition never set ControlPoint.dir, so every
+# recreated opening started with dir=zero. OpeningController.Rebuild renders zero-dir
+# openings at the base Euler(0,90,0) ("everything rotated 90°"). The later re-snap
+# that corrected dir ALSO changed serialize output after a restore -> phantom undo
+# step -> redo truncated ("redo dies in seconds"). One cause, both symptoms.
+#
+# FloorMapDesigner/Scripts/UI/UIFloorMapMenu.cs (vendor, // IBMROS)
+#   * CreateNewUIItem: apply seq.directions[index] to each created control point.
+#     Openings now render correctly immediately and serialize(restore(S)) == S.
+#
+# IBMROSBridge/UndoRedo/RestoreReconciler.cs (first-party)
+#   * Treat directions as DERIVED: diff geometry by normalizedPositions only; never
+#     hand-place opening points (recreate them); after any structural change fire
+#     OnRequestRepositionOpenings so every opening re-snaps its direction from the
+#     current walls (mirrors the full-load rebuild cascade).
+#
+# IBMROSBridge/UndoRedo/UndoRedoService.cs (first-party)
+#   * ResyncBaselineAfterRestore: poll-until-stable (two equal consecutive serializes)
+#     under a `resyncing` guard that blocks the capture pipeline while settling, so no
+#     phantom step can be pushed regardless of re-snap/rebuild duration.
+#
+# ApiSmokeTest.cs: opening-not-at-90°-base assertion (root-fix regression) +
+#   serialize-stable-across-leak-sweep after an opening restore (redo-death regression).
+# ============================================================================
+
+# ============================================================================
+# Deterministic item color from stable identity (2026-07-18) — proper color fix
+#
+# Item color was derived from a transient counter / sibling index, so it shifted
+# on rebuild/undo/reload AND (latent) whenever the A5 reconciler recreated an item.
+# Now derived from the persisted uniqueId → a given item is always the same color.
+#
+# IBMROSBridge/Core/ItemColor.cs (new): FNV-1a(uniqueId) % palette length (stable
+#   across platforms/sessions, unlike string.GetHashCode).
+# FloorMapDesigner/Scripts/UI/UIFloorMapMenu.cs (vendor // IBMROS): CreateNewUIItem
+#   sets cpc.pathColor / colorDisplayed / drawer.DrawingColor from ItemColor.ForId
+#   (using seq.uniqueId, or a freshly realized ItemUniqueId for new items) BEFORE the
+#   first build, so the mesh is colored correctly from the start.
+# ApiSmokeTest.cs: room color derives from id + is stable across a full teardown/rebuild.
+# ============================================================================
+
+# ============================================================================
+# P2.6 Selection workflow + touch deletion (2026-07-18) — first-party only
+# (roadmap feature work resumed; no vendor edits — rides on A2 identity + A3 gateway)
+#
+# IBMROSBridge/Interaction/SelectionService.cs (new): tap→raycast→IObjectDrawer.UI
+#   .ItemUniqueId; reversible _BaseColor MPB highlight re-applied across rebuilds;
+#   self-clears if the selected item is deleted/undone; tap vs drag disambiguation.
+# IBMROSBridge/Interaction/SelectionActionBar.cs (new): bottom-centre Duplicate/Delete
+#   contextual bar → FloorPlanEditor gateway (one undo step each).
+# IBMROSBridge/Core/FloorPlanEditor.cs: + DuplicateItem(id) gateway op.
+# ApiSmokeTest.cs: raycast-resolves-to-id, SelectById, duplicate, delete-selected.
+# ============================================================================
+
+# ============================================================================
+# P3.1 Rectangular-room tool (2026-07-18) — first-party only
+#
+# IBMROSBridge/Core/FloorPlanEditor.cs: + CreateRectRoomFromCorners(a,b) with
+#   MIN_RECT_SIDE (0.5m) guard -> reuses existing CreateRectRoom (A3 dividend).
+# IBMROSBridge/Interaction/RectRoomTool.cs (new): "Rect Room" arm button, two grid-
+#   snapped corner taps, rubber-band LineRenderer preview, ground = camera ray ∩ y=0,
+#   stays armed for multiple rooms, Esc/toggle exits. No engine changes.
+# IBMROSBridge/Interaction/SelectionService.cs: skip pick while RectRoomTool armed.
+# ApiSmokeTest.cs: corner->room correct dimensions + degenerate-pair rejection.
+# ============================================================================
+
+# ============================================================================
+# Scoped opening undo — stop unrelated openings from flickering (2026-07-18)
+#
+# Reported: undoing one window/door rebuilt ALL openings (flicker). Cause: the A5
+# reconciler fired a GLOBAL OnRequestRepositionOpenings after ANY structural change.
+# With stored directions now applied on creation, that global re-snap is only needed
+# when room/outside WALLS actually move.
+#
+# IBMROSBridge/UndoRedo/RestoreReconciler.cs: fire OnRequestRepositionOpenings only
+#   when a Room/Outside item was added/removed/moved (wallsChanged); opening add/
+#   remove/edit no longer re-snaps other openings.
+# ApiSmokeTest.cs: add a 2nd opening, undo it, assert the 1st opening's visual
+#   GameObject instance is UNCHANGED (proves no rebuild/flicker of unrelated openings).
+#
+# Note (tech debt, not blocking): removing/adding an opening still fires the vendor
+# global OnRequestRebuildAllRooms, so on MULTI-room plans other rooms' meshes rebuild.
+# Fine for single-room; true dirty-room scoping is P4.1 / A5 v3 — deferred.
+# ============================================================================
+
+# ============================================================================
+# A7 stage 1 — Scoped opening invalidation (2026-07-18, deep-ownership mandate)
+#
+# Replaces broadcast rebuild (opening change -> ALL rooms rebuild) with
+# dependency-scoped invalidation (opening -> only rooms whose wall it touches + building).
+#
+# IBMROSBridge/Core/ScopedRebuild.cs (new): ForOpeningPositions() — point-to-segment
+#   proximity (0.35m margin, conservative) selects affected SpaceControllers, calls
+#   RequestRebuild on each, rebuilds the single building. #else fallback = global.
+# Common/Scripts/Controllers/SpaceController.cs: + public RequestRebuild() (scoped entry).
+# FloorMapDesigner/Scripts/Controllers/OpeningController.cs: Rebuild's
+#   OnRequestRebuildAllRooms broadcast -> ScopedRebuild.ForOpeningPositions(worldPosList).
+# FloorMapDesigner/Scripts/UI/UIBaseItem.cs: Delete of an opening captures its footprint
+#   and scopes; room/outside delete stays global (A7 stage 2).
+# ApiSmokeTest.cs: distant room's Floor mesh instance unchanged when an opening on
+#   another room changes; scoped mesh stats == full-rebuild mesh stats (correctness).
+#
+# Debt (logged, A7 stage 2): room-geometry + room/outside delete still broadcast.
+# ============================================================================
+
+# ============================================================================
+# A7 stage 2 — Scoped room-geometry reposition + scoped room delete (2026-07-18)
+#
+# Finding: RoomController.Rebuild is already per-instance (only the edited room's mesh
+# regenerates), so the remaining broad invalidation on the room side is (a) the GLOBAL
+# opening reposition (every opening re-snaps on any room path change) and (b) room
+# DELETE broadcasting OnRequestRebuildAllRooms. Root cause of (a) being hard to scope:
+# openings bind to walls by PROXIMITY, with no explicit opening->wall reference.
+#
+# FloorMapDesigner/Scripts/Controllers/OpeningController.cs: + public RequestReposition().
+# Common/Scripts/Controllers/{SpaceController,RoomController,OutsideController}.cs:
+#   OnRequestRepositionOpenings broadcast -> ScopedRebuild.RepositionOpeningsNear(this).
+# IBMROSBridge/Core/ScopedRebuild.cs: + RepositionOpeningsNear(room), ForRoomRemoved(footprint),
+#   PolygonsNear; AnyPointNearPolygon gains a margin param (0.6m reposition, 0.35m rebuild).
+# FloorMapDesigner/Scripts/UI/UIBaseItem.cs: room/outside delete -> ScopedRebuild.ForRoomRemoved.
+# ApiSmokeTest.cs: creating a distant room does NOT re-snap room A's door; deleting a
+#   distant room does NOT rebuild room A; scoped==full geometry for both.
+#
+# NEW A7 stage 2b (root-cause, logged): openings bind by proximity, not explicit
+# reference; robust reposition scoping (and large-wall-move correctness) wants an
+# explicit opening->wall binding stored on the item. Reposition margin (0.6m) is the
+# interim heuristic.
+# ============================================================================
+
+# ============================================================================
+# A7 stage 2b — explicit opening->host-room binding + 2 fixes (2026-07-18)
+#
+# Fixes from the first clean A7 verification (2 failures caught):
+#  - Room-delete building-ordering bug: ForRoomRemoved fired the shell rebuild while
+#    the deleted room's GameObject still existed (Unity end-of-frame Destroy), so the
+#    shell kept the removed contour. Fix: IBMROSBridge/Core/RebuildScheduler.cs defers
+#    the building rebuild one frame; ScopedRebuild's scoped paths use it. (scoped==full
+#    now passes for room delete.)
+#  - Test-only: selection raycast-resolve ran deep in a mutated sequence AND from a
+#    top-of-world ray (hits the building roof). Moved it to the clean step-12 scene with
+#    a ray from inside the room. (Reveals: plan/top-down selection would hit the roof —
+#    logged for when 2D-plan selection lands.)
+#
+# Stage 2b — explicit hosting:
+# IBMROSBridge/Core/OpeningHostRegistry.cs (new): opening-item-id -> host-room-item-id,
+#   recorded at the authoritative claim (room rebuild, EXOA's 0.2m test), item-id keyed.
+# Common/Scripts/Controllers/RoomController.cs: registers hosted openings during Rebuild
+#   (ScopedRebuild.IsOpeningOnPolygon, 0.2m).
+# IBMROSBridge/Core/ScopedRebuild.cs: RepositionOpeningsNear reposition an opening whose
+#   REMEMBERED host is this room (exact — follows the wall through any move) UNION margin.
+# IBMROSBridge/Core/FloorPlanEditor.cs: MoveItemPoints on a room re-snaps its hosted
+#   openings so they follow the walls.
+# ApiSmokeTest.cs: door registered as hosted by room A; clean-scene raycast resolves to
+#   room A; (room-delete/reposition scoping + scoped==full from stage 2).
+# ============================================================================
+
+# ============================================================================
+# Multi-opening-item blink fix (2026-07-18, precise user repro)
+#
+# ROOT CAUSE (from user report: undoing the 3rd door blinks doors 1&2, windows
+# don't; different types never cross-blink): consecutive same-type openings drawn
+# in one session are multiple POINTS in a single OpeningController item. On point-
+# count decrease, OpeningController.Rebuild called transform.ClearChildren() — nuking
+# and recreating EVERY opening instance in that item → the survivors blink. AND the
+# undo reconciler recreated the whole opening item (delete+add) on any point change,
+# which also destroyed all its instances.
+#
+# FloorMapDesigner/Scripts/Controllers/OpeningController.cs: Rebuild removes ONLY the
+#   excess trailing children (detach + DestroyUniversal), keeping/reusing the rest.
+# IBMROSBridge/UndoRedo/RestoreReconciler.cs: SetItemPointsInPlace (generalizes
+#   MovePointsInPlace to add/remove control points) — reconcile an item's points IN
+#   PLACE for BOTH rooms and openings, keeping the item (and its surviving opening
+#   instances) alive. Reconciler geometry-diff no longer delete+adds openings.
+#   + Debug.Log diagnostics ([IBMROS Reconcile] scoped:.. / full-restore: reason).
+#   + type-morph now recreates just that item (was full-restore fallback).
+# ApiSmokeTest.cs step 15: 3-point door -> 2, surviving opening GameObject instances
+#   preserved (no blink).
+#
+# Note (obs 3, minor): adding openings very fast coalesces into one undo step (they
+# fall within the 0.4s capture settle window) -> undo removes them together. Logged
+# as finer-undo-granularity future work, not fixed now.
+# ============================================================================
+
+# ============================================================================
+# REVERT in-place opening reconcile (2026-07-18) — corruption regression
+#
+# The in-place point reconcile for multi-point OPENING items (added earlier same day
+# to kill the item-blink) caused worse problems in interactive stress testing
+# (10+ doors): doors desynced from their wall holes, doors shifted, the building
+# vanished/needed redo. Root: reconciling a multi-point OpeningController's points in
+# place during undo chains desyncs the parametric wall holes from the door visuals and
+# can leave bad state. Reverted: RestoreReconciler geometry-diff recreates the changed
+# OPENING item (delete+add, correct load path, scoped to that item + its room); ROOMS
+# still reconcile in place. Correctness > the item-blink. OpeningController remove-excess
+# fix + SetItemPointsInPlace method + diagnostics kept (correct in isolation, tested).
+# Blink of the CHANGED opening item returns (acceptable); proper blink-free opening undo
+# needs interactive diagnostics + verification (see [IBMROS Reconcile] console logs).
+# Separate open issue: rapid opening adds coalesce into one undo step (0.4s settle
+# window) -> multiple removed per undo. Undo-granularity redesign, not yet done.
+# ============================================================================
+
+# ============================================================================
+# One-opening-per-item (2026-07-18, user-chosen proper fix for opening undo blink)
+#
+# Root of the blink: consecutive same-type openings drawn in one session were POINTS
+# in ONE OpeningController item, so undo recreated the whole item -> survivors blink.
+# The gateway (AddOpening) already makes one item per opening; this makes the
+# INTERACTIVE draw loop do the same.
+#
+# ControlPointsController.cs: + public singlePointMode. On placing a ghost point in
+#   singlePointMode: stop drawing this item (IsDrawing=false) and call
+#   UIFloorMapMenu.ContinueDrawingNewOpening(this).
+# OpeningController.cs: Init sets cpc.singlePointMode = true (rooms stay multi-point).
+# UIFloorMapMenu.cs: + ContinueDrawingNewOpening(cpc) arms a fresh opening of the same
+#   type; DisableDrawModeOnItems(disableAll) -> RemoveEmptyOpenings (delete the trailing
+#   0-point armed opening); GetItemsData skips 0-point openings (clean snapshots/saves).
+#
+# Result: each door/window is its own item -> undo removes one at a time with NO blink
+# of others (proven by the gateway-based apitest, which already uses one-item-per-opening
+# and verifies scoped/clean undo), and openings become independently selectable/deletable.
+# NEEDS interactive verification (draw-loop timing) — headless tests can't drive taps.
+# ============================================================================
