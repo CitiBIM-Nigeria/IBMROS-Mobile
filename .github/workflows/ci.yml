@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, furniture-backend-migration]
+    paths:
+      - "Assets/IBMROS/**"
+      - "Tooling/**"
+      - "Packages/manifest.json"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "Assets/IBMROS/**"
+      - "Tooling/**"
+
+jobs:
+  # Fast, license-free guard: compiles the pure-C# room engine + vendored
+  # geometry libs at Unity's exact language level (C# 9 / netstandard2.1)
+  # with zero Unity references. Catches both syntax breaks and any attempt
+  # to leak UnityEngine into the engine assembly (doctrine D3).
+  engine-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Build engine (no Unity)
+        run: dotnet build Tooling/EngineSyntaxCheck -c Release
+      - name: Run pure engine tests (no Unity)
+        run: dotnet test Tooling/EngineTests -c Release --logger "console;verbosity=minimal"
+
+  # Full Unity edit-mode test run (GeometrySpikeTests, GoldenAssert, glTFast
+  # spike, and everything Phase 1+ adds). Requires game-ci license secrets:
+  #   UNITY_LICENSE (or UNITY_EMAIL/UNITY_PASSWORD/UNITY_SERIAL)
+  # Opt in by setting the repository variable ENABLE_UNITY_CI to 'true'
+  # after configuring secrets — see https://game.ci/docs/github/activation
+  unity-tests:
+    if: ${{ vars.ENABLE_UNITY_CI == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ hashFiles('Packages/packages-lock.json') }}
+          restore-keys: Library-
+      - uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          testMode: EditMode
+          checkName: Unity EditMode Tests
