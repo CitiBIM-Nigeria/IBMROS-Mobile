@@ -1,0 +1,97 @@
+﻿using Exoa.Events;
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Exoa.Designer
+{
+
+    public class RoomController : SpaceController, IObjectDrawer
+    {
+#if FLOORMAP_MODULE
+        public ProceduralRoom proceduralRoom
+        {
+            get
+            {
+                return proceduralSpace as ProceduralRoom;
+            }
+
+            set
+            {
+                proceduralSpace = value;
+            }
+        }
+
+
+        override protected void Rebuild(bool sendRepositionOpeningsEvent = false)
+        {
+            if (lastRebuild > Time.time - delayBetweenRebuilds)
+            {
+                queuedRebuild = true;
+                if (sendRepositionOpeningsEvent)
+                    queuedSendRepositionOpeningsEvent = true;
+                return;
+            }
+
+            if (sendRepositionOpeningsEvent)
+            {
+                //print("call OnRequestRepositionOpenings");
+                IBMROS.Core.ScopedRebuild.RepositionOpeningsNear(this); // IBMROS: A7 scoped reposition
+            }
+
+            lastRebuild = Time.time;
+            queuedRebuild = false;
+            queuedSendRepositionOpeningsEvent = false;
+
+
+            //print("RebuildMesh sendRepositionOpeningsEvent:" + sendRepositionOpeningsEvent + " roomColor:" + roomCOlor);
+            List<Vector3> worldPosList = cpc.GetPointsWorldPositionList();
+
+            if (proceduralSpace == null)
+                proceduralSpace = GetComponent<ProceduralRoom>();
+
+            if (worldPosList.Count < 3 || MathUtils.PointsAreInLine(worldPosList))
+            {
+                proceduralSpace.GenerateEmpty();
+                return;
+            }
+            //print("Room Rebuild");
+
+            // Getting all windows
+            List<ProceduralRoom.GenericOpening> openings = new List<ProceduralRoom.GenericOpening>();
+            List<Vector3> pointList = null;
+            UIBaseItem[] items = GameObject.FindObjectsOfType<UIBaseItem>();
+
+            for (int i = 0; i < items.Length; i++)
+            {
+                ProceduralRoom.GenericOpening.OpeningType oType = ProceduralRoom.GenericOpening.OpeningType.Opening;
+                Enum.TryParse<ProceduralRoom.GenericOpening.OpeningType>(items[i].sequencingItemType.ToString(), out oType);
+
+                if (items[i].sequencingItemType == DataModel.FloorMapItemType.Door ||
+                   items[i].sequencingItemType == DataModel.FloorMapItemType.Window ||
+                   items[i].sequencingItemType == DataModel.FloorMapItemType.Opening)
+                {
+                    pointList = items[i].cpc.GetPointsWorldPositionList();
+                    for (int j = 0; j < pointList.Count; j++)
+                    {
+                        openings.Add(new ProceduralRoom.GenericOpening(oType, pointList[j], items[i]));
+                    }
+
+                    // IBMROS: A7 stage 2b — record the authoritative opening→host-room
+                    // binding when THIS room actually claims the opening (within EXOA's
+                    // 0.2 m wall test). Reposition later targets the remembered host
+                    // exactly, so an opening follows its wall through any move.
+                    if (ui != null && IBMROS.Core.ScopedRebuild.IsOpeningOnPolygon(pointList, worldPosList))
+                        IBMROS.Core.OpeningHostRegistry.SetHost(items[i].ItemUniqueId, ui.ItemUniqueId);
+                }
+            }
+
+            proceduralSpace.Openings = openings;
+            proceduralSpace.SpaceVertexColor = DrawingColor;
+            proceduralSpace.Generate(worldPosList);
+
+            GameEditorEvents.OnRequestRebuildBuilding?.Invoke();
+        }
+#endif
+    }
+}
