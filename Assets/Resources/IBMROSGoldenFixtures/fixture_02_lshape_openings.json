@@ -1,0 +1,121 @@
+{
+  "version": "v2",
+  "floors": [
+    {
+      "uniqueId": "golden-f2",
+      "spaces": [
+        {
+          "type": "Room",
+          "name": "L Room",
+          "width": 0.0,
+          "height": 0.0,
+          "ypos": 0.0,
+          "hasWindow": false,
+          "windowFrameSize": 0.0,
+          "windowSizeH": 0.0,
+          "windowSizeV": 0.0,
+          "windowSubDivH": 0,
+          "windowSubDivV": 0,
+          "normalizedPositions": [
+            {
+              "x": 0.15,
+              "y": 0.15,
+              "z": 0.0
+            },
+            {
+              "x": 0.85,
+              "y": 0.15,
+              "z": 0.0
+            },
+            {
+              "x": 0.85,
+              "y": 0.5,
+              "z": 0.0
+            },
+            {
+              "x": 0.5,
+              "y": 0.5,
+              "z": 0.0
+            },
+            {
+              "x": 0.5,
+              "y": 0.85,
+              "z": 0.0
+            },
+            {
+              "x": 0.15,
+              "y": 0.85,
+              "z": 0.0
+            }
+          ],
+          "directions": []
+        },
+        {
+          "type": "Door",
+          "name": "Door 1",
+          "width": 0.9,
+          "height": 2.1,
+          "ypos": 0.0,
+          "hasWindow": false,
+          "windowFrameSize": 0.0,
+          "windowSizeH": 0.0,
+          "windowSizeV": 0.0,
+          "windowSubDivH": 0,
+          "windowSubDivV": 0,
+          "normalizedPositions": [
+            {
+              "x": 0.5,
+              "y": 0.15,
+              "z": 0.0
+            }
+          ],
+          "directions": [
+            {
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          ]
+        },
+        {
+          "type": "Window",
+          "name": "Window 1",
+          "width": 1.2,
+          "height": 1.1,
+          "ypos": 0.9,
+          "hasWindow": false,
+          "windowFrameSize": 0.05,
+          "windowSizeH": 1.2,
+          "windowSizeV": 1.1,
+          "windowSubDivH": 2,
+          "windowSubDivV": 1,
+          "normalizedPositions": [
+            {
+              "x": 0.15,
+              "y": 0.5,
+              "z": 0.0
+            }
+          ],
+          "directions": [
+            {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "wallsHeight": 3.0,
+    "doorsHeight": 2.5,
+    "interiorWallThickness": 0.05,
+    "exteriorWallThickness": 0.1,
+    "windowsThickness": 0.06,
+    "doorsThickness": 0.06,
+    "roofThickness": 0.2,
+    "roofOverhang": 0.2,
+    "roofType": 0
+  }
+}

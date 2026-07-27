@@ -1,0 +1,216 @@
+{
+  "version": "v2",
+  "floors": [
+    {
+      "uniqueId": "71aef3fb-92cd-43fa-945a-38b97d87fa7c",
+      "spaces": [
+        {
+          "type": "Room",
+          "name": "",
+          "width": 1.0,
+          "height": 1.0,
+          "ypos": 1.0,
+          "hasWindow": false,
+          "windowFrameSize": 0.0,
+          "windowSizeH": 0.0,
+          "windowSizeV": 0.0,
+          "windowSubDivH": 0,
+          "windowSubDivV": 0,
+          "normalizedPositions": [
+            {
+              "x": -0.1,
+              "y": 0.09999995,
+              "z": 0.0,
+              "normalized": {
+                "x": -0.707107,
+                "y": 0.7071066,
+                "z": 0.0,
+                "magnitude": 1.0,
+                "sqrMagnitude": 1.0
+              },
+              "magnitude": 0.141421318,
+              "sqrMagnitude": 0.01999999
+            },
+            {
+              "x": -0.1,
+              "y": 0.9,
+              "z": 0.0,
+              "normalized": {
+                "x": -0.11043153,
+                "y": 0.9938837,
+                "z": 0.0,
+                "magnitude": 1.0,
+                "sqrMagnitude": 1.0
+              },
+              "magnitude": 0.9055385,
+              "sqrMagnitude": 0.819999933
+            },
+            {
+              "x": 1.1,
+              "y": 0.9,
+              "z": 0.0,
+              "normalized": {
+                "x": 0.7739573,
+                "y": 0.6332378,
+                "z": 0.0,
+                "magnitude": 1.0,
+                "sqrMagnitude": 1.0
+              },
+              "magnitude": 1.421267,
+              "sqrMagnitude": 2.02
+            },
+            {
+              "x": 1.1,
+              "y": 0.09999995,
+              "z": 0.0,
+              "normalized": {
+                "x": 0.9958932,
+                "y": 0.09053569,
+                "z": 0.0,
+                "normalized": {
+                  "x": 0.99589324,
+                  "y": 0.0905357,
+                  "z": 0.0,
+                  "magnitude": 1.0,
+                  "sqrMagnitude": 1.0
+                },
+                "magnitude": 0.99999994,
+                "sqrMagnitude": 0.99999994
+              },
+              "magnitude": 1.10453618,
+              "sqrMagnitude": 1.22
+            }
+          ],
+          "directions": [
+            {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0,
+              "magnitude": 0.0,
+              "sqrMagnitude": 0.0
+            },
+            {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0,
+              "magnitude": 0.0,
+              "sqrMagnitude": 0.0
+            },
+            {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0,
+              "magnitude": 0.0,
+              "sqrMagnitude": 0.0
+            },
+            {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0,
+              "magnitude": 0.0,
+              "sqrMagnitude": 0.0
+            }
+          ]
+        },
+        {
+          "type": "Window",
+          "name": "",
+          "width": 1.0,
+          "height": 1.0,
+          "ypos": 0.0,
+          "hasWindow": false,
+          "windowFrameSize": 0.05,
+          "windowSizeH": 1.0,
+          "windowSizeV": 0.441,
+          "windowSubDivH": 2,
+          "windowSubDivV": 1,
+          "normalizedPositions": [
+            {
+              "x": 0.25,
+              "y": 0.9,
+              "z": 0.0,
+              "normalized": {
+                "x": 0.267643869,
+                "y": 0.9635179,
+                "z": 0.0,
+                "magnitude": 1.0,
+                "sqrMagnitude": 1.0
+              },
+              "magnitude": 0.9340771,
+              "sqrMagnitude": 0.872499943
+            },
+            {
+              "x": 0.8,
+              "y": 0.9,
+              "z": 0.0,
+              "normalized": {
+                "x": 0.6643638,
+                "y": 0.7474093,
+                "z": 0.0,
+                "normalized": {
+                  "x": 0.664363861,
+                  "y": 0.747409344,
+                  "z": 0.0,
+                  "magnitude": 1.0,
+                  "sqrMagnitude": 1.00000012
+                },
+                "magnitude": 0.99999994,
+                "sqrMagnitude": 0.9999999
+              },
+              "magnitude": 1.2041595,
+              "sqrMagnitude": 1.44999993
+            },
+            {
+              "x": 0.55,
+              "y": 0.9,
+              "z": 0.0,
+              "normalized": {
+                "x": 0.521450043,
+                "y": 0.8532818,
+                "z": 0.0,
+                "magnitude": 1.0,
+                "sqrMagnitude": 1.0
+              },
+              "magnitude": 1.05475116,
+              "sqrMagnitude": 1.1125
+            }
+          ],
+          "directions": [
+            {
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0,
+              "magnitude": 1.0,
+              "sqrMagnitude": 1.0
+            },
+            {
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0,
+              "magnitude": 1.0,
+              "sqrMagnitude": 1.0
+            },
+            {
+              "x": 1.0,
+              "y": 0.0,
+              "z": 0.0,
+              "magnitude": 1.0,
+              "sqrMagnitude": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "wallsHeight": 3.0,
+    "doorsHeight": 2.5,
+    "interiorWallThickness": 0.05,
+    "exteriorWallThickness": 0.1,
+    "windowsThickness": 0.06,
+    "doorsThickness": 0.06,
+    "roofThickness": 0.2,
+    "roofOverhang": 0.2,
+    "roofType": 2
+  }
+}

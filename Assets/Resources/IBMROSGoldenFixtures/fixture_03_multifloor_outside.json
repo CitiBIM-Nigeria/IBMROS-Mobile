@@ -1,0 +1,134 @@
+{
+  "version": "v2",
+  "floors": [
+    {
+      "uniqueId": "golden-f3a",
+      "spaces": [
+        {
+          "type": "Room",
+          "name": "Ground Room",
+          "width": 0.0,
+          "height": 0.0,
+          "ypos": 0.0,
+          "hasWindow": false,
+          "windowFrameSize": 0.0,
+          "windowSizeH": 0.0,
+          "windowSizeV": 0.0,
+          "windowSubDivH": 0,
+          "windowSubDivV": 0,
+          "normalizedPositions": [
+            {
+              "x": 0.2,
+              "y": 0.2,
+              "z": 0.0
+            },
+            {
+              "x": 0.6,
+              "y": 0.2,
+              "z": 0.0
+            },
+            {
+              "x": 0.6,
+              "y": 0.6,
+              "z": 0.0
+            },
+            {
+              "x": 0.2,
+              "y": 0.6,
+              "z": 0.0
+            }
+          ],
+          "directions": []
+        },
+        {
+          "type": "Outside",
+          "name": "Terrace",
+          "width": 0.0,
+          "height": 0.0,
+          "ypos": 0.0,
+          "hasWindow": false,
+          "windowFrameSize": 0.0,
+          "windowSizeH": 0.0,
+          "windowSizeV": 0.0,
+          "windowSubDivH": 0,
+          "windowSubDivV": 0,
+          "normalizedPositions": [
+            {
+              "x": 0.6,
+              "y": 0.2,
+              "z": 0.0
+            },
+            {
+              "x": 0.9,
+              "y": 0.2,
+              "z": 0.0
+            },
+            {
+              "x": 0.9,
+              "y": 0.6,
+              "z": 0.0
+            },
+            {
+              "x": 0.6,
+              "y": 0.6,
+              "z": 0.0
+            }
+          ],
+          "directions": []
+        }
+      ]
+    },
+    {
+      "uniqueId": "golden-f3b",
+      "spaces": [
+        {
+          "type": "Room",
+          "name": "Upper Room",
+          "width": 0.0,
+          "height": 0.0,
+          "ypos": 0.0,
+          "hasWindow": false,
+          "windowFrameSize": 0.0,
+          "windowSizeH": 0.0,
+          "windowSizeV": 0.0,
+          "windowSubDivH": 0,
+          "windowSubDivV": 0,
+          "normalizedPositions": [
+            {
+              "x": 0.2,
+              "y": 0.2,
+              "z": 0.0
+            },
+            {
+              "x": 0.6,
+              "y": 0.2,
+              "z": 0.0
+            },
+            {
+              "x": 0.6,
+              "y": 0.6,
+              "z": 0.0
+            },
+            {
+              "x": 0.2,
+              "y": 0.6,
+              "z": 0.0
+            }
+          ],
+          "directions": []
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "wallsHeight": 3.0,
+    "doorsHeight": 2.5,
+    "interiorWallThickness": 0.05,
+    "exteriorWallThickness": 0.1,
+    "windowsThickness": 0.06,
+    "doorsThickness": 0.06,
+    "roofThickness": 0.2,
+    "roofOverhang": 0.2,
+    "roofType": 1
+  }
+}
