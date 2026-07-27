@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android App Links intent-filter for QR deep links:  https://<domain>/p/<id>
+
+  PLACEHOLDER domain: replace "placeholder.ibmros.local" with the production host
+  (must match link_config.json AND Assets/MyStuffs/Scripts/Managers/LinkConfig.cs),
+  then deploy /.well-known/assetlinks.json on that domain containing THIS app's
+  RELEASE signing SHA-256 so android:autoVerify succeeds.
+
+  ACTIVITY NAME: this project builds with GameActivity (ProjectSettings
+  androidApplicationEntry: 2), so the entry activity is
+  com.unity3d.player.UnityPlayerGameActivity. If you switch back to the classic
+  Activity, change it to com.unity3d.player.UnityPlayerActivity.
+
+  Unity MERGES this file into the generated manifest (tools:node="merge"), so we
+  only declare the intent-filter additions, not the whole app.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+  <application>
+    <activity
+        android:name="com.unity3d.player.UnityPlayerGameActivity"
+        android:exported="true"
+        tools:node="merge">
+
+      <!-- Universal/App Link: opens the app for https://<domain>/p/*  -->
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data
+            android:scheme="https"
+            android:host="placeholder.ibmros.local"
+            android:pathPrefix="/p/" />
+      </intent-filter>
+
+      <!-- Optional custom scheme for in-app / testing: ibmros://p/<id>  -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="ibmros" android:host="p" />
+      </intent-filter>
+
+    </activity>
+  </application>
+</manifest>
