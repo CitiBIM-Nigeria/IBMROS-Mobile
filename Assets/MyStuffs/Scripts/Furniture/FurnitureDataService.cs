@@ -227,6 +227,47 @@ public class FurnitureDataService : MonoBehaviour
         OnProductLoaded?.Invoke(product);
     }
 
+    // Like LoadProduct but RETURNS the product (no event coupling) — for callers
+    // that need the result inline (My Items rows, scan history re-open).
+    public async Task<ProductModel> FetchProduct(string productId)
+    {
+        if (!IsReady() || string.IsNullOrEmpty(productId)) return null;
+
+        OnLoadingChanged?.Invoke(true, "Loading product...");
+        var product = await FurnitureRepository.Instance.GetProduct(productId);
+        OnLoadingChanged?.Invoke(false, string.Empty);
+        return product;
+    }
+
+    // Resolve a scanned QR's region-independent canonical id to a product. Fires
+    // the same OnProductLoaded/OnProductFailed events as LoadProduct AND returns
+    // the product so the deep-link flow can route it directly (no event coupling).
+    public async Task<ProductModel> ResolveByCanonical(string canonicalId)
+    {
+        if (!IsReady()) return null;
+
+        if (string.IsNullOrEmpty(canonicalId))
+        {
+            OnProductFailed?.Invoke("Invalid product code.");
+            return null;
+        }
+
+        OnLoadingChanged?.Invoke(true, "Loading product...");
+
+        var product = await FurnitureRepository.Instance.GetProductByCanonical(canonicalId);
+
+        OnLoadingChanged?.Invoke(false, string.Empty);
+
+        if (product == null)
+        {
+            OnProductFailed?.Invoke("Product not available.");
+            return null;
+        }
+
+        OnProductLoaded?.Invoke(product);
+        return product;
+    }
+
     // ---------------------------------------------------------------
     // SEARCH
     // ---------------------------------------------------------------

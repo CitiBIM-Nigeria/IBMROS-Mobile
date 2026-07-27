@@ -45,6 +45,12 @@ public class ProductModel
     public string MerchantId     { get; set; }
     public string Name           { get; set; }
 
+    // Region-independent identity (worldwide IKEA article) — the id a physical
+    // QR encodes and resolves through the canonical-index GSI. QrUrl is the
+    // product's deep link as written by the pipeline (empty on un-backfilled rows).
+    public string CanonicalProductId { get; set; }
+    public string QrUrl              { get; set; }
+
     // Short variant line shown in the UI, e.g. "2 seater sofa - Lejde grey/black".
     // Built from subtitle + primary colour by FurnitureRepository.
     public string Description    { get; set; }

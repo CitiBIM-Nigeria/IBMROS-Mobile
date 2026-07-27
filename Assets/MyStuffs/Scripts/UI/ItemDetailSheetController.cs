@@ -33,9 +33,10 @@ public class ItemDetailSheetController : MonoBehaviour
     // STATE
     // ---------------------------------------------------------------
 
-    private bool      _isOpen = false;
-    private Coroutine _animCoroutine;
-    private string    _currentItemKey;
+    private bool         _isOpen = false;
+    private Coroutine    _animCoroutine;
+    private string       _currentItemKey;
+    private ProductModel _currentProduct;   // for Save-for-Later persistence
     private const float SLIDE_DURATION = 0.28f;
 
     // ---------------------------------------------------------------
@@ -74,11 +75,19 @@ public class ItemDetailSheetController : MonoBehaviour
             Close();
         });
 
+        // Fav = Save for Later. Persists to the local SavedItemsService (works for
+        // guests, offline) — the natural action for an in-store QR scan. Falls back
+        // to a visual-only toggle if the service isn't in the scene.
         _favButton?.RegisterCallback<ClickEvent>(evt =>
         {
             evt.StopPropagation();
+            bool nowSaved;
+            if (SavedItemsService.Instance != null && _currentProduct != null)
+                nowSaved = SavedItemsService.Instance.Toggle(_currentProduct);
+            else
+                nowSaved = _favIcon != null && _favIcon.text == "☆";
             if (_favIcon != null)
-                _favIcon.text = _favIcon.text == "☆" ? "★" : "☆";
+                _favIcon.text = nowSaved ? "★" : "☆";
         });
 
         _addButton?.RegisterCallback<ClickEvent>(evt =>
@@ -109,11 +118,23 @@ public class ItemDetailSheetController : MonoBehaviour
         ProductModel product = null)
     {
         _currentItemKey = productId;
+        _currentProduct = product;
+
+        // Add-to-Room only works with a 3D model. Hide the button for products
+        // IKEA hasn't published a model for (reachable via QR scan) — the sheet
+        // stays useful (image, specs, Save for Later), it just can't place in AR.
+        // product == null (legacy callers) keeps the button, as before.
+        bool noModel = product != null && !product.HasModel;
+        if (_addButton != null)
+            _addButton.style.display = noModel ? DisplayStyle.None : DisplayStyle.Flex;
 
         if (_emojiLabel      != null) _emojiLabel.text      = emoji;
         if (_brandLabel      != null) _brandLabel.text      = "IKEA";
         if (_nameLabel       != null) _nameLabel.text       = name;
-        if (_favIcon         != null) _favIcon.text         = "☆";
+        // Reflect whether this product is already saved for later.
+        if (_favIcon         != null)
+            _favIcon.text = (SavedItemsService.Instance != null &&
+                             SavedItemsService.Instance.IsSaved(productId)) ? "★" : "☆";
 
         // Dimensions line: prefer the REAL page measurements ("Diameter 73 cm ·
         // Height 70 cm"); fall back to the variant line for sparse products.

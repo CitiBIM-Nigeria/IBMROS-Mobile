@@ -84,6 +84,26 @@ public class FurnitureSpawnManager : MonoBehaviour
 
         if (loadedModel != null)
         {
+            // If the user CONFIRMED the loading cube while the model downloaded
+            // (tapped to place it), the cube is now a real placed item — it's in
+            // the registry, on the undo stack, and selected. Destroying it and
+            // re-entering ghost mode (the old behaviour) both re-asked the user
+            // to place AND left those systems pointing at a dead object. Instead,
+            // swap the visuals INSIDE the same GameObject: same identity, no
+            // second ghost — the box simply becomes the product where it stands.
+            var cubeItem = loadingCube != null
+                ? loadingCube.GetComponent<FurnitureItem>() : null;
+            if (cubeItem != null && cubeItem.IsPlaced)
+            {
+                SwapPlacedVisuals(loadingCube, loadedModel, s3ModelUrl);
+                spawnSw.Stop();
+                Debug.Log($"[Spawn] {shortName}" +
+                          $" | load {loadMs}ms" +
+                          $" | swapped into confirmed placeholder" +
+                          $" | END-TO-END {spawnSw.ElapsedMilliseconds}ms");
+                return;
+            }
+
             // Grab position and rotation from the loading cube before destroying it
             Vector3    cubePosition = loadingCube.transform.position;
             Quaternion cubeRotation = loadingCube.transform.rotation;
@@ -117,6 +137,55 @@ public class FurnitureSpawnManager : MonoBehaviour
             loadingCube.name = $"[Placeholder] {s3ModelUrl}";
     }
     
+    // Replace a CONFIRMED loading cube's visuals with the real model, keeping the
+    // same root GameObject so the registry entry, undo PlaceAction, and current
+    // selection remain valid. The model is grounded at the same floor height the
+    // cube sat on by offsetting the CHILD (the root's position is untouched, so
+    // undo/redo restores exactly the recorded spot).
+    private void SwapPlacedVisuals(GameObject root, GameObject model, string itemKey)
+    {
+        // Floor height = bottom of the cube's current visual bounds.
+        float floorY = root.transform.position.y;
+        var oldRenderer = root.GetComponent<Renderer>();
+        if (oldRenderer != null) floorY = oldRenderer.bounds.min.y;
+
+        // Remove the cube's own visuals NOW — Destroy() is deferred a frame and
+        // would pollute the bounds/collider rebuild below.
+        var mr = root.GetComponent<MeshRenderer>();
+        if (mr != null) DestroyImmediate(mr);
+        var mf = root.GetComponent<MeshFilter>();
+        if (mf != null) DestroyImmediate(mf);
+
+        root.transform.localScale = Vector3.one;   // cube ghost was 0.8³
+        root.name = $"[Furniture] {System.IO.Path.GetFileName(itemKey)}";
+
+        model.transform.SetParent(root.transform, false);
+        model.transform.localPosition = Vector3.zero;
+        model.transform.localRotation = Quaternion.identity;
+
+        // Pivots differ (cube = centre, GLB = usually base): lift/drop the child
+        // so the model's bottom sits on the cube's floor line.
+        var renderers = model.GetComponentsInChildren<Renderer>();
+        if (renderers.Length > 0)
+        {
+            Bounds combined = renderers[0].bounds;
+            foreach (var r in renderers)
+                combined.Encapsulate(r.bounds);
+            model.transform.position += Vector3.up * (floorY - combined.min.y);
+        }
+
+        // The root already carries a Rigidbody from its first init. Initialize's
+        // own cleanup uses deferred Destroy, and AddComponent<Rigidbody> in the
+        // same frame would collide with the not-yet-removed one — remove it NOW.
+        var rb = root.GetComponent<Rigidbody>();
+        if (rb != null) DestroyImmediate(rb);
+
+        // Rebuild layers/shadows/colliders/rigidbody for the new meshes. Note:
+        // FurnitureItem.Initialize does NOT reset IsPlaced, so the item stays a
+        // placed object throughout.
+        InitializeFurnitureItem(root, itemKey, null);
+    }
+
     private GameObject CreatePlaceholderCube(string itemKey, bool isLoading = false)
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Cube);

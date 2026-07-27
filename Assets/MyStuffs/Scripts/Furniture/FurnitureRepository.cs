@@ -60,6 +60,8 @@ public class FurnitureRepository : MonoBehaviour
         { "#meas", "measurements" },
         { "#pkg",  "packages" },
         { "#st",   "status" },     // catalogue lifecycle (sync engine)
+        { "#can",  "canonical_product_id" },  // region-independent QR identity
+        { "#qr",   "qr_url" },                // physical-QR deep link
     };
 
     // Discontinued products (removed from the merchant's storefront and past
@@ -69,7 +71,7 @@ public class FurnitureRepository : MonoBehaviour
         "(attribute_not_exists(#st) OR #st <> :disc)";
     private const string ProductProjection =
         "#pid, #mid, #nm, #sub, #desc, #cid, #mesh, #pmin, #pmax, #star, #rev, " +
-        "#hid, #var, #meas, #pkg";
+        "#hid, #var, #meas, #pkg, #can, #qr";
 
     private static readonly Dictionary<string, string> CategoryAttrNames = new()
     {
@@ -513,11 +515,18 @@ public class FurnitureRepository : MonoBehaviour
     {
         try
         {
+            // GetItem has NO FilterExpression, and DynamoDB rejects a request
+            // whose ExpressionAttributeNames contains names the expressions never
+            // use — so drop #st (it exists only for the NotDiscontinued filter
+            // that the query/scan paths add).
+            var names = new Dictionary<string, string>(ProductAttrNames);
+            names.Remove("#st");
+
             var request = new GetItemRequest
             {
                 TableName = AwsConfig.FurnitureCatalogTableName,
                 ProjectionExpression = ProductProjection,
-                ExpressionAttributeNames = new Dictionary<string, string>(ProductAttrNames),
+                ExpressionAttributeNames = names,
                 Key = new Dictionary<string, AttributeValue>
                 {
                     { "merchant_id", new AttributeValue { S = Merchant } },
@@ -539,6 +548,55 @@ public class FurnitureRepository : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError($"[FurnitureRepository] GetProduct error: {e.Message}");
+            return null;
+        }
+    }
+
+    // Resolve a scanned QR's region-independent canonical id to THIS region's
+    // product. Queries the canonical-index GSI (HASH group_canonical = "ikea#<id>",
+    // RANGE merchant_id) — one query returns the row for our configured merchant,
+    // whatever region printed the sticker. The GSI projection is trimmed (INCLUDE),
+    // so we take its product_id and fetch the full row via GetProduct.
+    public async Task<ProductModel> GetProductByCanonical(string canonicalId)
+    {
+        if (string.IsNullOrEmpty(canonicalId)) return null;
+        try
+        {
+            await AwsManager.Instance.RefreshCredentialsIfNeeded();
+
+            var request = new QueryRequest
+            {
+                TableName              = AwsConfig.FurnitureCatalogTableName,
+                IndexName              = LinkConfig.CanonicalIndexName,
+                KeyConditionExpression = "group_canonical = :gc AND merchant_id = :mid",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    { ":gc",  new AttributeValue { S = LinkConfig.GroupCanonical(canonicalId) } },
+                    { ":mid", new AttributeValue { S = Merchant } }
+                },
+                Limit = 1
+            };
+
+            var response = await DbWithRetry(
+                () => AwsManager.Instance.DynamoDBClient.QueryAsync(request),
+                $"canonical:{canonicalId}");
+
+            if (response.Items == null || response.Items.Count == 0)
+            {
+                Debug.LogWarning($"[FurnitureRepository] No product for canonical {canonicalId}.");
+                return null;
+            }
+
+            // GSI row is a trimmed projection — fetch the full product by its key.
+            var first = response.Items[0];
+            string productId = first.TryGetValue("product_id", out var v) ? v.S : null;
+            if (string.IsNullOrEmpty(productId)) return null;
+
+            return await GetProduct(productId);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[FurnitureRepository] GetProductByCanonical error: {e.Message}");
             return null;
         }
     }
@@ -617,6 +675,8 @@ public class FurnitureRepository : MonoBehaviour
                 ProductId        = GetString(item, "product_id"),
                 MerchantId       = GetString(item, "merchant_id"),
                 Name             = GetString(item, "name"),
+                CanonicalProductId = GetString(item, "canonical_product_id"),
+                QrUrl              = GetString(item, "qr_url"),
                 Description      = desc,
                 FullDescription  = GetString(item, "description"),
                 CategoryId       = GetString(item, "category_id"),
