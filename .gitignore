@@ -80,3 +80,11 @@ UIElementsSchema/
 # Claude Code (local-only settings)
 # =========================
 .claude/settings.local.json
+# Tooling (headless engine syntax-check) build artifacts
+Tooling/**/bin/
+Tooling/**/obj/
+# Crash dumps / profiler captures / editor screenshots
+mono_crash.*.json
+ProfilerCaptures/
+Assets/Screenshots/
+Assets/Screenshots.meta
