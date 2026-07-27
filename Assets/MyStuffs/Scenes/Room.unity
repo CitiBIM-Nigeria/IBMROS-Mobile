@@ -119,6 +119,46 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!21 &99560420
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: UI/RoundedCorners/RoundedCorners
+  m_Shader: {fileID: 4800000, guid: 0bd2ec5d73751e34a814274a454bec41, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _MainTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _ColorMask: 15
+    - _Stencil: 0
+    - _StencilComp: 8
+    - _StencilOp: 0
+    - _StencilReadMask: 255
+    - _StencilWriteMask: 255
+    - _UseUIAlphaClip: 0
+    m_Colors:
+    - _WidthHeightRadius: {r: 260, g: 80, b: 80, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
 --- !u!1 &102644091
 GameObject:
   m_ObjectHideFlags: 0
@@ -1085,7 +1125,7 @@ GameObject:
   - component: {fileID: 276191785}
   - component: {fileID: 276191784}
   - component: {fileID: 276191783}
-  m_Layer: 9
+  m_Layer: 14
   m_Name: Ceiling
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1396,7 +1436,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_Material: {fileID: 2105752155}
+  m_Material: {fileID: 99560420}
   m_Color: {r: 0.9607843, g: 0.9411765, b: 0.9098039, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -1569,7 +1609,7 @@ MonoBehaviour:
   maxLookDown: 40
   wallLayer:
     serializedVersion: 2
-    m_Bits: 512
+    m_Bits: 1024
   wallClearance: 0.25
   collisionRadius: 0.3
   roomBoundsCollider: {fileID: 0}
@@ -1865,7 +1905,7 @@ GameObject:
   - component: {fileID: 505337564}
   - component: {fileID: 505337563}
   - component: {fileID: 505337562}
-  m_Layer: 9
+  m_Layer: 10
   m_Name: Wall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2221,7 +2261,7 @@ GameObject:
   - component: {fileID: 517716393}
   - component: {fileID: 517716392}
   - component: {fileID: 517716391}
-  m_Layer: 9
+  m_Layer: 14
   m_Name: Ceiling
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3294,7 +3334,7 @@ GameObject:
   - component: {fileID: 856925035}
   - component: {fileID: 856925034}
   - component: {fileID: 856925033}
-  m_Layer: 9
+  m_Layer: 10
   m_Name: Wall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4500,7 +4540,7 @@ GameObject:
   - component: {fileID: 1069213374}
   - component: {fileID: 1069213373}
   - component: {fileID: 1069213372}
-  m_Layer: 9
+  m_Layer: 10
   m_Name: Wall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5517,7 +5557,7 @@ GameObject:
   - component: {fileID: 1224923690}
   - component: {fileID: 1224923689}
   - component: {fileID: 1224923688}
-  m_Layer: 9
+  m_Layer: 10
   m_Name: Walls
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6604,7 +6644,7 @@ GameObject:
   - component: {fileID: 1523817279}
   - component: {fileID: 1523817278}
   - component: {fileID: 1523817277}
-  m_Layer: 9
+  m_Layer: 14
   m_Name: Ceiling
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7873,7 +7913,7 @@ GameObject:
   - component: {fileID: 1935401096}
   - component: {fileID: 1935401095}
   - component: {fileID: 1935401094}
-  m_Layer: 9
+  m_Layer: 10
   m_Name: Wall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8369,46 +8409,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c759f1023728473996437f3ea1698f07, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FurnitureRepository
---- !u!21 &2105752155
-Material:
-  serializedVersion: 8
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: UI/RoundedCorners/RoundedCorners
-  m_Shader: {fileID: 4800000, guid: 0bd2ec5d73751e34a814274a454bec41, type: 3}
-  m_Parent: {fileID: 0}
-  m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
-  m_InvalidKeywords: []
-  m_LightmapFlags: 4
-  m_EnableInstancingVariants: 0
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses: []
-  m_LockedProperties: 
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs:
-    - _MainTex:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    m_Ints: []
-    m_Floats:
-    - _ColorMask: 15
-    - _Stencil: 0
-    - _StencilComp: 8
-    - _StencilOp: 0
-    - _StencilReadMask: 255
-    - _StencilWriteMask: 255
-    - _UseUIAlphaClip: 0
-    m_Colors:
-    - _WidthHeightRadius: {r: 260, g: 80, b: 80, a: 0}
-  m_BuildTextureStacks: []
-  m_AllowLocking: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

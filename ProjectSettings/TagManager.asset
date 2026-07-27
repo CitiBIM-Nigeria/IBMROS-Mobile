@@ -23,7 +23,7 @@ TagManager:
   - Interactable
   - Floor
   - FX
-  - Floor
+  - ExoaFloor
   - Wall
   - Join
   - RoomBox
