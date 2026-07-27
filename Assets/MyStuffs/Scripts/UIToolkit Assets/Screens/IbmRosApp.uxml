@@ -10,6 +10,7 @@
         <ui:VisualElement name="ConfirmPasswordScreenContainer" class="screen-auth"/>
         <ui:VisualElement name="MainAppScreenContainer" class="screen"/>
         <ui:VisualElement name="DeleteAccountScreenContainer" class="screen-auth"/>
+        <ui:VisualElement name="PresetPickerScreenContainer" class="screen-auth"/>
         <ui:VisualElement name="GlobalLoadingOverlay" class="loading-overlay">
             <ui:VisualElement name="GlobalLoadingCard" class="loading-card">
                 <ui:VisualElement name="GlobalLoadingSpinner" class="loading-spinner"/>

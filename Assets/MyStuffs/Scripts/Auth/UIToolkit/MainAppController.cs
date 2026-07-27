@@ -531,8 +531,8 @@ public class MainAppController : MonoBehaviour, IAuthUI
 
     private void OnAddRoomClicked()
     {
-        Debug.Log("[MainAppController] Loading Room scene.");
-        SceneManager.LoadScene("Room");
+        Debug.Log("[MainAppController] Opening floor-plan preset picker.");
+        ScreenNavigator.Instance.NavigateTo(ScreenName.PresetPicker);
     }
 
     // ---------------------------------------------------------------

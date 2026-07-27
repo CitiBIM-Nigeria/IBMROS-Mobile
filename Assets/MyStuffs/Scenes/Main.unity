@@ -334,6 +334,7 @@ MonoBehaviour:
   confirmPasswordScreenAsset: {fileID: 9197481963319205126, guid: 13393155394a401db71fd3cb7f491308, type: 3}
   mainAppScreenAsset: {fileID: 9197481963319205126, guid: 38280f27c65040eb88390ce9c6f908db, type: 3}
   deleteAccountScreenAsset: {fileID: 9197481963319205126, guid: 0ec22d327ed04b70be3ddd79745008b3, type: 3}
+  presetPickerScreenAsset: {fileID: 9197481963319205126, guid: 20fcab2a8c96d43dd97e467bc63ac284, type: 3}
 --- !u!114 &343968617
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -363,6 +364,7 @@ GameObject:
   - component: {fileID: 1714164423}
   - component: {fileID: 1714164422}
   - component: {fileID: 1714164421}
+  - component: {fileID: 1714164430}
   m_Layer: 0
   m_Name: Controllers
   m_TagString: Untagged
@@ -481,6 +483,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1714164430
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1714164420}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62684fb52a507473eae31b4beef40549, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PresetPickerController
 --- !u!1 &1744900196
 GameObject:
   m_ObjectHideFlags: 0

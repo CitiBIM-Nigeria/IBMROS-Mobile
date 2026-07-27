@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/MyStuffs/Scripts/UIToolkit%20Assets/Styles/PresetPickerScreen.uss?fileID=7433441132597879392&amp;guid=149aefd9eb3a74807ae17886ec8c73e7&amp;type=3#PresetPickerScreen"/>
+    <ui:VisualElement name="PresetPickerScreen" class="preset-picker">
+        <ui:VisualElement name="PresetPickerHeader" class="preset-picker__header">
+            <ui:Button name="PresetBackButton" text="‹" class="preset-picker__back"/>
+            <ui:Label name="PresetPickerTitle" text="Choose a floor plan" class="preset-picker__title"/>
+            <ui:VisualElement class="preset-picker__header-spacer"/>
+        </ui:VisualElement>
+        <ui:ScrollView name="PresetScroll" class="preset-picker__scroll">
+            <ui:VisualElement name="PresetGrid" class="preset-picker__grid"/>
+        </ui:ScrollView>
+    </ui:VisualElement>
+</ui:UXML>

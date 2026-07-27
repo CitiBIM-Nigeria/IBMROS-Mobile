@@ -22,6 +22,7 @@ public class UIManager : MonoBehaviour
     [SerializeField] private VisualTreeAsset confirmPasswordScreenAsset;
     [SerializeField] private VisualTreeAsset mainAppScreenAsset;
     [SerializeField] private VisualTreeAsset deleteAccountScreenAsset;
+    [SerializeField] private VisualTreeAsset presetPickerScreenAsset;
 
     // Screen container references
     private VisualElement _splashScreenContainer;
@@ -32,6 +33,7 @@ public class UIManager : MonoBehaviour
     private VisualElement _confirmPasswordScreenContainer;
     private VisualElement _mainAppScreenContainer;
     private VisualElement _deleteAccountScreenContainer;
+    private VisualElement _presetPickerScreenContainer;
 
     // Global overlay references
     private VisualElement _globalLoadingOverlay;
@@ -70,6 +72,7 @@ public class UIManager : MonoBehaviour
         _confirmPasswordScreenContainer = Root.Q<VisualElement>("ConfirmPasswordScreenContainer");
         _mainAppScreenContainer = Root.Q<VisualElement>("MainAppScreenContainer");
         _deleteAccountScreenContainer = Root.Q<VisualElement>("DeleteAccountScreenContainer");
+        _presetPickerScreenContainer = Root.Q<VisualElement>("PresetPickerScreenContainer");
     }
 
     private void InjectScreens()
@@ -82,6 +85,7 @@ public class UIManager : MonoBehaviour
         InjectScreen(confirmPasswordScreenAsset, _confirmPasswordScreenContainer, "ConfirmPasswordScreen");
         InjectScreen(mainAppScreenAsset, _mainAppScreenContainer, "MainAppScreen");
         InjectScreen(deleteAccountScreenAsset, _deleteAccountScreenContainer, "DeleteAccountScreen");
+        InjectScreen(presetPickerScreenAsset, _presetPickerScreenContainer, "PresetPickerScreen");
 
         IsReady = true;
         Debug.Log("[UIManager] All screens ready.");
@@ -141,6 +145,7 @@ public class UIManager : MonoBehaviour
             case ScreenName.ConfirmPassword: return _confirmPasswordScreenContainer;
             case ScreenName.MainApp: return _mainAppScreenContainer;
             case ScreenName.DeleteAccount: return _deleteAccountScreenContainer;
+            case ScreenName.PresetPicker: return _presetPickerScreenContainer;
             default: return null;
         }
     }
@@ -196,5 +201,6 @@ public enum ScreenName
     ForgotPassword,
     ConfirmPassword,
     MainApp,
-    DeleteAccount
+    DeleteAccount,
+    PresetPicker
 }

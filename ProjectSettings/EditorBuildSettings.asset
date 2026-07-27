@@ -20,6 +20,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Exoa/FloorMapDesigner/Scenes/FloorMapEditor.unity
     guid: 03455621e2df65d45bf262cac0f80c38
+  - enabled: 1
+    path: Assets/MyStuffs/Scenes/RoomDesigner.unity
+    guid: 6bb42ba805cfa49668ade0147980b073
   m_configObjects:
     AR Foundation RemoteARFoundationRemoteLoaderSettings: {fileID: 11400000, guid: 56ebcc88a54f54995a642d9259f29664, type: 2}
     AR Foundation RemoteARFoundationRemoteSessionRecordsData: {fileID: 11400000, guid: 6faeaf66e40fd4e8c96977850b804306, type: 2}

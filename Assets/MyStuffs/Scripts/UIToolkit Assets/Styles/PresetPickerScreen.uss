@@ -1,0 +1,80 @@
+.preset-picker {
+    flex-grow: 1;
+    background-color: rgb(250, 250, 250);
+}
+
+.preset-picker__header {
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 16px;
+    background-color: rgb(255, 255, 255);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(235, 235, 235);
+}
+
+.preset-picker__back {
+    width: 44px;
+    height: 44px;
+    font-size: 30px;
+    -unity-text-align: middle-center;
+    color: rgb(30, 30, 30);
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    margin: 0;
+    padding: 0 0 4px 0;
+}
+
+.preset-picker__back:active {
+    color: rgb(120, 120, 120);
+}
+
+.preset-picker__title {
+    flex-grow: 1;
+    font-size: 20px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    color: rgb(20, 20, 20);
+}
+
+.preset-picker__header-spacer {
+    width: 44px;
+}
+
+.preset-picker__scroll {
+    flex-grow: 1;
+}
+
+.preset-picker__grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: 12px 16px 24px 16px;
+}
+
+.preset-card {
+    width: 47%;
+    margin-bottom: 16px;
+    background-color: rgb(255, 255, 255);
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: rgb(232, 232, 232);
+    padding: 10px;
+}
+
+.preset-card:active {
+    background-color: rgb(242, 246, 250);
+    border-color: rgb(70, 130, 220);
+}
+
+.preset-card__thumb {
+    height: 130px;
+    background-color: rgb(247, 246, 244);
+    border-radius: 8px;
+}
+
+.preset-card__label {
+    margin-top: 8px;
+    font-size: 15px;
+    color: rgb(35, 35, 35);
+    -unity-text-align: middle-center;
+}
