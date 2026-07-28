@@ -1,0 +1,215 @@
+using IBMROS.Core;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace IBMROS.Designer.Plan
+{
+    /// <summary>
+    /// The 2D plan's "drawing" look (reference-app style):
+    ///   • wall meshes read as thick DARK slabs from above — a MaterialPropertyBlock
+    ///     tint on Wall/ExteriorWall renderers while in Plan2D (the ground-level
+    ///     LineRenderer is hidden underneath 3 m walls, so the wall TOPS are the
+    ///     visible outline)
+    ///   • flat bright ambient so the canvas reads paper-white (the 3D trilight
+    ///     makes a lit top-down plane render mid-gray)
+    /// Both fully revert outside Plan2D. Re-applied on a short cadence because
+    /// rebuilds create fresh renderers (MPBs don't survive that), same pattern
+    /// SelectionService uses for its highlight.
+    /// </summary>
+    public sealed class PlanLookController : MonoBehaviour
+    {
+        private static readonly Color WALL_TINT = new Color(0.27f, 0.30f, 0.34f, 1f);
+        private static readonly Color WALL_TINT_SELECTED = new Color(0.16f, 0.47f, 0.85f, 1f);
+        private static readonly Color PLAN_AMBIENT = new Color(0.96f, 0.96f, 0.95f);
+        private const float REAPPLY_INTERVAL_S = 0.25f;
+
+        // Exoa/VertexColor_URP has NO color property — meshes are colored purely
+        // by vertex colors, so MaterialPropertyBlock tints are silent no-ops on
+        // them. The plan look therefore SWAPS wall materials (dark slab; accent
+        // blue on the selected room) and restores the originals on exit.
+        private Material darkWallMat;
+        private Material selectedWallMat;
+        private Material darkLineMat;     // Line.mat clone, opaque dark slate
+        private Material selectedLineMat; // Line.mat clone, accent blue
+        private readonly System.Collections.Generic.Dictionary<Renderer, Material> originals =
+            new System.Collections.Generic.Dictionary<Renderer, Material>();
+        // Restore fallbacks — wall GameObjects are POOLED across vendor rebuilds
+        // (mesh swapped in place), so dictionary keys can go stale while a live
+        // renderer still carries our material. Remember one original per kind.
+        private readonly System.Collections.Generic.Dictionary<int, Material> fallbackByLayer =
+            new System.Collections.Generic.Dictionary<int, Material>();
+        private Material fallbackLineMat;
+
+        private MaterialPropertyBlock mpb;
+        private int wallMask;
+        private bool planMode;
+        private float nextApply;
+
+        // 3D ambient = LightingRig's trilight (kept in lockstep by value; the
+        // rig's Start order vs ours is unreliable, so no save/restore dance)
+        private static readonly Color AMBIENT_SKY = new Color(0.55f, 0.57f, 0.60f);
+        private static readonly Color AMBIENT_EQUATOR = new Color(0.42f, 0.42f, 0.42f);
+        private static readonly Color AMBIENT_GROUND = new Color(0.25f, 0.24f, 0.22f);
+
+        private void Awake()
+        {
+            mpb = new MaterialPropertyBlock();
+            wallMask = LayerMask.GetMask("Wall", "ExteriorWall");
+
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            darkWallMat = new Material(lit) { color = WALL_TINT, name = "PlanWall_Dark" };
+            selectedWallMat = new Material(lit) { color = WALL_TINT_SELECTED, name = "PlanWall_Selected" };
+        }
+
+        private void OnEnable()
+        {
+            DesignerModeController.OnModeChanged += OnModeChanged;
+        }
+
+        private void OnDisable()
+        {
+            DesignerModeController.OnModeChanged -= OnModeChanged;
+            if (planMode)
+                RestoreLook();
+        }
+
+        private void Start()
+        {
+            // Runs after LightingRig.Start (component order) — whatever mode we
+            // booted into, assert its look now so the rig's trilight can't stomp
+            // the plan's flat ambient.
+            planMode = !(DesignerModeController.Instance != null &&
+                         DesignerModeController.Instance.Mode == DesignerMode.Plan2D);
+            OnModeChanged(DesignerModeController.Instance != null
+                ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
+        }
+
+        private void OnModeChanged(DesignerMode mode)
+        {
+            bool wantPlan = mode == DesignerMode.Plan2D;
+            if (wantPlan == planMode)
+                return;
+            planMode = wantPlan;
+            if (planMode)
+            {
+                RenderSettings.ambientMode = AmbientMode.Flat;
+                RenderSettings.ambientLight = PLAN_AMBIENT;
+                IBMROS.Bridge.Interaction.SelectionService.HighlightLayerExclusionMask = wallMask;
+                nextApply = 0f; // tint immediately
+            }
+            else
+            {
+                IBMROS.Bridge.Interaction.SelectionService.HighlightLayerExclusionMask = 0;
+                RestoreLook();
+            }
+        }
+
+        private void RestoreLook()
+        {
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = AMBIENT_SKY;
+            RenderSettings.ambientEquatorColor = AMBIENT_EQUATOR;
+            RenderSettings.ambientGroundColor = AMBIENT_GROUND;
+            ClearWallTint();
+        }
+
+        private void Update()
+        {
+            if (!planMode || Time.unscaledTime < nextApply)
+                return;
+            nextApply = Time.unscaledTime + REAPPLY_INTERVAL_S;
+
+            Transform selRoot = null;
+            var ui = PlanEditorUtil.FindItem(
+                IBMROS.Bridge.Interaction.SelectionService.Instance != null
+                    ? IBMROS.Bridge.Interaction.SelectionService.Instance.SelectedId : null);
+            if (ui != null && ui.drawer != null && ui.drawer.GO != null)
+                selRoot = ui.drawer.GO.transform;
+
+            foreach (MeshRenderer r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+            {
+                if (((1 << r.gameObject.layer) & wallMask) == 0)
+                    continue;
+                Material want = (selRoot != null && r.transform.IsChildOf(selRoot))
+                    ? selectedWallMat : darkWallMat;
+                if (r.sharedMaterial == want)
+                    continue;
+                if (r.sharedMaterial != darkWallMat && r.sharedMaterial != selectedWallMat)
+                {
+                    originals[r] = r.sharedMaterial; // remember before first swap
+                    if (!fallbackByLayer.ContainsKey(r.gameObject.layer))
+                        fallbackByLayer[r.gameObject.layer] = r.sharedMaterial;
+                }
+                r.sharedMaterial = want;
+            }
+
+            // The visible plan "walls" are the CPC LineRenderers (interior wall
+            // meshes are cm-thin from above) — accent the selected item's path.
+            string selId = IBMROS.Bridge.Interaction.SelectionService.Instance != null
+                ? IBMROS.Bridge.Interaction.SelectionService.Instance.SelectedId : null;
+            foreach (var cpc in FindObjectsByType<Exoa.Designer.ControlPointsController>(FindObjectsSortMode.None))
+            {
+                var lr = cpc.GetComponent<LineRenderer>();
+                if (lr == null || lr.sharedMaterial == null)
+                    continue;
+                if (selectedLineMat == null)
+                {
+                    // Clone the vendor line shader but own the colors outright —
+                    // the shared asset ships semi-transparent (alpha 0.8) which
+                    // washes any dark tint out over the white canvas.
+                    Material template = lr.sharedMaterial;
+                    darkLineMat = new Material(template) { name = "PlanLine_Dark" };
+                    darkLineMat.color = WALL_TINT;
+                    selectedLineMat = new Material(template) { name = "PlanLine_Selected" };
+                    selectedLineMat.color = WALL_TINT_SELECTED;
+                }
+                bool isSelected = !string.IsNullOrEmpty(selId) && ItemOfCpc(cpc) == selId;
+                Material wantLine = isSelected ? selectedLineMat : darkLineMat;
+                if (lr.sharedMaterial == wantLine)
+                    continue;
+                if (lr.sharedMaterial != darkLineMat && lr.sharedMaterial != selectedLineMat)
+                {
+                    originals[lr] = lr.sharedMaterial;
+                    if (fallbackLineMat == null)
+                        fallbackLineMat = lr.sharedMaterial;
+                }
+                lr.sharedMaterial = wantLine;
+            }
+        }
+
+        private static string ItemOfCpc(Exoa.Designer.ControlPointsController cpc)
+        {
+            foreach (var ui in FindObjectsByType<Exoa.Designer.UIBaseItem>(FindObjectsSortMode.None))
+                if (ui.cpc == cpc)
+                    return ui.ItemUniqueId;
+            return null;
+        }
+
+        private void ClearWallTint()
+        {
+            // Sweep EVERY live renderer — dictionary keys go stale when the
+            // vendor pools wall objects across rebuilds, so membership in
+            // `originals` is an optimization, not the source of truth.
+            foreach (Renderer r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+            {
+                if (r == null || r.sharedMaterial == null)
+                    continue;
+                Material cur = r.sharedMaterial;
+                if (cur != darkWallMat && cur != selectedWallMat &&
+                    cur != darkLineMat && cur != selectedLineMat)
+                    continue;
+                Material orig;
+                if (!originals.TryGetValue(r, out orig) || orig == null)
+                {
+                    if (cur == darkLineMat || cur == selectedLineMat)
+                        orig = fallbackLineMat;
+                    else
+                        fallbackByLayer.TryGetValue(r.gameObject.layer, out orig);
+                }
+                if (orig != null)
+                    r.sharedMaterial = orig;
+            }
+            originals.Clear();
+        }
+    }
+}

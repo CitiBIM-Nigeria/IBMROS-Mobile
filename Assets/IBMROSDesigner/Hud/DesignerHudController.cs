@@ -27,8 +27,8 @@ namespace IBMROS.Designer.Hud
         private Label planName;
         private Button back, shot, undo, redo;
         private VisualElement planBar, viewBar, sheet;
-        private Button btn3D, btnDrawRect, btnAddDoor, btnAddWindow, btnResize;
-        private Button btn2D, btnWalk, btnFurnish, btnScan;
+        private Button btn3D, btnDrawRect, btnAddDoor, btnAddWindow, btnResize, btnAdd;
+        private Button btn2D, btnFurnish, btnScan;
         private TextField widthField, lengthField, ceilField, thickField;
         private Button sheetApply, sheetClose;
         private VisualElement selectionBar;
@@ -53,8 +53,8 @@ namespace IBMROS.Designer.Hud
             btnAddDoor = root.Q<Button>("BtnAddDoor");
             btnAddWindow = root.Q<Button>("BtnAddWindow");
             btnResize = root.Q<Button>("BtnResize");
+            btnAdd = root.Q<Button>("BtnAdd");
             btn2D = root.Q<Button>("Btn2D");
-            btnWalk = root.Q<Button>("BtnWalkthrough");
             btnFurnish = root.Q<Button>("BtnFurniture");
             btnScan = root.Q<Button>("BtnScan");
 
@@ -77,7 +77,7 @@ namespace IBMROS.Designer.Hud
             btnAddDoor.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddDoor);
             btnAddWindow.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddWindow);
             btnResize.clicked += OpenSheet;
-            btnWalk.clicked += OnWalkthrough;
+            btnAdd.clicked += OnFurnish; // furniture reachable from the 2D bar too
             btnFurnish.clicked += OnFurnish;
             btnScan.SetEnabled(false); // future feature — UI placeholder only
 
@@ -160,21 +160,6 @@ namespace IBMROS.Designer.Hud
                 $"Room_{DateTime.Now:yyyyMMdd_HHmmss}.png");
             ScreenCapture.CaptureScreenshot(file);
             Debug.Log($"[DesignerHud] Screenshot → {file}");
-        }
-
-        private void OnWalkthrough()
-        {
-            var walk = FindAnyObjectByType<ThreeD.WalkthroughController>(FindObjectsInactive.Include);
-            if (walk == null)
-            {
-                Debug.Log("[DesignerHud] Walkthrough not available in this build.");
-                return;
-            }
-            if (DesignerModeController.Instance != null &&
-                DesignerModeController.Instance.Mode == DesignerMode.Walkthrough)
-                walk.Exit();
-            else
-                walk.Enter();
         }
 
         private void OnFurnish()
@@ -284,7 +269,6 @@ namespace IBMROS.Designer.Hud
             viewBar.style.display = mode == DesignerMode.Plan2D ? DisplayStyle.None : DisplayStyle.Flex;
             if (mode != DesignerMode.Plan2D)
                 ShowSheet(false);
-            btnWalk.text = mode == DesignerMode.Walkthrough ? "Exit walk" : "Walk";
             RefreshSelectionBar();
         }
 

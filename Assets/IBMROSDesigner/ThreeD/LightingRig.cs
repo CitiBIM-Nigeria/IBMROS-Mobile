@@ -47,10 +47,9 @@ namespace IBMROS.Designer.ThreeD
                 RenderSettings.sun = key;
             }
 
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = AMBIENT_SKY;
-            RenderSettings.ambientEquatorColor = AMBIENT_EQUATOR;
-            RenderSettings.ambientGroundColor = AMBIENT_GROUND;
+            // Ambient is owned by PlanLookController (flat white in 2D plan,
+            // this rig's trilight values in 3D) — setting it here raced its
+            // Start order and stomped the plan look.
 
             var probeGo = new GameObject("RoomReflectionProbe");
             probeGo.transform.SetParent(transform, false);

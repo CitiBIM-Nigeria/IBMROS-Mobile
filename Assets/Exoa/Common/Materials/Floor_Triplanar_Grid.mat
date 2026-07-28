@@ -152,7 +152,7 @@ Material:
     - _ZTestTransparent: 4
     - _ZWrite: 1
     m_Colors:
-    - _Color: {r: 0.88, g: 0.88, b: 0.87, a: 1}
+    - _Color: {r: 0.86, g: 0.86, b: 0.855, a: 1}
     - _DoubleSidedConstants: {r: 1, g: 1, b: -1, a: 0}
     - _EmissionColor: {r: 191.74902, g: 191.74902, b: 191.74902, a: 1}
     - _EmissionColorUI: {r: 1, g: 1, b: 1, a: 1}

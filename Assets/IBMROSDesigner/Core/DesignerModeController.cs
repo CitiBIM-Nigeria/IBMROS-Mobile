@@ -67,11 +67,23 @@ namespace IBMROS.Designer
         /// <summary>
         /// WalkthroughController reports entering/leaving first-person mode here
         /// (the vendor switcher is disabled during walkthrough, so no camera
-        /// events fire for this transition).
+        /// events fire for this transition). On exit the mode comes from the
+        /// resumed switcher's actual state.
         /// </summary>
         public void NotifyWalkthrough(bool entering)
         {
-            DesignerMode next = entering ? DesignerMode.Walkthrough : DesignerMode.Orbit3D;
+            DesignerMode next;
+            if (entering)
+            {
+                next = DesignerMode.Walkthrough;
+            }
+            else
+            {
+                CameraModeSwitcher sw = CameraModeSwitcher.Instance;
+                next = (sw == null || sw.CurrentCameraMode is CameraTopDownOrtho)
+                    ? DesignerMode.Plan2D
+                    : DesignerMode.Orbit3D;
+            }
             if (next == Mode)
                 return;
             Mode = next;
@@ -86,13 +98,31 @@ namespace IBMROS.Designer
 
         public void Set2D()
         {
+            if (Mode == DesignerMode.Walkthrough)
+            {
+                // Walkthrough entered from ortho, so the resumed switcher is
+                // already top-down — exiting lands straight back in the plan.
+                var walk = FindAnyObjectByType<ThreeD.WalkthroughController>(FindObjectsInactive.Include);
+                walk?.Exit();
+                return;
+            }
             if (Mode == DesignerMode.Orbit3D)
                 Toggle2D3D();
         }
 
+        /// <summary>
+        /// "3D" now means INSIDE the room (user direction: the far-out orbit
+        /// view read as the vendor's feel, not the product's). Falls back to
+        /// the orbit switch only when no walkthrough controller exists.
+        /// </summary>
         public void Set3D()
         {
-            if (Mode == DesignerMode.Plan2D)
+            if (Mode == DesignerMode.Walkthrough)
+                return;
+            var walk = FindAnyObjectByType<ThreeD.WalkthroughController>(FindObjectsInactive.Include);
+            if (walk != null)
+                walk.Enter();
+            else if (Mode == DesignerMode.Plan2D)
                 Toggle2D3D();
         }
     }

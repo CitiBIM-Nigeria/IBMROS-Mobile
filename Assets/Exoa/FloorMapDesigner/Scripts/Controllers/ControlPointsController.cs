@@ -109,7 +109,14 @@ namespace Exoa.Designer
         {
             lr = GetComponent<LineRenderer>();
             if (lr != null)
-                lr.startColor = lr.endColor = pathColor;
+            {
+                // IBMROS: 2D walls read as thick dark slabs (reference-app look).
+                // The per-item pastel stays on the floor fill (drawer.DrawingColor);
+                // tinting the wall line with it made walls washed-out and thin.
+                lr.startColor = lr.endColor = new Color(0.24f, 0.27f, 0.31f, 1f);
+                lr.widthCurve = AnimationCurve.Constant(0f, 1f, 1f);
+                lr.widthMultiplier = 0.18f;
+            }
 
             grid = GetGrid();
 

@@ -441,6 +441,14 @@ public class RoomUIManager : MonoBehaviour
 
     private void SetRoomUIVisible(bool visible)
     {
+        // IBMROS: in RoomDesigner the FurnishModeAdapter owns chrome + joystick
+        // visibility (this manager's top/bottom bars belong to the legacy Room
+        // layout). Without this guard, every furniture-panel/detail-sheet close
+        // resurrected the hidden chrome and popped the joystick over the
+        // designer HUD (user-reported UI pile-up).
+        if (IBMROS.Designer.Furnish.FurnishModeAdapter.Instance != null)
+            return;
+
         if (_topBar != null)
             _topBar.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
 

@@ -19,13 +19,13 @@
             <ui:Button name="BtnAddDoor" text="+ Door" class="btn btn--tool"/>
             <ui:Button name="BtnAddWindow" text="+ Window" class="btn btn--tool"/>
             <ui:Button name="BtnResize" text="Resize" class="btn btn--tool"/>
+            <ui:Button name="BtnAdd" text="+ Add" class="btn btn--tool"/>
         </ui:VisualElement>
 
-        <!-- BOTTOM BAR: 3D view tools (visible in Orbit3D) -->
+        <!-- BOTTOM BAR: inside-room tools (visible in Walkthrough/3D) -->
         <ui:VisualElement name="ViewToolbar" class="bar bar--bottom" style="display: none;">
             <ui:Button name="Btn2D" text="2D" class="btn btn--primary"/>
-            <ui:Button name="BtnWalkthrough" text="Walk" class="btn btn--tool"/>
-            <ui:Button name="BtnFurniture" text="Furnish" class="btn btn--tool"/>
+            <ui:Button name="BtnFurniture" text="Add Furniture" class="btn btn--tool"/>
             <ui:Button name="BtnScan" text="Scan · soon" class="btn btn--tool btn--disabled"/>
         </ui:VisualElement>
 

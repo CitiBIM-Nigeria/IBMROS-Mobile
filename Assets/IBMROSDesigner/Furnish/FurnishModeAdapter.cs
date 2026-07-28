@@ -42,9 +42,19 @@ namespace IBMROS.Designer.Furnish
             }
         }
 
-        private void OnEnable() => DesignerModeController.OnModeChanged += ApplyMode;
+        private void OnEnable()
+        {
+            DesignerModeController.OnModeChanged += ApplyMode;
+            if (furniturePanel != null)
+                furniturePanel.OnPanelClosed += OnPanelClosed;
+        }
 
-        private void OnDisable() => DesignerModeController.OnModeChanged -= ApplyMode;
+        private void OnDisable()
+        {
+            DesignerModeController.OnModeChanged -= ApplyMode;
+            if (furniturePanel != null)
+                furniturePanel.OnPanelClosed -= OnPanelClosed;
+        }
 
         private void Start()
         {
@@ -53,13 +63,32 @@ namespace IBMROS.Designer.Furnish
                 ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
         }
 
-        /// <summary>DesignerHud's Furnish button.</summary>
+        /// <summary>
+        /// DesignerHud's Furnish/Add buttons. From the 2D plan this first drops
+        /// the user inside the room (placement needs the 3D interaction stack),
+        /// then opens the catalog with the dismiss overlay armed so tapping
+        /// outside the panel closes it (RoomUIManager only arms that overlay on
+        /// its own — hidden — bottom-bar path).
+        /// </summary>
         public void OpenCatalog()
         {
             if (DesignerModeController.Instance != null &&
                 DesignerModeController.Instance.Mode == DesignerMode.Plan2D)
                 DesignerModeController.Instance.Set3D();
+            SetDismissOverlayVisible(true);
             furniturePanel?.Open();
+        }
+
+        private void OnPanelClosed() => SetDismissOverlayVisible(false);
+
+        private void SetDismissOverlayVisible(bool visible)
+        {
+            var doc = roomUi != null ? roomUi.GetComponent<UIDocument>() : null;
+            VisualElement overlay = doc != null
+                ? doc.rootVisualElement.Q<VisualElement>("FurnitureDismissOverlay")
+                : null;
+            if (overlay != null)
+                overlay.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         private void HideRoomUiChrome()
@@ -84,7 +113,12 @@ namespace IBMROS.Designer.Furnish
             if (interactionManagers != null && interactionManagers.activeSelf != furnish)
                 interactionManagers.SetActive(furnish);
             if (!furnish)
+            {
+                // Programmatic Close() doesn't raise OnPanelClosed — drop the
+                // dismiss overlay ourselves or it lingers over the 2D plan.
                 furniturePanel?.Close();
+                SetDismissOverlayVisible(false);
+            }
         }
     }
 }

@@ -12,13 +12,11 @@ using UnityEngine.UIElements;
 public class PresetPickerController : MonoBehaviour
 {
     private VisualElement _screen;
-    private VisualElement _savedSection;
     private bool _bound;
 
     private void OnEnable()
     {
         UIManager.OnScreensReady += Bind;
-        ScreenNavigator.OnScreenChanged += OnScreenChanged;
         if (UIManager.Instance != null && UIManager.Instance.IsReady)
             Bind();
     }
@@ -26,15 +24,6 @@ public class PresetPickerController : MonoBehaviour
     private void OnDisable()
     {
         UIManager.OnScreensReady -= Bind;
-        ScreenNavigator.OnScreenChanged -= OnScreenChanged;
-    }
-
-    private void OnScreenChanged(ScreenName screen)
-    {
-        // Saved rooms change while the user is away in the designer — rebuild
-        // the section every time this screen is shown.
-        if (screen == ScreenName.PresetPicker && _bound)
-            RefreshSavedRooms();
     }
 
     private void Bind()
@@ -60,92 +49,13 @@ public class PresetPickerController : MonoBehaviour
 
         back.clicked += () => ScreenNavigator.Instance.NavigateTo(ScreenName.MainApp);
 
-        // "Your rooms" (saved plans) sits above the preset grid, inside the scroll.
-        ScrollView scroll = container.Q<ScrollView>("PresetScroll");
-        _savedSection = new VisualElement();
-        _savedSection.name = "SavedRoomsSection";
-        scroll?.Insert(0, _savedSection);
-        RefreshSavedRooms();
-
+        // Saved rooms live on the MAIN screen (SavedRoomsRow) — this screen is
+        // presets only, per the reference flow.
         grid.Clear();
         foreach (RoomPresets.Preset preset in RoomPresets.All)
             grid.Add(BuildCard(preset));
 
         _bound = true;
-    }
-
-    // ------------------------------------------------------------------ saved rooms
-
-    private void RefreshSavedRooms()
-    {
-        if (_savedSection == null)
-            return;
-        _savedSection.Clear();
-
-        string dir = System.IO.Path.Combine(Application.persistentDataPath, "FloorMaps");
-        if (!System.IO.Directory.Exists(dir))
-            return;
-
-        var plans = new System.Collections.Generic.List<System.IO.FileInfo>();
-        foreach (string f in System.IO.Directory.GetFiles(dir, "*.json"))
-        {
-            if (f.EndsWith(".furniture.json") || f.Contains(".json.bak"))
-                continue;
-            plans.Add(new System.IO.FileInfo(f));
-        }
-        if (plans.Count == 0)
-            return;
-        plans.Sort((a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
-
-        var header = new Label("Your rooms");
-        header.AddToClassList("preset-picker__section-title");
-        _savedSection.Add(header);
-
-        var row = new ScrollView(ScrollViewMode.Horizontal);
-        row.AddToClassList("saved-rooms__row");
-        // Structural sizing inline — code-built elements must not depend on
-        // stylesheet load order for layout, only for theming.
-        row.style.height = 100;
-        row.style.flexShrink = 0;
-        _savedSection.Add(row);
-
-        int shown = 0;
-        foreach (System.IO.FileInfo fi in plans)
-        {
-            if (shown++ >= 12)
-                break;
-            string name = System.IO.Path.GetFileNameWithoutExtension(fi.Name);
-            var card = new VisualElement();
-            card.AddToClassList("saved-room-card");
-            card.style.width = 150;
-            card.style.minHeight = 72;
-            card.style.flexShrink = 0;
-            card.style.paddingTop = 12; card.style.paddingBottom = 12;
-            card.style.paddingLeft = 12; card.style.paddingRight = 12;
-            card.style.justifyContent = Justify.Center;
-            var title = new Label(name);
-            title.AddToClassList("saved-room-card__name");
-            title.style.fontSize = 15;
-            card.Add(title);
-            var when = new Label(fi.LastWriteTime.ToString("d MMM, HH:mm"));
-            when.AddToClassList("saved-room-card__date");
-            when.style.fontSize = 12;
-            when.style.marginTop = 4;
-            card.Add(when);
-            card.RegisterCallback<ClickEvent>(_ => OpenSaved(name));
-            row.Add(card);
-        }
-
-        var presetsHeader = new Label("New from preset");
-        presetsHeader.AddToClassList("preset-picker__section-title");
-        _savedSection.Add(presetsHeader);
-    }
-
-    private void OpenSaved(string planName)
-    {
-        Debug.Log($"[PresetPickerController] Opening saved plan '{planName}'.");
-        RoomDesignLaunch.SetLoadPlan(planName);
-        SceneManager.LoadScene("RoomDesigner");
     }
 
     private VisualElement BuildCard(RoomPresets.Preset preset)

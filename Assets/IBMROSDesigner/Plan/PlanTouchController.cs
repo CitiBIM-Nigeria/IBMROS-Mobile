@@ -137,6 +137,9 @@ namespace IBMROS.Designer.Plan
             DisableVendorCpcs();
         }
 
+        private static readonly Color WALL_LINE_COLOR = new Color(0.24f, 0.27f, 0.31f, 1f);
+        private const float WALL_LINE_WIDTH_M = 0.18f;
+
         private static void DisableVendorCpcs()
         {
             foreach (ControlPointsController cpc in
@@ -144,6 +147,17 @@ namespace IBMROS.Designer.Plan
             {
                 if (cpc.enabled)
                     cpc.enabled = false;
+
+                // Disabling a CPC before its first frame means its Start() — where
+                // the wall-line styling lives — never runs. Style here instead:
+                // thick dark 2D walls (reference-app look) on every sweep.
+                var lr = cpc.GetComponent<LineRenderer>();
+                if (lr != null && (lr.widthMultiplier != WALL_LINE_WIDTH_M || lr.startColor != WALL_LINE_COLOR))
+                {
+                    lr.startColor = lr.endColor = WALL_LINE_COLOR;
+                    lr.widthCurve = AnimationCurve.Constant(0f, 1f, 1f);
+                    lr.widthMultiplier = WALL_LINE_WIDTH_M;
+                }
             }
         }
 

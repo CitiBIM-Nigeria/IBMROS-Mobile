@@ -183,6 +183,14 @@ namespace IBMROS.Bridge.Interaction
 
         // ------------------------------------------------------------------ highlight
 
+        /// <summary>
+        /// Layers the highlight must leave alone (bitmask). The 2D plan look
+        /// tints wall renderers dark via its own MPB; re-tinting them blue every
+        /// 0.2 s here fought that and washed the selected room's walls out.
+        /// PlanLookController sets this to the wall layers while in Plan2D.
+        /// </summary>
+        public static int HighlightLayerExclusionMask = 0;
+
         private bool ReapplyHighlight()
         {
             IObjectDrawer drawer = FindDrawer(SelectedId);
@@ -190,6 +198,8 @@ namespace IBMROS.Bridge.Interaction
                 return false;
             ClearHighlightRenderers();
             drawer.GO.GetComponentsInChildren(true, highlighted);
+            highlighted.RemoveAll(r =>
+                r == null || ((1 << r.gameObject.layer) & HighlightLayerExclusionMask) != 0);
             foreach (MeshRenderer r in highlighted)
             {
                 r.GetPropertyBlock(mpb);

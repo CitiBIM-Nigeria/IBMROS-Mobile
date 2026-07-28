@@ -365,6 +365,7 @@ GameObject:
   - component: {fileID: 1714164422}
   - component: {fileID: 1714164421}
   - component: {fileID: 1714164430}
+  - component: {fileID: 1714164431}
   m_Layer: 0
   m_Name: Controllers
   m_TagString: Untagged
@@ -495,6 +496,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 62684fb52a507473eae31b4beef40549, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PresetPickerController
+--- !u!114 &1714164431
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1714164420}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2de069f9d19394d38a8ea941ce1d1dbf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SavedRoomsRow
 --- !u!1 &1744900196
 GameObject:
   m_ObjectHideFlags: 0

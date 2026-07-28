@@ -29,12 +29,19 @@ namespace IBMROS.Designer.ThreeD
         private const float LOOK_DEG_PER_PX = 0.22f;
         private const float BODY_RADIUS_M = 0.28f;
         private const float NEAR_PLANE_M = 0.05f;
-        private const float FOV_DEG = 65f;
+        // Wide view so a whole room wall fits from inside (user direction:
+        // "ultra-wide, like the reference app").
+        private const float FOV_DEG = 78f;
         private const float PITCH_MIN = -75f, PITCH_MAX = 75f;
 
         private Camera cam;
         private CameraModeSwitcher switcher;
         private MonoBehaviour ortho, persp; // CameraTopDownOrtho / CameraPerspective
+
+        // On-screen joystick (legacy Room rig, transplanted): when present it
+        // drives movement and this controller owns its canvas visibility.
+        private JoystickController joystick;
+        private GameObject joystickCanvas;
 
         public bool Active { get; private set; }
 
@@ -48,6 +55,12 @@ namespace IBMROS.Designer.ThreeD
         private void Awake()
         {
             wallMask = LayerMask.GetMask("Wall", "ExteriorWall");
+            joystick = FindAnyObjectByType<JoystickController>(FindObjectsInactive.Include);
+            if (joystick != null)
+            {
+                Canvas c = joystick.GetComponentInParent<Canvas>(true);
+                joystickCanvas = c != null ? c.gameObject : joystick.gameObject;
+            }
         }
 
         public void Enter()
@@ -78,6 +91,8 @@ namespace IBMROS.Designer.ThreeD
             cam.transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
 
             moveFingerId = lookFingerId = -1;
+            if (joystickCanvas != null)
+                joystickCanvas.SetActive(true);
             Active = true;
             DesignerModeController.Instance?.NotifyWalkthrough(true);
         }
@@ -87,6 +102,8 @@ namespace IBMROS.Designer.ThreeD
             if (!Active)
                 return;
             Active = false;
+            if (joystickCanvas != null)
+                joystickCanvas.SetActive(false);
 
             // Re-enable the rig; its LateUpdate restores the orbit pose/matrix.
             if (ortho != null) ortho.enabled = true;
@@ -104,9 +121,17 @@ namespace IBMROS.Designer.ThreeD
             Vector2 moveInput = Vector2.zero; // x = strafe, y = forward
             Vector2 lookDelta = Vector2.zero;
 
+            bool joystickDriving = joystick != null && joystickCanvas != null &&
+                                   joystickCanvas.activeInHierarchy;
+            if (joystickDriving)
+                moveInput = joystick.InputVector;
+
             if (Input.touchCount > 0)
             {
-                ReadTouches(ref moveInput, ref lookDelta);
+                if (joystickDriving)
+                    ReadLookOnlyTouches(ref lookDelta); // joystick owns movement
+                else
+                    ReadTouches(ref moveInput, ref lookDelta);
             }
             else
             {
@@ -173,6 +198,36 @@ namespace IBMROS.Designer.ThreeD
                 }
                 else if (t.fingerId == lookFingerId &&
                          (t.phase == TouchPhase.Moved || t.phase == TouchPhase.Stationary))
+                {
+                    look += t.position - lookLast;
+                    lookLast = t.position;
+                }
+            }
+        }
+
+        /// <summary>All non-UI touches steer the view; the uGUI joystick owns movement
+        /// (its touches register as over-UI, so they never leak into look).</summary>
+        private void ReadLookOnlyTouches(ref Vector2 look)
+        {
+            for (int i = 0; i < Input.touchCount; i++)
+            {
+                Touch t = Input.GetTouch(i);
+                switch (t.phase)
+                {
+                    case TouchPhase.Began:
+                        if (lookFingerId < 0 && !PointerOverUi(t.fingerId))
+                        {
+                            lookFingerId = t.fingerId;
+                            lookLast = t.position;
+                        }
+                        break;
+                    case TouchPhase.Ended:
+                    case TouchPhase.Canceled:
+                        if (t.fingerId == lookFingerId) lookFingerId = -1;
+                        break;
+                }
+                if (t.fingerId == lookFingerId &&
+                    (t.phase == TouchPhase.Moved || t.phase == TouchPhase.Stationary))
                 {
                     look += t.position - lookLast;
                     lookLast = t.position;
