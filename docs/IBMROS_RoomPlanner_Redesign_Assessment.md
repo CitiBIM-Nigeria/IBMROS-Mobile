@@ -105,3 +105,29 @@ The new scene needs only four ingredients for the Exoa runtime to function (veri
 - **Phase 5 — Polish & cleanup**: retire Room.unity from the flow, remove dead code/scenes from build, full-flow test (Step 7 of the brief) via MCP + on-device pass.
 
 **Scanning/photo-import stay future features**: the scanning UI slot (button) can appear in Phase 4/5 UI as a disabled/"coming soon" entry; OpenRoomPlan already targets FloorMapV2 as its output, so nothing in this plan blocks it.
+
+---
+
+## Implementation status — 2026-07-28 overnight build
+
+All five phases landed on `furniture-backend-migration` (commits `a973054`,
+`4482a94`, `e076b9a`, `e88b107`). The repo is source of truth; summary only:
+
+- **Flow shipped**: Main → Create Room → preset picker (Rectangle/L/T/Z,
+  thumbnails painted from preset data; "Your rooms" list) → 2D touch editor
+  (corner/edge/room/opening drags, add door/window, draw-rect, resize sheet,
+  undo/redo, dimension labels) → 3D orbit → walkthrough → furnish → save.
+- **Architecture**: all document writes via `FloorPlanEditor` gateway;
+  scene = `RoomDesigner.unity` (FloorMapEditor duplicate, vendor UI hidden
+  but load-bearing); new code under `Assets/IBMROSDesigner/`.
+- **Root causes fixed**: layer-9 duplicate name (now `ExoaFloor`, enforced
+  via `Layers.cs` so `LayersCreator` agrees); furniture floor masks 128→640;
+  vendor prefabs generate colliders (`addMeshColliders`).
+- **Furniture persistence**: `FloorMaps/{plan}.furniture.json` sidecar;
+  migration path to additive FloorMapV2 fields documented in
+  `FurniturePersistence.cs`.
+- **Known-unverified**: real GLB catalog restore (needs AwsManager via Main
+  + network), on-device touch pass (pinch/`IsPointerOverGameObject`), Android
+  build. Room sections (SplitRoom) has gateway support but no UI affordance
+  yet. Legacy `Room.unity` intentionally retained as fallback (Step 8 cleanup
+  deferred until device pass).
