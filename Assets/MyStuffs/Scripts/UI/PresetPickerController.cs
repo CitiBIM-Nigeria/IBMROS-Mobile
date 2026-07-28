@@ -103,6 +103,10 @@ public class PresetPickerController : MonoBehaviour
 
         var row = new ScrollView(ScrollViewMode.Horizontal);
         row.AddToClassList("saved-rooms__row");
+        // Structural sizing inline — code-built elements must not depend on
+        // stylesheet load order for layout, only for theming.
+        row.style.height = 100;
+        row.style.flexShrink = 0;
         _savedSection.Add(row);
 
         int shown = 0;
@@ -113,11 +117,20 @@ public class PresetPickerController : MonoBehaviour
             string name = System.IO.Path.GetFileNameWithoutExtension(fi.Name);
             var card = new VisualElement();
             card.AddToClassList("saved-room-card");
+            card.style.width = 150;
+            card.style.minHeight = 72;
+            card.style.flexShrink = 0;
+            card.style.paddingTop = 12; card.style.paddingBottom = 12;
+            card.style.paddingLeft = 12; card.style.paddingRight = 12;
+            card.style.justifyContent = Justify.Center;
             var title = new Label(name);
             title.AddToClassList("saved-room-card__name");
+            title.style.fontSize = 15;
             card.Add(title);
             var when = new Label(fi.LastWriteTime.ToString("d MMM, HH:mm"));
             when.AddToClassList("saved-room-card__date");
+            when.style.fontSize = 12;
+            when.style.marginTop = 4;
             card.Add(when);
             card.RegisterCallback<ClickEvent>(_ => OpenSaved(name));
             row.Add(card);

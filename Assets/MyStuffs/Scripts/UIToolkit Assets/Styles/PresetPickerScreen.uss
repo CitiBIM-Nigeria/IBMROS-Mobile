@@ -60,11 +60,16 @@
 
 .saved-rooms__row {
     margin: 0 8px;
-    max-height: 96px;
+    height: 92px;
+}
+
+.saved-rooms__row .unity-scroll-view__content-container {
+    flex-direction: row;
 }
 
 .saved-room-card {
     width: 150px;
+    flex-shrink: 0;
     margin: 4px 8px;
     padding: 12px;
     background-color: rgb(255, 255, 255);

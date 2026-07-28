@@ -21,8 +21,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Floor_Triplanar_Grid
-  m_Shader: {fileID: -6465566751694194690, guid: c2a24c9849f08c4428bb61845b7672ca,
-    type: 3}
+  m_Shader: {fileID: -6465566751694194690, guid: c2a24c9849f08c4428bb61845b7672ca, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -147,12 +146,13 @@ Material:
     - _UsingMetallicGlossMap: 1
     - _UsingSpecGlossMap: 0
     - _VertexColorStrength: 0
+    - _XRMotionVectorsPass: 1
     - _ZTestDepthEqualForOpaque: 3
     - _ZTestGBuffer: 4
     - _ZTestTransparent: 4
     - _ZWrite: 1
     m_Colors:
-    - _Color: {r: 0.3490566, g: 0.3490566, b: 0.3490566, a: 1}
+    - _Color: {r: 0.88, g: 0.88, b: 0.87, a: 1}
     - _DoubleSidedConstants: {r: 1, g: 1, b: -1, a: 0}
     - _EmissionColor: {r: 191.74902, g: 191.74902, b: 191.74902, a: 1}
     - _EmissionColorUI: {r: 1, g: 1, b: 1, a: 1}

@@ -194,6 +194,7 @@ public class FurnitureSpawnManager : MonoBehaviour
         string s3ModelUrl, Vector3 position, Quaternion rotation, Vector3 localScale)
     {
         GameObject model = null;
+        bool placeholderKey = string.IsNullOrEmpty(s3ModelUrl) || s3ModelUrl == "Unknown";
         void OnLoaded(string fileName, GameObject m)
         {
             if (fileName == s3ModelUrl) model = m;
@@ -201,7 +202,7 @@ public class FurnitureSpawnManager : MonoBehaviour
         FurnitureService.OnModelLoaded += OnLoaded;
         try
         {
-            if (!string.IsNullOrEmpty(s3ModelUrl) && FurnitureService.Instance != null)
+            if (!placeholderKey && FurnitureService.Instance != null)
                 await FurnitureService.Instance.LoadModel(s3ModelUrl);
         }
         finally
