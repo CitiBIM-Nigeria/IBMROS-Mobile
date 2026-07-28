@@ -1,0 +1,52 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="DesignerHud.uss"/>
+    <ui:VisualElement name="DesignerHudRoot" picking-mode="Ignore" class="hud-root">
+
+        <!-- TOP BAR: back, plan name, undo/redo -->
+        <ui:VisualElement name="TopBar" class="bar bar--top">
+            <ui:Button name="BackButton" text="✕" class="btn btn--icon"/>
+            <ui:Label name="PlanNameLabel" text="Room" class="plan-name"/>
+            <ui:VisualElement name="TopBarSpacer" picking-mode="Ignore" class="spacer"/>
+            <ui:Button name="ShotButton" text="📷" class="btn btn--icon"/>
+            <ui:Button name="UndoButton" text="⟲" class="btn btn--icon"/>
+            <ui:Button name="RedoButton" text="⟳" class="btn btn--icon"/>
+        </ui:VisualElement>
+
+        <!-- BOTTOM BAR: 2D plan tools (visible in Plan2D) -->
+        <ui:VisualElement name="PlanToolbar" class="bar bar--bottom">
+            <ui:Button name="Btn3D" text="3D" class="btn btn--primary"/>
+            <ui:Button name="BtnDrawRect" text="▭ Room" class="btn btn--tool"/>
+            <ui:Button name="BtnAddDoor" text="+ Door" class="btn btn--tool"/>
+            <ui:Button name="BtnAddWindow" text="+ Window" class="btn btn--tool"/>
+            <ui:Button name="BtnResize" text="Resize" class="btn btn--tool"/>
+        </ui:VisualElement>
+
+        <!-- BOTTOM BAR: 3D view tools (visible in Orbit3D) -->
+        <ui:VisualElement name="ViewToolbar" class="bar bar--bottom" style="display: none;">
+            <ui:Button name="Btn2D" text="2D" class="btn btn--primary"/>
+            <ui:Button name="BtnWalkthrough" text="Walk" class="btn btn--tool"/>
+            <ui:Button name="BtnFurniture" text="Furnish" class="btn btn--tool"/>
+            <ui:Button name="BtnScan" text="Scan · soon" class="btn btn--tool btn--disabled"/>
+        </ui:VisualElement>
+
+        <!-- SELECTION BAR (floating, shown while something is selected in 2D) -->
+        <ui:VisualElement name="SelectionBar" class="selection-bar" style="display: none;">
+            <ui:Button name="SelDuplicateButton" text="Duplicate" class="btn btn--tool"/>
+            <ui:Button name="SelDeleteButton" text="Delete" class="btn btn--danger"/>
+        </ui:VisualElement>
+
+        <!-- ROOM SIZE SHEET (bottom card, hidden until Resize) -->
+        <ui:VisualElement name="RoomSizeSheet" class="sheet" style="display: none;">
+            <ui:Label name="RoomSizeTitle" text="Room size" class="sheet__title"/>
+            <ui:TextField name="WidthField" label="Width (m)" class="sheet__field"/>
+            <ui:TextField name="LengthField" label="Length (m)" class="sheet__field"/>
+            <ui:TextField name="CeilHeightField" label="Ceiling height (m)" class="sheet__field"/>
+            <ui:TextField name="WallThickField" label="Wall thickness (m)" class="sheet__field"/>
+            <ui:VisualElement name="SheetActions" class="sheet__actions">
+                <ui:Button name="SheetApplyButton" text="Apply" class="btn btn--primary sheet__btn"/>
+                <ui:Button name="SheetCloseButton" text="Close" class="btn sheet__btn"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,342 @@
+using System;
+using System.Globalization;
+using System.Collections.Generic;
+using System.IO;
+using Exoa.Designer;
+using IBMROS.Bridge.UndoRedo;
+using IBMROS.Bridge.Interaction;
+using IBMROS.Core;
+using IBMROS.Designer.Plan;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UIElements;
+
+namespace IBMROS.Designer.Hud
+{
+    /// <summary>
+    /// UI Toolkit HUD for RoomDesigner.unity — top bar (back / plan name /
+    /// screenshot / undo / redo), per-mode bottom toolbars, and the room-size
+    /// sheet. All document writes go through the FloorPlanEditor gateway; all
+    /// mode changes through DesignerModeController; all tools through
+    /// PlanTouchController — this class binds buttons, it owns no editing logic.
+    /// </summary>
+    [RequireComponent(typeof(UIDocument))]
+    public sealed class DesignerHudController : MonoBehaviour
+    {
+        private VisualElement root;
+        private Label planName;
+        private Button back, shot, undo, redo;
+        private VisualElement planBar, viewBar, sheet;
+        private Button btn3D, btnDrawRect, btnAddDoor, btnAddWindow, btnResize;
+        private Button btn2D, btnWalk, btnFurnish, btnScan;
+        private TextField widthField, lengthField, ceilField, thickField;
+        private Button sheetApply, sheetClose;
+        private VisualElement selectionBar;
+        private Button selDelete, selDuplicate;
+
+        private string sheetItemId; // room the sheet is editing
+
+        private void OnEnable()
+        {
+            root = GetComponent<UIDocument>().rootVisualElement;
+
+            planName = root.Q<Label>("PlanNameLabel");
+            back = root.Q<Button>("BackButton");
+            shot = root.Q<Button>("ShotButton");
+            undo = root.Q<Button>("UndoButton");
+            redo = root.Q<Button>("RedoButton");
+
+            planBar = root.Q<VisualElement>("PlanToolbar");
+            viewBar = root.Q<VisualElement>("ViewToolbar");
+            btn3D = root.Q<Button>("Btn3D");
+            btnDrawRect = root.Q<Button>("BtnDrawRect");
+            btnAddDoor = root.Q<Button>("BtnAddDoor");
+            btnAddWindow = root.Q<Button>("BtnAddWindow");
+            btnResize = root.Q<Button>("BtnResize");
+            btn2D = root.Q<Button>("Btn2D");
+            btnWalk = root.Q<Button>("BtnWalkthrough");
+            btnFurnish = root.Q<Button>("BtnFurniture");
+            btnScan = root.Q<Button>("BtnScan");
+
+            sheet = root.Q<VisualElement>("RoomSizeSheet");
+            widthField = root.Q<TextField>("WidthField");
+            lengthField = root.Q<TextField>("LengthField");
+            ceilField = root.Q<TextField>("CeilHeightField");
+            thickField = root.Q<TextField>("WallThickField");
+            sheetApply = root.Q<Button>("SheetApplyButton");
+            sheetClose = root.Q<Button>("SheetCloseButton");
+
+            back.clicked += OnBack;
+            shot.clicked += OnScreenshot;
+            undo.clicked += () => UndoRedoService.Instance?.Undo();
+            redo.clicked += () => UndoRedoService.Instance?.Redo();
+
+            btn3D.clicked += () => DesignerModeController.Instance?.Set3D();
+            btn2D.clicked += () => DesignerModeController.Instance?.Set2D();
+            btnDrawRect.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.DrawRect);
+            btnAddDoor.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddDoor);
+            btnAddWindow.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddWindow);
+            btnResize.clicked += OpenSheet;
+            btnWalk.clicked += OnWalkthrough;
+            btnFurnish.clicked += OnFurnish;
+            btnScan.SetEnabled(false); // future feature — UI placeholder only
+
+            sheetApply.clicked += ApplySheet;
+            sheetClose.clicked += () => ShowSheet(false);
+
+            selectionBar = root.Q<VisualElement>("SelectionBar");
+            selDelete = root.Q<Button>("SelDeleteButton");
+            selDuplicate = root.Q<Button>("SelDuplicateButton");
+            selDelete.clicked += OnDeleteSelected;
+            selDuplicate.clicked += OnDuplicateSelected;
+
+            UndoRedoService.OnHistoryChanged += RefreshHistoryButtons;
+            DesignerModeController.OnModeChanged += RefreshMode;
+            PlanTouchController.OnToolChanged += RefreshToolStates;
+            SelectionService.OnSelectionChanged += RefreshSelectionBar;
+
+            ApplySafeArea();
+            RefreshHistoryButtons();
+            RefreshMode(DesignerModeController.Instance != null
+                ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
+            RefreshToolStates(PlanTouchController.Instance != null
+                ? PlanTouchController.Instance.Tool : PlanToolMode.Browse);
+            ShowSheet(false);
+        }
+
+        private void OnDisable()
+        {
+            UndoRedoService.OnHistoryChanged -= RefreshHistoryButtons;
+            DesignerModeController.OnModeChanged -= RefreshMode;
+            PlanTouchController.OnToolChanged -= RefreshToolStates;
+            SelectionService.OnSelectionChanged -= RefreshSelectionBar;
+        }
+
+        private void Start()
+        {
+            // The bridge self-installs floating uGUI HUDs (undo/redo pair,
+            // delete/duplicate bar, rect-tool arm button). This HUD owns all of
+            // those affordances now — suppress the visuals. RectRoomTool keeps
+            // running (BtnDrawRect delegates to it); only its Canvas is disabled.
+            UndoRedoHud bridgeHud = FindAnyObjectByType<UndoRedoHud>();
+            if (bridgeHud != null)
+                bridgeHud.gameObject.SetActive(false);
+            SelectionActionBar bridgeBar = FindAnyObjectByType<SelectionActionBar>();
+            if (bridgeBar != null)
+                bridgeBar.gameObject.SetActive(false);
+            RectRoomTool rect = RectRoomTool.Instance;
+            if (rect != null)
+            {
+                var rectCanvas = rect.GetComponent<UnityEngine.Canvas>();
+                if (rectCanvas != null)
+                    rectCanvas.enabled = false;
+            }
+        }
+
+        private void Update()
+        {
+            // Plan name becomes known when the bootstrap finishes; poll cheaply.
+            string name = RoomDesignerBootstrap.PlanName;
+            if (!string.IsNullOrEmpty(name) && planName.text != name)
+                planName.text = name;
+        }
+
+        // ------------------------------------------------------------------ actions
+
+        private void OnBack()
+        {
+            // Save silently under the current plan name, then return to the shell.
+            if (UISaving.instance != null && !string.IsNullOrEmpty(RoomDesignerBootstrap.PlanName))
+                UISaving.instance.SaveInternal(RoomDesignerBootstrap.PlanName);
+            SceneTransition.SetSkipSplash(true);
+            SceneManager.LoadScene("Main");
+        }
+
+        private void OnScreenshot()
+        {
+            string dir = Path.Combine(Application.persistentDataPath, "Screenshots");
+            Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir,
+                $"Room_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            ScreenCapture.CaptureScreenshot(file);
+            Debug.Log($"[DesignerHud] Screenshot → {file}");
+        }
+
+        private void OnWalkthrough()
+        {
+            var walk = FindAnyObjectByType<ThreeD.WalkthroughController>(FindObjectsInactive.Include);
+            if (walk == null)
+            {
+                Debug.Log("[DesignerHud] Walkthrough not available in this build.");
+                return;
+            }
+            if (DesignerModeController.Instance != null &&
+                DesignerModeController.Instance.Mode == DesignerMode.Walkthrough)
+                walk.Exit();
+            else
+                walk.Enter();
+        }
+
+        private void OnFurnish()
+        {
+            Debug.Log("[DesignerHud] Furnish — Phase 4 wires the furniture panel here.");
+        }
+
+        // ------------------------------------------------------------------ room-size sheet
+
+        private void OpenSheet()
+        {
+            UIBaseItem item = PlanEditorUtil.FindItem(SelectionService.Instance?.SelectedId);
+            if (item == null || PlanEditorUtil.IsOpening(item))
+            {
+                List<UIBaseItem> spaces = PlanEditorUtil.AllSpaces();
+                item = spaces.Count > 0 ? spaces[0] : null;
+            }
+            if (item == null)
+                return;
+
+            sheetItemId = item.ItemUniqueId;
+            Rect bounds = BoundsOf(item);
+            widthField.value = bounds.width.ToString("0.##", CultureInfo.InvariantCulture);
+            lengthField.value = bounds.height.ToString("0.##", CultureInfo.InvariantCulture);
+
+            AppController app = AppController.Instance;
+            if (app != null)
+            {
+                ceilField.value = app.wallsHeight.ToString("0.##", CultureInfo.InvariantCulture);
+                thickField.value = app.exteriorWallThickness.ToString("0.##", CultureInfo.InvariantCulture);
+            }
+            ShowSheet(true);
+        }
+
+        private void ApplySheet()
+        {
+            UIBaseItem item = PlanEditorUtil.FindItem(sheetItemId);
+            if (item != null &&
+                TryParse(widthField.value, out float w) &&
+                TryParse(lengthField.value, out float l) &&
+                w >= 0.5f && l >= 0.5f)
+            {
+                Rect b = BoundsOf(item);
+                if (b.width > 1e-3f && b.height > 1e-3f &&
+                    (Mathf.Abs(b.width - w) > 1e-3f || Mathf.Abs(b.height - l) > 1e-3f))
+                {
+                    // Scale the polygon about its center so any shape (L/T/Z) resizes.
+                    Vector2 center = b.center;
+                    float sx = w / b.width, sy = l / b.height;
+                    var pts = new List<Vector2>();
+                    foreach (Vector3 wp in PlanEditorUtil.WorldPoints(item))
+                    {
+                        Vector2 m = PlanEditorUtil.WorldToMeters(wp);
+                        pts.Add(center + Vector2.Scale(m - center, new Vector2(sx, sy)));
+                    }
+                    FloorPlanEditor.MoveItemPoints(item.ItemUniqueId, pts);
+                }
+            }
+
+            bool hasCeil = TryParse(ceilField.value, out float ceil) && ceil >= 2f && ceil <= 6f;
+            bool hasThick = TryParse(thickField.value, out float thick) && thick >= 0.02f && thick <= 0.5f;
+            if (hasCeil || hasThick)
+            {
+                FloorPlanEditor.SetBuildingSettings(
+                    wallsHeight: hasCeil ? ceil : (float?)null,
+                    exteriorWallThickness: hasThick ? thick : (float?)null);
+            }
+
+            ShowSheet(false);
+        }
+
+        private static bool TryParse(string s, out float v) =>
+            float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v);
+
+        private static Rect BoundsOf(UIBaseItem item)
+        {
+            var min = new Vector2(float.MaxValue, float.MaxValue);
+            var max = new Vector2(float.MinValue, float.MinValue);
+            foreach (Vector3 wp in PlanEditorUtil.WorldPoints(item))
+            {
+                Vector2 m = PlanEditorUtil.WorldToMeters(wp);
+                min = Vector2.Min(min, m);
+                max = Vector2.Max(max, m);
+            }
+            return new Rect(min, max - min);
+        }
+
+        private void ShowSheet(bool show) =>
+            sheet.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+
+        // ------------------------------------------------------------------ state refresh
+
+        private void RefreshHistoryButtons()
+        {
+            UndoRedoService svc = UndoRedoService.Instance;
+            undo.SetEnabled(svc != null && svc.CanUndo);
+            redo.SetEnabled(svc != null && svc.CanRedo);
+        }
+
+        private void RefreshMode(DesignerMode mode)
+        {
+            planBar.style.display = mode == DesignerMode.Plan2D ? DisplayStyle.Flex : DisplayStyle.None;
+            viewBar.style.display = mode == DesignerMode.Plan2D ? DisplayStyle.None : DisplayStyle.Flex;
+            if (mode != DesignerMode.Plan2D)
+                ShowSheet(false);
+            btnWalk.text = mode == DesignerMode.Walkthrough ? "Exit walk" : "Walk";
+            RefreshSelectionBar();
+        }
+
+        private void OnDeleteSelected()
+        {
+            string id = SelectionService.Instance?.SelectedId;
+            if (string.IsNullOrEmpty(id))
+                return;
+            SelectionService.Instance.Deselect();
+            FloorPlanEditor.DeleteItem(id);
+        }
+
+        private void OnDuplicateSelected()
+        {
+            string id = SelectionService.Instance?.SelectedId;
+            if (string.IsNullOrEmpty(id))
+                return;
+            string dupId = FloorPlanEditor.DuplicateItem(id);
+            if (!string.IsNullOrEmpty(dupId))
+            {
+                // Nudge the copy so it doesn't sit exactly on the original.
+                FloorPlanEditor.MoveItemBy(dupId, new Vector2(0.5f, -0.5f));
+                SelectionService.Instance.SelectById(dupId);
+            }
+        }
+
+        private void RefreshSelectionBar()
+        {
+            bool show = SelectionService.Instance != null &&
+                        SelectionService.Instance.HasSelection &&
+                        DesignerModeController.Instance != null &&
+                        DesignerModeController.Instance.Mode == DesignerMode.Plan2D;
+            selectionBar.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        private void RefreshToolStates(PlanToolMode tool)
+        {
+            SetArmed(btnDrawRect, tool == PlanToolMode.DrawRect);
+            SetArmed(btnAddDoor, tool == PlanToolMode.AddDoor);
+            SetArmed(btnAddWindow, tool == PlanToolMode.AddWindow);
+        }
+
+        private static void SetArmed(Button b, bool armed)
+        {
+            if (armed) b.AddToClassList("btn--armed");
+            else b.RemoveFromClassList("btn--armed");
+        }
+
+        private void ApplySafeArea()
+        {
+            Rect safe = Screen.safeArea;
+            float scale = root.panel != null ? root.panel.scaledPixelsPerPoint : 1f;
+            root.style.paddingTop = (Screen.height - safe.yMax) / scale;
+            root.style.paddingBottom = safe.yMin / scale;
+            root.style.paddingLeft = safe.xMin / scale;
+            root.style.paddingRight = (Screen.width - safe.xMax) / scale;
+        }
+    }
+}

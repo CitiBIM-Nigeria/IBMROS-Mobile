@@ -25,12 +25,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8589385580408720580}
+  serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8589385580408720578
 MonoBehaviour:
@@ -44,24 +45,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e5f94eeee8844ac4eba1f8b6889e13c2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  prefabPoint: {fileID: 1513451265004805185, guid: 2ebe793b83aa16848af7dbf3858c0e7a,
-    type: 3}
+  prefabPoint: {fileID: 1513451265004805185, guid: 2ebe793b83aa16848af7dbf3858c0e7a, type: 3}
   snapToGrid: 1
   snapToPathLines: 0
   randomColors:
-  - {r: 0.100302614, g: 0.5471719, b: 0.9245283, a: 1}
-  - {r: 0.8679245, g: 0.32170805, b: 0.10234957, a: 1}
-  - {r: 0.09960338, g: 0.6226415, b: 0.032306872, a: 1}
-  - {r: 1, g: 0.697198, b: 0, a: 1}
-  - {r: 0.13995194, g: 0.7745695, b: 0.8018868, a: 1}
-  - {r: 1, g: 0, b: 0.6351261, a: 1}
-  - {r: 0.87545586, g: 0, b: 1, a: 1}
-  - {r: 0.16812229, g: 0, b: 1, a: 1}
-  - {r: 0.023629395, g: 0.3145704, b: 0.5566038, a: 1}
+  - {r: 0.91, g: 0.86, b: 0.78, a: 1}
+  - {r: 0.8, g: 0.87, b: 0.78, a: 1}
+  - {r: 0.78, g: 0.85, b: 0.92, a: 1}
+  - {r: 0.93, g: 0.84, b: 0.8, a: 1}
+  - {r: 0.88, g: 0.88, b: 0.86, a: 1}
+  - {r: 0.85, g: 0.82, b: 0.9, a: 1}
+  - {r: 0.94, g: 0.9, b: 0.75, a: 1}
+  - {r: 0.78, g: 0.9, b: 0.86, a: 1}
+  - {r: 0.9, g: 0.8, b: 0.72, a: 1}
   pathColor: {r: 0, g: 0, b: 0, a: 0}
   drawPath: 0
+  drawWidth: 0
+  singlePointMode: 0
 --- !u!120 &8589385580408720579
 LineRenderer:
+  serializedVersion: 3
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -71,10 +74,17 @@ LineRenderer:
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
   m_MotionVectors: 0
   m_LightProbeUsage: 0
   m_ReflectionProbeUsage: 0
   m_RayTracingMode: 0
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -96,9 +106,11 @@ LineRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Positions: []
   m_Parameters:
     serializedVersion: 3
@@ -145,13 +157,16 @@ LineRenderer:
       atime6: 0
       atime7: 0
       m_Mode: 1
+      m_ColorSpace: -1
       m_NumColorKeys: 2
       m_NumAlphaKeys: 2
     numCornerVertices: 0
     numCapVertices: 0
     alignment: 0
     textureMode: 0
+    textureScale: {x: 1, y: 1}
     shadowBias: 0.5
     generateLightingData: 0
   m_UseWorldSpace: 1
   m_Loop: 0
+  m_ApplyActiveColorSpace: 0

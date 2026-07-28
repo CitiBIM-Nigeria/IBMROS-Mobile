@@ -64,6 +64,20 @@ namespace IBMROS.Designer
             OnModeChanged?.Invoke(Mode);
         }
 
+        /// <summary>
+        /// WalkthroughController reports entering/leaving first-person mode here
+        /// (the vendor switcher is disabled during walkthrough, so no camera
+        /// events fire for this transition).
+        /// </summary>
+        public void NotifyWalkthrough(bool entering)
+        {
+            DesignerMode next = entering ? DesignerMode.Walkthrough : DesignerMode.Orbit3D;
+            if (next == Mode)
+                return;
+            Mode = next;
+            OnModeChanged?.Invoke(Mode);
+        }
+
         /// <summary>Animated ortho↔perspective switch via the vendor rig.</summary>
         public void Toggle2D3D()
         {

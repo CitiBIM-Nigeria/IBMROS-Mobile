@@ -1,0 +1,150 @@
+.hud-root {
+    flex-grow: 1;
+    justify-content: space-between;
+}
+
+.bar {
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 12px;
+}
+
+.bar--top {
+    background-color: rgba(252, 252, 252, 0.92);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.bar--bottom {
+    background-color: rgba(252, 252, 252, 0.95);
+    border-top-width: 1px;
+    border-top-color: rgba(0, 0, 0, 0.08);
+    justify-content: space-around;
+}
+
+.plan-name {
+    font-size: 17px;
+    -unity-font-style: bold;
+    color: rgb(25, 25, 25);
+    margin-left: 6px;
+}
+
+.spacer {
+    flex-grow: 1;
+}
+
+.btn {
+    height: 48px;
+    min-width: 48px;
+    padding: 0 14px;
+    margin: 0 4px;
+    border-radius: 12px;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0.05);
+    color: rgb(30, 30, 30);
+    font-size: 15px;
+    -unity-text-align: middle-center;
+}
+
+.btn:active {
+    background-color: rgba(0, 0, 0, 0.14);
+}
+
+.btn--icon {
+    font-size: 22px;
+    min-width: 48px;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.btn--primary {
+    background-color: rgb(28, 28, 30);
+    color: rgb(255, 255, 255);
+    -unity-font-style: bold;
+    min-width: 64px;
+}
+
+.btn--primary:active {
+    background-color: rgb(70, 70, 74);
+}
+
+.btn--tool {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.btn--armed {
+    background-color: rgb(70, 130, 220);
+    color: rgb(255, 255, 255);
+}
+
+.btn--disabled {
+    opacity: 0.35;
+}
+
+.btn:disabled {
+    opacity: 0.35;
+}
+
+.selection-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 84px;
+    flex-direction: row;
+    justify-content: center;
+}
+
+.btn--danger {
+    background-color: rgb(214, 69, 65);
+    color: rgb(255, 255, 255);
+}
+
+.btn--danger:active {
+    background-color: rgb(170, 50, 47);
+}
+
+.sheet {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 84px;
+    background-color: rgb(255, 255, 255);
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: rgba(0, 0, 0, 0.1);
+    padding: 16px;
+}
+
+.sheet__title {
+    font-size: 18px;
+    -unity-font-style: bold;
+    color: rgb(25, 25, 25);
+    margin-bottom: 10px;
+}
+
+.sheet__field {
+    margin-bottom: 8px;
+}
+
+.sheet__field .unity-base-field__label {
+    min-width: 150px;
+    font-size: 14px;
+    color: rgb(60, 60, 60);
+}
+
+.sheet__field .unity-base-text-field__input {
+    height: 40px;
+    border-radius: 8px;
+    font-size: 15px;
+    padding: 0 10px;
+}
+
+.sheet__actions {
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-top: 6px;
+}
+
+.sheet__btn {
+    min-width: 96px;
+}

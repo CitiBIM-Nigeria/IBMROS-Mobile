@@ -9,7 +9,11 @@ namespace Exoa.Designer
         public const string Water = "Water";
         public const string UI = "UI";
         public const string FX = "FX";
-        public const string Floor = "Floor";
+        // IBMROS: layer 9 renamed ExoaFloor — index 7 already holds the app's own
+        // "Floor" layer; the duplicate name broke NameToLayer/GetMask("Floor")
+        // resolution (commit 6e15b0c). LayersCreator enforces THESE names on every
+        // domain reload, so the rename must live here or it silently reverts.
+        public const string Floor = "ExoaFloor";
         public const string Wall = "Wall";
         public const string Join = "Join";
         public const string RoomBox = "RoomBox";
@@ -64,7 +68,8 @@ namespace Exoa.Designer
             Water = 4,
             UI = 5,
             FX = 8,
-            Floor = 9,
+            ExoaFloor = 9, // IBMROS: was Floor — see string const note above
+
             Wall = 10,
             Join = 11,
             RoomBox = 12,

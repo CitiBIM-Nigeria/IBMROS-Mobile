@@ -523,6 +523,10 @@ GameObject:
   - component: {fileID: 227503491}
   - component: {fileID: 227503490}
   - component: {fileID: 227503489}
+  - component: {fileID: 227503494}
+  - component: {fileID: 227503493}
+  - component: {fileID: 227503492}
+  - component: {fileID: 227503495}
   m_Layer: 0
   m_Name: IBMROSDesigner
   m_TagString: Untagged
@@ -569,6 +573,54 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &227503492
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 227503488}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e60ae1425ac9944c5b2d07e39bb66520, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::IBMROS.Designer.ThreeD.WalkthroughController
+--- !u!114 &227503493
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 227503488}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37978d5a8e905474880d3455ef7548f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::IBMROS.Designer.Plan.DimensionLabels
+--- !u!114 &227503494
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 227503488}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b354b1edefb3b4129a6c72c2b8750b59, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::IBMROS.Designer.Plan.PlanTouchController
+--- !u!114 &227503495
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 227503488}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 949e8a917a15e42c78eeb6661fbf1ed1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::IBMROS.Designer.ThreeD.LightingRig
 --- !u!1 &272541836
 GameObject:
   m_ObjectHideFlags: 0
@@ -6194,6 +6246,74 @@ RectTransform:
   m_AnchoredPosition: {x: 812.40076, y: -0.5}
   m_SizeDelta: {x: 1623, y: 1}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &1278217283
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1278217286}
+  - component: {fileID: 1278217285}
+  - component: {fileID: 1278217284}
+  m_Layer: 0
+  m_Name: DesignerHud
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1278217284
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1278217283}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a257a2f9136c4432dad884e200fdb408, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::IBMROS.Designer.Hud.DesignerHudController
+--- !u!114 &1278217285
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1278217283}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: a1d3053091a4e42168535de05348553c, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: e935d3cb8609a4f319610fbd2f43a5ea, type: 3}
+  m_SortingOrder: 0
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
+--- !u!4 &1278217286
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1278217283}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1298196260
 GameObject:
   m_ObjectHideFlags: 0
@@ -14351,3 +14471,4 @@ SceneRoots:
   - {fileID: 1018578833}
   - {fileID: 507459888}
   - {fileID: 227503491}
+  - {fileID: 1278217286}
