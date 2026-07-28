@@ -14,27 +14,33 @@ using UnityEngine.UIElements;
 namespace IBMROS.Designer.Hud
 {
     /// <summary>
-    /// UI Toolkit HUD for RoomDesigner.unity — top bar (back / plan name /
-    /// screenshot / undo / redo), per-mode bottom toolbars, and the room-size
-    /// sheet. All document writes go through the FloorPlanEditor gateway; all
-    /// mode changes through DesignerModeController; all tools through
-    /// PlanTouchController — this class binds buttons, it owns no editing logic.
+    /// UI Toolkit HUD for RoomDesigner.unity, structured like the reference app:
+    ///   • 2D browse bar: [3D · Open 3D plan] [Edit Walls] [Add Furniture]
+    ///   • Edit Walls mode: [Done] [Room] [Door] [Window] [Resize]
+    ///   • 3D bar: [2D · Open 2D plan] … [Add Furniture] (joystick floats above)
+    /// Icons are painter-drawn (generateVisualContent) — the UI font lacks the
+    /// undo/camera glyphs, which rendered as empty boxes on device.
+    /// All writes go through the gateway/controllers; this class only binds.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class DesignerHudController : MonoBehaviour
     {
+        private static readonly Color ICON_COLOR = new Color(0.13f, 0.13f, 0.14f);
+
         private VisualElement root;
         private Label planName;
         private Button back, shot, undo, redo;
-        private VisualElement planBar, viewBar, sheet;
-        private Button btn3D, btnDrawRect, btnAddDoor, btnAddWindow, btnResize, btnAdd;
-        private Button btn2D, btnFurnish, btnScan;
+        private VisualElement browseBar, editBar, viewBar, sheet;
+        private Button btnOpen3D, btnEditWalls, btnAddFurn2D;
+        private Button btnDone, btnDrawRect, btnAddDoor, btnAddWindow, btnResize;
+        private Button btnOpen2D, btnAddFurn3D;
         private TextField widthField, lengthField, ceilField, thickField;
         private Button sheetApply, sheetClose;
         private VisualElement selectionBar;
         private Button selDelete, selDuplicate;
 
-        private string sheetItemId; // room the sheet is editing
+        private string sheetItemId;   // room the sheet is editing
+        private bool editingWalls;    // Edit Walls sub-mode of Plan2D
 
         private void OnEnable()
         {
@@ -46,17 +52,19 @@ namespace IBMROS.Designer.Hud
             undo = root.Q<Button>("UndoButton");
             redo = root.Q<Button>("RedoButton");
 
-            planBar = root.Q<VisualElement>("PlanToolbar");
+            browseBar = root.Q<VisualElement>("BrowseToolbar");
+            editBar = root.Q<VisualElement>("EditToolbar");
             viewBar = root.Q<VisualElement>("ViewToolbar");
-            btn3D = root.Q<Button>("Btn3D");
+            btnOpen3D = root.Q<Button>("BtnOpen3D");
+            btnEditWalls = root.Q<Button>("BtnEditWalls");
+            btnAddFurn2D = root.Q<Button>("BtnAddFurn2D");
+            btnDone = root.Q<Button>("BtnDone");
             btnDrawRect = root.Q<Button>("BtnDrawRect");
             btnAddDoor = root.Q<Button>("BtnAddDoor");
             btnAddWindow = root.Q<Button>("BtnAddWindow");
             btnResize = root.Q<Button>("BtnResize");
-            btnAdd = root.Q<Button>("BtnAdd");
-            btn2D = root.Q<Button>("Btn2D");
-            btnFurnish = root.Q<Button>("BtnFurniture");
-            btnScan = root.Q<Button>("BtnScan");
+            btnOpen2D = root.Q<Button>("BtnOpen2D");
+            btnAddFurn3D = root.Q<Button>("BtnAddFurn3D");
 
             sheet = root.Q<VisualElement>("RoomSizeSheet");
             widthField = root.Q<TextField>("WidthField");
@@ -65,28 +73,41 @@ namespace IBMROS.Designer.Hud
             thickField = root.Q<TextField>("WallThickField");
             sheetApply = root.Q<Button>("SheetApplyButton");
             sheetClose = root.Q<Button>("SheetCloseButton");
+            selectionBar = root.Q<VisualElement>("SelectionBar");
+            selDelete = root.Q<Button>("SelDeleteButton");
+            selDuplicate = root.Q<Button>("SelDuplicateButton");
+
+            // Painter icons (no font dependency).
+            BindIcon("ShotIcon", DrawCameraIcon);
+            BindIcon("UndoIcon", ctx => DrawUndoIcon(ctx, false));
+            BindIcon("RedoIcon", ctx => DrawUndoIcon(ctx, true));
+            BindIcon("EditWallsIcon", DrawEditWallsIcon);
+            BindIcon("AddIcon2D", DrawPlusIcon);
+            BindIcon("AddIcon3D", DrawPlusIcon);
 
             back.clicked += OnBack;
             shot.clicked += OnScreenshot;
             undo.clicked += () => UndoRedoService.Instance?.Undo();
             redo.clicked += () => UndoRedoService.Instance?.Redo();
 
-            btn3D.clicked += () => DesignerModeController.Instance?.Set3D();
-            btn2D.clicked += () => DesignerModeController.Instance?.Set2D();
+            btnOpen3D.clicked += () => DesignerModeController.Instance?.Set3D();
+            btnOpen2D.clicked += () => DesignerModeController.Instance?.Set2D();
+            btnEditWalls.clicked += () => SetEditingWalls(true);
+            btnDone.clicked += () =>
+            {
+                PlanTouchController.Instance?.SetTool(PlanToolMode.Browse);
+                ShowSheet(false);
+                SetEditingWalls(false);
+            };
+            btnAddFurn2D.clicked += OnFurnish;
+            btnAddFurn3D.clicked += OnFurnish;
             btnDrawRect.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.DrawRect);
             btnAddDoor.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddDoor);
             btnAddWindow.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddWindow);
             btnResize.clicked += OpenSheet;
-            btnAdd.clicked += OnFurnish; // furniture reachable from the 2D bar too
-            btnFurnish.clicked += OnFurnish;
-            btnScan.SetEnabled(false); // future feature — UI placeholder only
 
             sheetApply.clicked += ApplySheet;
             sheetClose.clicked += () => ShowSheet(false);
-
-            selectionBar = root.Q<VisualElement>("SelectionBar");
-            selDelete = root.Q<Button>("SelDeleteButton");
-            selDuplicate = root.Q<Button>("SelDuplicateButton");
             selDelete.clicked += OnDeleteSelected;
             selDuplicate.clicked += OnDuplicateSelected;
 
@@ -114,10 +135,9 @@ namespace IBMROS.Designer.Hud
 
         private void Start()
         {
-            // The bridge self-installs floating uGUI HUDs (undo/redo pair,
-            // delete/duplicate bar, rect-tool arm button). This HUD owns all of
-            // those affordances now — suppress the visuals. RectRoomTool keeps
-            // running (BtnDrawRect delegates to it); only its Canvas is disabled.
+            // The bridge self-installs floating uGUI HUDs; this HUD owns those
+            // affordances. RectRoomTool keeps running (Room button delegates to
+            // it); only its arm-button canvas is hidden.
             UndoRedoHud bridgeHud = FindAnyObjectByType<UndoRedoHud>();
             if (bridgeHud != null)
                 bridgeHud.gameObject.SetActive(false);
@@ -135,17 +155,123 @@ namespace IBMROS.Designer.Hud
 
         private void Update()
         {
-            // Plan name becomes known when the bootstrap finishes; poll cheaply.
             string name = RoomDesignerBootstrap.PlanName;
             if (!string.IsNullOrEmpty(name) && planName.text != name)
                 planName.text = name;
+        }
+
+        // ------------------------------------------------------------------ painter icons
+
+        private void BindIcon(string elementName, Action<MeshGenerationContext> draw)
+        {
+            VisualElement el = root.Q<VisualElement>(elementName);
+            if (el != null)
+                el.generateVisualContent += draw;
+        }
+
+        private static void DrawUndoIcon(MeshGenerationContext ctx, bool mirrored)
+        {
+            Rect r = ctx.visualElement.contentRect;
+            var p = ctx.painter2D;
+            float cx = r.width * 0.5f, cy = r.height * 0.55f;
+            float rad = Mathf.Min(r.width, r.height) * 0.32f;
+            p.strokeColor = ICON_COLOR;
+            p.lineWidth = 2.2f;
+            p.lineCap = LineCap.Round;
+            // open arc with an arrowhead at its start (top)
+            float a0 = mirrored ? -60f : 240f;
+            float a1 = mirrored ? 240f : -60f;
+            p.BeginPath();
+            p.Arc(new Vector2(cx, cy), rad, a0, a1,
+                mirrored ? ArcDirection.Clockwise : ArcDirection.CounterClockwise);
+            p.Stroke();
+            float tipX = cx + rad * Mathf.Cos(a0 * Mathf.Deg2Rad);
+            float tipY = cy + rad * Mathf.Sin(a0 * Mathf.Deg2Rad);
+            float dir = mirrored ? 1f : -1f;
+            p.BeginPath();
+            p.MoveTo(new Vector2(tipX + dir * 5f, tipY - 4f));
+            p.LineTo(new Vector2(tipX, tipY));
+            p.LineTo(new Vector2(tipX + dir * 5f, tipY + 4f));
+            p.Stroke();
+        }
+
+        private static void DrawCameraIcon(MeshGenerationContext ctx)
+        {
+            Rect r = ctx.visualElement.contentRect;
+            var p = ctx.painter2D;
+            p.strokeColor = ICON_COLOR;
+            p.lineWidth = 2f;
+            p.lineJoin = LineJoin.Round;
+            float w = r.width, h = r.height;
+            // body
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.08f, h * 0.3f));
+            p.LineTo(new Vector2(w * 0.32f, h * 0.3f));
+            p.LineTo(new Vector2(w * 0.4f, h * 0.16f));
+            p.LineTo(new Vector2(w * 0.6f, h * 0.16f));
+            p.LineTo(new Vector2(w * 0.68f, h * 0.3f));
+            p.LineTo(new Vector2(w * 0.92f, h * 0.3f));
+            p.LineTo(new Vector2(w * 0.92f, h * 0.85f));
+            p.LineTo(new Vector2(w * 0.08f, h * 0.85f));
+            p.ClosePath();
+            p.Stroke();
+            // lens
+            p.BeginPath();
+            p.Arc(new Vector2(w * 0.5f, h * 0.56f), w * 0.17f, 0f, 360f);
+            p.Stroke();
+        }
+
+        private static void DrawEditWallsIcon(MeshGenerationContext ctx)
+        {
+            Rect r = ctx.visualElement.contentRect;
+            var p = ctx.painter2D;
+            float w = r.width, h = r.height;
+            p.strokeColor = ICON_COLOR;
+            p.lineWidth = 2.2f;
+            p.lineJoin = LineJoin.Round;
+            // rectangle outline
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.18f, h * 0.18f));
+            p.LineTo(new Vector2(w * 0.82f, h * 0.18f));
+            p.LineTo(new Vector2(w * 0.82f, h * 0.82f));
+            p.LineTo(new Vector2(w * 0.18f, h * 0.82f));
+            p.ClosePath();
+            p.Stroke();
+            // corner handles
+            p.fillColor = ICON_COLOR;
+            foreach (Vector2 c in new[]
+            {
+                new Vector2(w * 0.18f, h * 0.18f), new Vector2(w * 0.82f, h * 0.18f),
+                new Vector2(w * 0.82f, h * 0.82f), new Vector2(w * 0.18f, h * 0.82f),
+            })
+            {
+                p.BeginPath();
+                p.Arc(c, 3.2f, 0f, 360f);
+                p.Fill();
+            }
+        }
+
+        private static void DrawPlusIcon(MeshGenerationContext ctx)
+        {
+            Rect r = ctx.visualElement.contentRect;
+            var p = ctx.painter2D;
+            float cx = r.width * 0.5f, cy = r.height * 0.5f;
+            float arm = Mathf.Min(r.width, r.height) * 0.36f;
+            p.strokeColor = ICON_COLOR;
+            p.lineWidth = 3f;
+            p.lineCap = LineCap.Round;
+            p.BeginPath();
+            p.MoveTo(new Vector2(cx - arm, cy));
+            p.LineTo(new Vector2(cx + arm, cy));
+            p.MoveTo(new Vector2(cx, cy - arm));
+            p.LineTo(new Vector2(cx, cy + arm));
+            p.Stroke();
         }
 
         // ------------------------------------------------------------------ actions
 
         private void OnBack()
         {
-            // Save silently under the current plan name, then return to the shell.
             if (UISaving.instance != null && !string.IsNullOrEmpty(RoomDesignerBootstrap.PlanName))
                 UISaving.instance.SaveInternal(RoomDesignerBootstrap.PlanName);
             SceneTransition.SetSkipSplash(true);
@@ -156,8 +282,7 @@ namespace IBMROS.Designer.Hud
         {
             string dir = Path.Combine(Application.persistentDataPath, "Screenshots");
             Directory.CreateDirectory(dir);
-            string file = Path.Combine(dir,
-                $"Room_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            string file = Path.Combine(dir, $"Room_{DateTime.Now:yyyyMMdd_HHmmss}.png");
             ScreenCapture.CaptureScreenshot(file);
             Debug.Log($"[DesignerHud] Screenshot → {file}");
         }
@@ -169,6 +294,13 @@ namespace IBMROS.Designer.Hud
                 adapter.OpenCatalog();
             else
                 Debug.Log("[DesignerHud] Furniture stack not present in this scene.");
+        }
+
+        private void SetEditingWalls(bool editing)
+        {
+            editingWalls = editing;
+            RefreshMode(DesignerModeController.Instance != null
+                ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
         }
 
         // ------------------------------------------------------------------ room-size sheet
@@ -210,7 +342,6 @@ namespace IBMROS.Designer.Hud
                 if (b.width > 1e-3f && b.height > 1e-3f &&
                     (Mathf.Abs(b.width - w) > 1e-3f || Mathf.Abs(b.height - l) > 1e-3f))
                 {
-                    // Scale the polygon about its center so any shape (L/T/Z) resizes.
                     Vector2 center = b.center;
                     float sx = w / b.width, sy = l / b.height;
                     var pts = new List<Vector2>();
@@ -254,23 +385,7 @@ namespace IBMROS.Designer.Hud
         private void ShowSheet(bool show) =>
             sheet.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
 
-        // ------------------------------------------------------------------ state refresh
-
-        private void RefreshHistoryButtons()
-        {
-            UndoRedoService svc = UndoRedoService.Instance;
-            undo.SetEnabled(svc != null && svc.CanUndo);
-            redo.SetEnabled(svc != null && svc.CanRedo);
-        }
-
-        private void RefreshMode(DesignerMode mode)
-        {
-            planBar.style.display = mode == DesignerMode.Plan2D ? DisplayStyle.Flex : DisplayStyle.None;
-            viewBar.style.display = mode == DesignerMode.Plan2D ? DisplayStyle.None : DisplayStyle.Flex;
-            if (mode != DesignerMode.Plan2D)
-                ShowSheet(false);
-            RefreshSelectionBar();
-        }
+        // ------------------------------------------------------------------ selection actions
 
         private void OnDeleteSelected()
         {
@@ -289,10 +404,32 @@ namespace IBMROS.Designer.Hud
             string dupId = FloorPlanEditor.DuplicateItem(id);
             if (!string.IsNullOrEmpty(dupId))
             {
-                // Nudge the copy so it doesn't sit exactly on the original.
                 FloorPlanEditor.MoveItemBy(dupId, new Vector2(0.5f, -0.5f));
                 SelectionService.Instance.SelectById(dupId);
             }
+        }
+
+        // ------------------------------------------------------------------ state refresh
+
+        private void RefreshHistoryButtons()
+        {
+            UndoRedoService svc = UndoRedoService.Instance;
+            undo.SetEnabled(svc != null && svc.CanUndo);
+            redo.SetEnabled(svc != null && svc.CanRedo);
+        }
+
+        private void RefreshMode(DesignerMode mode)
+        {
+            bool plan = mode == DesignerMode.Plan2D;
+            browseBar.style.display = plan && !editingWalls ? DisplayStyle.Flex : DisplayStyle.None;
+            editBar.style.display = plan && editingWalls ? DisplayStyle.Flex : DisplayStyle.None;
+            viewBar.style.display = plan ? DisplayStyle.None : DisplayStyle.Flex;
+            if (!plan)
+            {
+                ShowSheet(false);
+                editingWalls = false;
+            }
+            RefreshSelectionBar();
         }
 
         private void RefreshSelectionBar()

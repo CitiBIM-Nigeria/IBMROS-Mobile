@@ -26,13 +26,16 @@ namespace IBMROS.Designer.ThreeD
     {
         private const float EYE_HEIGHT_M = 1.6f;
         private const float MOVE_SPEED_MPS = 1.8f;
-        private const float LOOK_DEG_PER_PX = 0.22f;
+        private const float LOOK_DEG_PER_PX = 0.38f;
+        private const float LOOK_SMOOTH_LAMBDA = 9f;   // higher = snappier stop
+        private const float LOOK_INERTIA_LAMBDA = 4f;  // glide-out after release
         private const float BODY_RADIUS_M = 0.28f;
-        private const float NEAR_PLANE_M = 0.05f;
-        // Wide view so a whole room wall fits from inside (user direction:
-        // "ultra-wide, like the reference app").
-        private const float FOV_DEG = 78f;
+        private const float NEAR_PLANE_M = 0.12f;
         private const float PITCH_MIN = -75f, PITCH_MAX = 75f;
+        // Optics copied from the Room scene's hand-tuned camera (physical
+        // Super-35 @ 18 mm, gate fit horizontal ⇒ wide interior view).
+        private static readonly Vector2 SENSOR_SIZE = new Vector2(24.89f, 18.66f);
+        private const float FOCAL_LENGTH_MM = 18f;
 
         private Camera cam;
         private CameraModeSwitcher switcher;
@@ -46,6 +49,7 @@ namespace IBMROS.Designer.ThreeD
         public bool Active { get; private set; }
 
         private float yaw, pitch;
+        private Vector2 lookVelocity; // deg/s, smoothed + inertial
         private int wallMask;
 
         // touch bookkeeping
@@ -82,17 +86,31 @@ namespace IBMROS.Designer.ThreeD
             cam.orthographic = false;
             cam.ResetProjectionMatrix(); // clear the switcher's blended matrix
             cam.nearClipPlane = NEAR_PLANE_M;
-            cam.fieldOfView = FOV_DEG;
+            cam.usePhysicalProperties = true;
+            cam.sensorSize = SENSOR_SIZE;
+            cam.focalLength = FOCAL_LENGTH_MM;
+            cam.gateFit = Camera.GateFitMode.Horizontal;
 
-            Vector3 spawn = FindSpawnPoint();
+            Vector3 spawn = FindSpawnPoint(out float spawnYaw);
             cam.transform.position = new Vector3(spawn.x, EYE_HEIGHT_M, spawn.z);
-            yaw = cam.transform.eulerAngles.y;
-            pitch = 0f;
+            yaw = spawnYaw;
+            pitch = 4f; // slight downward glance, like the reference
+            lookVelocity = Vector2.zero;
             cam.transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
 
             moveFingerId = lookFingerId = -1;
             if (joystickCanvas != null)
                 joystickCanvas.SetActive(true);
+            if (joystick != null && joystick.background != null)
+            {
+                // Bottom-center, floated ABOVE the HUD toolbar — it previously
+                // overlapped the Add Furniture button, which both looked wrong
+                // and swallowed the joystick's pointer events (reported broken).
+                RectTransform bg = joystick.background;
+                bg.anchorMin = bg.anchorMax = new Vector2(0.5f, 0f);
+                bg.pivot = new Vector2(0.5f, 0.5f);
+                bg.anchoredPosition = new Vector2(0f, 420f);
+            }
             Active = true;
             DesignerModeController.Instance?.NotifyWalkthrough(true);
         }
@@ -104,6 +122,8 @@ namespace IBMROS.Designer.ThreeD
             Active = false;
             if (joystickCanvas != null)
                 joystickCanvas.SetActive(false);
+            if (cam != null)
+                cam.usePhysicalProperties = false; // hand plain projection back to the rig
 
             // Re-enable the rig; its LateUpdate restores the orbit pose/matrix.
             if (ortho != null) ortho.enabled = true;
@@ -143,8 +163,25 @@ namespace IBMROS.Designer.ThreeD
                     lookDelta = new Vector2(Input.GetAxis("Mouse X") * 10f, Input.GetAxis("Mouse Y") * 10f);
             }
 
-            yaw += lookDelta.x * LOOK_DEG_PER_PX;
-            pitch = Mathf.Clamp(pitch - lookDelta.y * LOOK_DEG_PER_PX, PITCH_MIN, PITCH_MAX);
+            // Smoothed, inertial look: input drives a velocity that eases toward
+            // the target while dragging and glides out after release (the
+            // "keeps moving a little, then settles" feel of the reference app).
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+            bool hasInput = lookDelta.sqrMagnitude > 1e-6f;
+            if (hasInput)
+            {
+                Vector2 target = lookDelta * (LOOK_DEG_PER_PX / dt);
+                lookVelocity = Vector2.Lerp(lookVelocity, target,
+                    1f - Mathf.Exp(-LOOK_SMOOTH_LAMBDA * dt));
+            }
+            else
+            {
+                lookVelocity *= Mathf.Exp(-LOOK_INERTIA_LAMBDA * dt);
+                if (lookVelocity.sqrMagnitude < 0.5f)
+                    lookVelocity = Vector2.zero;
+            }
+            yaw += lookVelocity.x * dt;
+            pitch = Mathf.Clamp(pitch - lookVelocity.y * dt, PITCH_MIN, PITCH_MAX);
             cam.transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
 
             if (moveInput.sqrMagnitude > 1e-4f)
@@ -266,11 +303,16 @@ namespace IBMROS.Designer.ThreeD
             return pos;
         }
 
-        /// <summary>Center of the largest room polygon (fallback: world origin).</summary>
-        private static Vector3 FindSpawnPoint()
+        /// <summary>
+        /// Spawn like the reference app: just inside the DOOR, looking across
+        /// the room — the whole space is in view instead of a nearby wall.
+        /// Fallback: largest room's centroid facing its longest horizontal span.
+        /// </summary>
+        private static Vector3 FindSpawnPoint(out float yawDeg)
         {
+            // Largest room centroid (always needed as the look-at).
             float bestArea = -1f;
-            Vector2 best = Vector2.zero;
+            Vector2 centroidBest = Vector2.zero;
             foreach (var ui in PlanEditorUtil.AllSpaces())
             {
                 List<Vector3> pts = PlanEditorUtil.WorldPoints(ui);
@@ -289,10 +331,35 @@ namespace IBMROS.Designer.ThreeD
                 if (area > bestArea)
                 {
                     bestArea = area;
-                    best = centroid / pts.Count;
+                    centroidBest = centroid / pts.Count;
                 }
             }
-            return new Vector3(best.x, 0f, best.y);
+
+            // Door position from the document, if any.
+            Vector2? door = null;
+            foreach (var ui in UnityEngine.Object.FindObjectsByType<Exoa.Designer.UIBaseItem>(FindObjectsSortMode.None))
+            {
+                if (ui.sequencingItemType != Exoa.Designer.DataModel.FloorMapItemType.Door || ui.cpc == null)
+                    continue;
+                List<Vector3> pts = ui.cpc.GetPointsWorldPositionList();
+                if (pts != null && pts.Count > 0)
+                {
+                    door = new Vector2(pts[0].x, pts[0].z);
+                    break;
+                }
+            }
+
+            Vector2 eye;
+            if (door.HasValue && (centroidBest - door.Value).sqrMagnitude > 0.25f)
+                eye = door.Value + (centroidBest - door.Value).normalized * 0.7f; // step inside
+            else
+                eye = centroidBest;
+
+            Vector2 lookDir = centroidBest - eye;
+            if (lookDir.sqrMagnitude < 0.04f)
+                lookDir = Vector2.up;
+            yawDeg = Mathf.Atan2(lookDir.x, lookDir.y) * Mathf.Rad2Deg;
+            return new Vector3(eye.x, 0f, eye.y);
         }
     }
 }

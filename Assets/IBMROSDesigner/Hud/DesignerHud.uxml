@@ -2,31 +2,52 @@
     <Style src="DesignerHud.uss"/>
     <ui:VisualElement name="DesignerHudRoot" picking-mode="Ignore" class="hud-root">
 
-        <!-- TOP BAR: back, plan name, undo/redo -->
+        <!-- TOP BAR: back, plan name, screenshot, undo/redo (icons are painter-drawn) -->
         <ui:VisualElement name="TopBar" class="bar bar--top">
             <ui:Button name="BackButton" text="✕" class="btn btn--icon"/>
             <ui:Label name="PlanNameLabel" text="Room" class="plan-name"/>
             <ui:VisualElement name="TopBarSpacer" picking-mode="Ignore" class="spacer"/>
-            <ui:Button name="ShotButton" text="📷" class="btn btn--icon"/>
-            <ui:Button name="UndoButton" text="⟲" class="btn btn--icon"/>
-            <ui:Button name="RedoButton" text="⟳" class="btn btn--icon"/>
+            <ui:Button name="ShotButton" class="btn btn--icon"><ui:VisualElement name="ShotIcon" picking-mode="Ignore" class="icon"/></ui:Button>
+            <ui:Button name="UndoButton" class="btn btn--icon"><ui:VisualElement name="UndoIcon" picking-mode="Ignore" class="icon"/></ui:Button>
+            <ui:Button name="RedoButton" class="btn btn--icon"><ui:VisualElement name="RedoIcon" picking-mode="Ignore" class="icon"/></ui:Button>
         </ui:VisualElement>
 
-        <!-- BOTTOM BAR: 2D plan tools (visible in Plan2D) -->
-        <ui:VisualElement name="PlanToolbar" class="bar bar--bottom">
-            <ui:Button name="Btn3D" text="3D" class="btn btn--primary"/>
-            <ui:Button name="BtnDrawRect" text="▭ Room" class="btn btn--tool"/>
-            <ui:Button name="BtnAddDoor" text="+ Door" class="btn btn--tool"/>
-            <ui:Button name="BtnAddWindow" text="+ Window" class="btn btn--tool"/>
+        <!-- 2D BROWSE BAR (reference: three labeled actions) -->
+        <ui:VisualElement name="BrowseToolbar" class="bar bar--bottom">
+            <ui:Button name="BtnOpen3D" class="tool-col">
+                <ui:Label text="3D" picking-mode="Ignore" class="tool-col__glyph"/>
+                <ui:Label text="Open 3D plan" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
+            <ui:Button name="BtnEditWalls" class="tool-col">
+                <ui:VisualElement name="EditWallsIcon" picking-mode="Ignore" class="tool-col__icon"/>
+                <ui:Label text="Edit Walls" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
+            <ui:Button name="BtnAddFurn2D" class="tool-col">
+                <ui:VisualElement name="AddIcon2D" picking-mode="Ignore" class="tool-col__icon"/>
+                <ui:Label text="Add Furniture" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
+        </ui:VisualElement>
+
+        <!-- 2D EDIT-WALLS BAR (shown after Edit Walls; Done returns) -->
+        <ui:VisualElement name="EditToolbar" class="bar bar--bottom" style="display: none;">
+            <ui:Button name="BtnDone" text="Done" class="btn btn--primary"/>
+            <ui:Button name="BtnDrawRect" text="Room" class="btn btn--tool"/>
+            <ui:Button name="BtnAddDoor" text="Door" class="btn btn--tool"/>
+            <ui:Button name="BtnAddWindow" text="Window" class="btn btn--tool"/>
             <ui:Button name="BtnResize" text="Resize" class="btn btn--tool"/>
-            <ui:Button name="BtnAdd" text="+ Add" class="btn btn--tool"/>
         </ui:VisualElement>
 
-        <!-- BOTTOM BAR: inside-room tools (visible in Walkthrough/3D) -->
+        <!-- 3D BAR (reference: 2D · joystick lives above · Add Furniture) -->
         <ui:VisualElement name="ViewToolbar" class="bar bar--bottom" style="display: none;">
-            <ui:Button name="Btn2D" text="2D" class="btn btn--primary"/>
-            <ui:Button name="BtnFurniture" text="Add Furniture" class="btn btn--tool"/>
-            <ui:Button name="BtnScan" text="Scan · soon" class="btn btn--tool btn--disabled"/>
+            <ui:Button name="BtnOpen2D" class="tool-col">
+                <ui:Label text="2D" picking-mode="Ignore" class="tool-col__glyph"/>
+                <ui:Label text="Open 2D plan" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
+            <ui:VisualElement picking-mode="Ignore" class="spacer"/>
+            <ui:Button name="BtnAddFurn3D" class="tool-col">
+                <ui:VisualElement name="AddIcon3D" picking-mode="Ignore" class="tool-col__icon"/>
+                <ui:Label text="Add Furniture" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
         </ui:VisualElement>
 
         <!-- SELECTION BAR (floating, shown while something is selected in 2D) -->

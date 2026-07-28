@@ -16,10 +16,53 @@
 }
 
 .bar--bottom {
-    background-color: rgba(252, 252, 252, 0.95);
+    background-color: rgba(252, 252, 252, 0.97);
     border-top-width: 1px;
     border-top-color: rgba(0, 0, 0, 0.08);
     justify-content: space-around;
+    min-height: 76px;
+    padding: 8px 18px;
+}
+
+.tool-col {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 92px;
+    height: 60px;
+    padding: 4px 10px;
+    margin: 0;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    border-radius: 12px;
+}
+
+.tool-col:active {
+    background-color: rgba(0, 0, 0, 0.07);
+}
+
+.tool-col__glyph {
+    font-size: 26px;
+    -unity-font-style: bold;
+    color: rgb(25, 25, 25);
+    -unity-text-align: middle-center;
+}
+
+.tool-col__icon {
+    width: 28px;
+    height: 28px;
+}
+
+.tool-col__label {
+    margin-top: 2px;
+    font-size: 11px;
+    color: rgb(95, 95, 95);
+    -unity-text-align: middle-center;
+}
+
+.icon {
+    width: 24px;
+    height: 24px;
 }
 
 .plan-name {

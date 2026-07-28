@@ -40,10 +40,14 @@ namespace IBMROS.Designer.ThreeD
             if (key != null)
             {
                 key.color = KEY_COLOR;
-                key.intensity = 1.1f;
-                key.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+                key.intensity = 1.05f;
+                // Sun travels toward -Z: it enters through the presets' WINDOW
+                // wall (+Z) and cannot beam through the door on the -Z wall
+                // (user report: "light coming from the door"). Steep pitch keeps
+                // interior beams short.
+                key.transform.rotation = Quaternion.Euler(62f, 180f, 0f);
                 key.shadows = LightShadows.Soft;
-                key.shadowStrength = 0.45f;
+                key.shadowStrength = 0.5f;
                 RenderSettings.sun = key;
             }
 

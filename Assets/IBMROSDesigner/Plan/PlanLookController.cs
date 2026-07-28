@@ -27,6 +27,11 @@ namespace IBMROS.Designer.Plan
         // by vertex colors, so MaterialPropertyBlock tints are silent no-ops on
         // them. The plan look therefore SWAPS wall materials (dark slab; accent
         // blue on the selected room) and restores the originals on exit.
+        [Header("3D interior materials (Room-scene textures)")]
+        [SerializeField] private Material wallMaterial3D;    // plaster white
+        [SerializeField] private Material floorMaterial3D;   // laminate wood
+        [SerializeField] private Material ceilingMaterial3D; // plaster ceiling
+
         private Material darkWallMat;
         private Material selectedWallMat;
         private Material darkLineMat;     // Line.mat clone, opaque dark slate
@@ -111,13 +116,51 @@ namespace IBMROS.Designer.Plan
             RenderSettings.ambientEquatorColor = AMBIENT_EQUATOR;
             RenderSettings.ambientGroundColor = AMBIENT_GROUND;
             ClearWallTint();
+            Apply3DLook();
+        }
+
+        /// <summary>
+        /// Interior texture pass for 3D (user direction: use the Room scene's
+        /// textures) — generated room walls/floors/ceilings get the plaster +
+        /// laminate materials. Only renderers OWNED by a room (SpaceController
+        /// parent) are touched; the grid backdrop and exterior shell keep their
+        /// own materials.
+        /// </summary>
+        private void Apply3DLook()
+        {
+            if (wallMaterial3D == null && floorMaterial3D == null && ceilingMaterial3D == null)
+                return;
+            int floorLayer = LayerMask.NameToLayer("ExoaFloor");
+            int wallLayer = LayerMask.NameToLayer("Wall");
+            int ceilLayer = LayerMask.NameToLayer("Ceil");
+            foreach (MeshRenderer r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+            {
+                int layer = r.gameObject.layer;
+                Material want = null;
+                if (layer == wallLayer) want = wallMaterial3D;
+                else if (layer == floorLayer) want = floorMaterial3D;
+                else if (layer == ceilLayer) want = ceilingMaterial3D;
+                if (want == null || r.sharedMaterial == want)
+                    continue;
+                if (r.GetComponentInParent<Exoa.Designer.SpaceController>() == null)
+                    continue; // not room geometry (grid plane, shell, furniture)
+                if (r.sharedMaterial != darkWallMat && r.sharedMaterial != selectedWallMat &&
+                    !fallbackByLayer.ContainsKey(layer))
+                    fallbackByLayer[layer] = r.sharedMaterial;
+                r.sharedMaterial = want;
+            }
         }
 
         private void Update()
         {
-            if (!planMode || Time.unscaledTime < nextApply)
+            if (Time.unscaledTime < nextApply)
                 return;
             nextApply = Time.unscaledTime + REAPPLY_INTERVAL_S;
+            if (!planMode)
+            {
+                Apply3DLook(); // textured interior (rebuilds recreate renderers)
+                return;
+            }
 
             Transform selRoot = null;
             var ui = PlanEditorUtil.FindItem(
@@ -141,6 +184,21 @@ namespace IBMROS.Designer.Plan
                         fallbackByLayer[r.gameObject.layer] = r.sharedMaterial;
                 }
                 r.sharedMaterial = want;
+            }
+
+            // Returning from 3D: floors/ceilings still carry the interior
+            // textures — restore the pastel plan fill.
+            if (floorMaterial3D != null || ceilingMaterial3D != null)
+            {
+                foreach (MeshRenderer r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                {
+                    Material cur = r.sharedMaterial;
+                    if (cur == null || (cur != floorMaterial3D && cur != ceilingMaterial3D))
+                        continue;
+                    Material orig;
+                    if (fallbackByLayer.TryGetValue(r.gameObject.layer, out orig) && orig != null)
+                        r.sharedMaterial = orig;
+                }
             }
 
             // The visible plan "walls" are the CPC LineRenderers (interior wall

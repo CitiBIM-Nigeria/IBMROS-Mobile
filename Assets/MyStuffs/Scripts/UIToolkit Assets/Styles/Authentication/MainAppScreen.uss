@@ -333,16 +333,15 @@
 }
 
 .main-nav-item__icon {
-    font-size: 22px;
-    -unity-text-align: middle-center;
-    color: var(--color-text-placeholder);
+    /* Emoji glyphs render as rough mono outlines in Unity's text engine —
+       text-only tabs read far cleaner. */
+    display: none;
 }
 
 .main-nav-item__label {
-    font-size: var(--font-size-xs);
+    font-size: 14px;
     color: var(--color-text-placeholder);
     -unity-text-align: middle-center;
-    margin-top: 3px;
     letter-spacing: var(--letter-spacing-wide);
 }
 
