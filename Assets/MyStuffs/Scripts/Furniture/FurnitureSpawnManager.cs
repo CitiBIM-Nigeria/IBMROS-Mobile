@@ -186,6 +186,45 @@ public class FurnitureSpawnManager : MonoBehaviour
         InitializeFurnitureItem(root, itemKey, null);
     }
 
+    // IBMROS: designer persistence — restore a previously saved item at its
+    // saved pose, skipping interactive placement entirely. Mirrors SpawnItem's
+    // load path; registers with the registry so drag/rotate/scale and the
+    // transform undo stack treat it exactly like a hand-placed item.
+    public async System.Threading.Tasks.Task<GameObject> SpawnSavedItem(
+        string s3ModelUrl, Vector3 position, Quaternion rotation, Vector3 localScale)
+    {
+        GameObject model = null;
+        void OnLoaded(string fileName, GameObject m)
+        {
+            if (fileName == s3ModelUrl) model = m;
+        }
+        FurnitureService.OnModelLoaded += OnLoaded;
+        try
+        {
+            if (!string.IsNullOrEmpty(s3ModelUrl) && FurnitureService.Instance != null)
+                await FurnitureService.Instance.LoadModel(s3ModelUrl);
+        }
+        finally
+        {
+            FurnitureService.OnModelLoaded -= OnLoaded;
+        }
+
+        if (model == null)
+            model = CreatePlaceholderCube(s3ModelUrl ?? "Unknown", isLoading: false);
+
+        InitializeFurnitureItem(model, s3ModelUrl ?? "Unknown", null);
+        model.transform.SetPositionAndRotation(position, rotation);
+        model.transform.localScale = localScale;
+
+        var item = model.GetComponent<FurnitureItem>();
+        if (item != null)
+        {
+            item.SetPlaced(true);
+            registry?.Register(item);
+        }
+        return model;
+    }
+
     private GameObject CreatePlaceholderCube(string itemKey, bool isLoading = false)
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Cube);

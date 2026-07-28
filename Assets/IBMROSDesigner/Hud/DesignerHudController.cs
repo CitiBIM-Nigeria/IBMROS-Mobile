@@ -179,7 +179,11 @@ namespace IBMROS.Designer.Hud
 
         private void OnFurnish()
         {
-            Debug.Log("[DesignerHud] Furnish — Phase 4 wires the furniture panel here.");
+            var adapter = Furnish.FurnishModeAdapter.Instance;
+            if (adapter != null)
+                adapter.OpenCatalog();
+            else
+                Debug.Log("[DesignerHud] Furniture stack not present in this scene.");
         }
 
         // ------------------------------------------------------------------ room-size sheet

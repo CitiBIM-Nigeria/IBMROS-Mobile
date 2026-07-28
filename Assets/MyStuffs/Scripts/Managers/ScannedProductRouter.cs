@@ -33,11 +33,13 @@ public static class ScannedProductRouter
             return;
         }
 
-        // Not in the Room scene — stash, auto-save, and enter the designer.
+        // Not in a designer scene — stash, auto-save, and enter the designer.
+        // RoomDesigner hosts the same RoomUIManager/detail-sheet stack that
+        // consumes the pending product (the legacy Room scene is retired).
         _pending = product;
         SavedItemsService.Instance?.Add(product);
         SceneTransition.SetSkipSplash(true);
-        SceneManager.LoadScene("Room");
+        SceneManager.LoadScene("RoomDesigner");
     }
 
     /// <summary>RoomUIManager calls this once its UI is live to pick up a product

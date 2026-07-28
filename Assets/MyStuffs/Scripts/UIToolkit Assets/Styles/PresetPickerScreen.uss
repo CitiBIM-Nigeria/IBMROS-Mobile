@@ -51,6 +51,45 @@
     padding: 12px 16px 24px 16px;
 }
 
+.preset-picker__section-title {
+    font-size: 16px;
+    -unity-font-style: bold;
+    color: rgb(35, 35, 35);
+    margin: 10px 16px 6px 16px;
+}
+
+.saved-rooms__row {
+    margin: 0 8px;
+    max-height: 96px;
+}
+
+.saved-room-card {
+    width: 150px;
+    margin: 4px 8px;
+    padding: 12px;
+    background-color: rgb(255, 255, 255);
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: rgb(232, 232, 232);
+}
+
+.saved-room-card:active {
+    background-color: rgb(242, 246, 250);
+    border-color: rgb(70, 130, 220);
+}
+
+.saved-room-card__name {
+    font-size: 15px;
+    -unity-font-style: bold;
+    color: rgb(30, 30, 30);
+}
+
+.saved-room-card__date {
+    font-size: 12px;
+    color: rgb(130, 130, 130);
+    margin-top: 4px;
+}
+
 .preset-card {
     width: 47%;
     margin-bottom: 16px;
