@@ -20,8 +20,8 @@ namespace IBMROS.Designer.Plan
     {
         private const float LABEL_OUT_OFFSET_M = 0.45f;
         private const float LABEL_Y = 0.03f;
-        private const float WALL_FONT_SIZE = 4.0f;
-        private const float CENTER_FONT_SIZE = 5.0f;
+        private const float WALL_FONT_SIZE = 2.6f;
+        private const float CENTER_FONT_SIZE = 3.2f;
         private static readonly Color LABEL_COLOR = new Color(0.07f, 0.09f, 0.12f, 1f);
         private static readonly Color CENTER_COLOR = new Color(0.07f, 0.09f, 0.12f, 0.5f);
 

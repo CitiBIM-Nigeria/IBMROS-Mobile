@@ -1,3 +1,4 @@
+using Exoa.Cameras;
 using IBMROS.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -49,6 +50,7 @@ namespace IBMROS.Designer.Plan
         private int wallMask;
         private bool planMode;
         private float nextApply;
+        private bool framedOnce;
 
         // 3D ambient = LightingRig's trilight (kept in lockstep by value; the
         // rig's Start order vs ours is unreliable, so no save/restore dance)
@@ -104,6 +106,7 @@ namespace IBMROS.Designer.Plan
                 IBMROS.Bridge.Interaction.SelectionService.HighlightLayerExclusionMask = wallMask;
                 IBMROS.Bridge.Interaction.SelectionService.Suspended = false;
                 nextApply = 0f; // tint immediately
+                FramePlan();
             }
             else
             {
@@ -127,6 +130,46 @@ namespace IBMROS.Designer.Plan
         }
 
         /// <summary>
+        /// Frames the whole plan with margin on entering 2D. Without this the
+        /// ortho camera kept whatever zoom it had, which often cropped the room's
+        /// corners off-screen — and corners you cannot see are corners you cannot
+        /// drag.
+        /// </summary>
+        public void FramePlan()
+        {
+            var ortho = Camera.main != null ? Camera.main.GetComponent<CameraTopDownOrtho>() : null;
+            if (ortho == null)
+                return;
+
+            var min = new Vector2(float.MaxValue, float.MaxValue);
+            var max = new Vector2(float.MinValue, float.MinValue);
+            bool any = false;
+            foreach (var ui in PlanEditorUtil.AllSpaces())
+            {
+                foreach (Vector3 wp in PlanEditorUtil.WorldPoints(ui))
+                {
+                    Vector2 m = PlanEditorUtil.WorldToMeters(wp);
+                    min = Vector2.Min(min, m);
+                    max = Vector2.Max(max, m);
+                    any = true;
+                }
+            }
+            if (!any)
+                return;
+
+            Vector2 centre = (min + max) * 0.5f;
+            Vector2 size = max - min;
+            float aspect = Camera.main.aspect > 0.01f ? Camera.main.aspect : 0.5f;
+            // Ortho size is the vertical half-extent; respect width via aspect.
+            float needed = Mathf.Max(size.y * 0.5f, size.x * 0.5f / aspect);
+            float orthoSize = needed * 1.35f; // margin for handles + dimension labels
+
+            ortho.SetResetValues(new Vector3(centre.x, 0f, centre.y),
+                Quaternion.Euler(90f, 0f, 0f), orthoSize);
+            ortho.ResetCamera();
+        }
+
+        /// <summary>
         /// The 2D plan's line/handle visuals use the vendor "Exoa/AlwaysOnTop"
         /// shader (ZTest Always, Queue Transparent+100), so in 3D they punch
         /// straight through walls and furniture — that was the black line drawn
@@ -141,6 +184,20 @@ namespace IBMROS.Designer.Plan
                 var lr = cpc.GetComponent<LineRenderer>();
                 if (lr != null && lr.enabled != visible)
                     lr.enabled = visible;
+
+                // Corner handles: the balls the user drags. Kept ACTIVE in the
+                // plan (the vendor only showed them mid-draw) so every vertex is
+                // always grabbable, and off in 3D.
+                var pts = cpc.GetPointsList();
+                if (pts != null)
+                {
+                    foreach (var cp in pts)
+                    {
+                        if (cp == null) continue;
+                        if (cp.gameObject.activeSelf != visible)
+                            cp.gameObject.SetActive(visible);
+                    }
+                }
 
                 foreach (Renderer r in cpc.GetComponentsInChildren<Renderer>(true))
                 {
@@ -195,6 +252,14 @@ namespace IBMROS.Designer.Plan
                 return;
             nextApply = Time.unscaledTime + REAPPLY_INTERVAL_S;
             SetPlanVisualsVisible(planMode);
+
+            // The document loads a frame or two after this component starts, so
+            // frame once as soon as there is geometry to frame.
+            if (planMode && !framedOnce && PlanEditorUtil.AllSpaces().Count > 0)
+            {
+                framedOnce = true;
+                FramePlan();
+            }
             if (!planMode)
             {
                 Apply3DLook(); // textured interior (rebuilds recreate renderers)

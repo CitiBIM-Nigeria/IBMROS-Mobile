@@ -16,8 +16,10 @@ namespace IBMROS.Designer.Hud
     /// <summary>
     /// UI Toolkit HUD for RoomDesigner.unity, structured like the reference app:
     ///   • 2D browse bar: [3D · Open 3D plan] [Edit Walls] [Add Furniture]
-    ///   • Edit Walls mode: [Done] [Room] [Door] [Window] [Resize]
-    ///   • 3D bar: [2D · Open 2D plan] … [Add Furniture] (joystick floats above)
+    ///   • Edit mode: header shows ONLY "Done"; bar is [Draw Wall][Resize][Add]
+    ///     where Add opens the FURNITURE panel (the plugin's Door/Window/Room
+    ///     menu is intentionally not exposed in this workflow)
+    ///   • 3D bar: [2D · Open 2D plan] [joystick] [Add Furniture]
     /// Icons are painter-drawn (generateVisualContent) — the UI font lacks the
     /// undo/camera glyphs, which rendered as empty boxes on device.
     /// All writes go through the gateway/controllers; this class only binds.
@@ -34,15 +36,12 @@ namespace IBMROS.Designer.Hud
         private VisualElement root;
         private Label planName;
         private Button back, shot, undo, redo;
-        private VisualElement browseBar, editBar, viewBar, sheet, addMenu;
+        private VisualElement browseBar, editBar, viewBar, sheet;
         private Button btnOpen3D, btnEditWalls, btnAddFurn2D;
         private Button btnDone, btnDrawWall, btnResize, btnAddOpening;
-        private Button btnDrawRect, btnAddDoor, btnAddWindow;
         private Button btnOpen2D, btnAddFurn3D;
         private TextField widthField, lengthField, ceilField, thickField;
         private Button sheetApply, sheetClose;
-        private VisualElement selectionBar;
-        private Button selDelete, selDuplicate;
 
         private string sheetItemId;   // room the sheet is editing
         private bool editingWalls;    // Edit Walls sub-mode of Plan2D
@@ -63,14 +62,10 @@ namespace IBMROS.Designer.Hud
             btnOpen3D = root.Q<Button>("BtnOpen3D");
             btnEditWalls = root.Q<Button>("BtnEditWalls");
             btnAddFurn2D = root.Q<Button>("BtnAddFurn2D");
-            btnDone = root.Q<Button>("BtnDone");
+            btnDone = root.Q<Button>("DoneButton");
             btnDrawWall = root.Q<Button>("BtnDrawWall");
             btnResize = root.Q<Button>("BtnResize");
             btnAddOpening = root.Q<Button>("BtnAddOpening");
-            addMenu = root.Q<VisualElement>("AddMenu");
-            btnDrawRect = root.Q<Button>("BtnDrawRect");
-            btnAddDoor = root.Q<Button>("BtnAddDoor");
-            btnAddWindow = root.Q<Button>("BtnAddWindow");
             btnOpen2D = root.Q<Button>("BtnOpen2D");
             btnAddFurn3D = root.Q<Button>("BtnAddFurn3D");
 
@@ -81,9 +76,6 @@ namespace IBMROS.Designer.Hud
             thickField = root.Q<TextField>("WallThickField");
             sheetApply = root.Q<Button>("SheetApplyButton");
             sheetClose = root.Q<Button>("SheetCloseButton");
-            selectionBar = root.Q<VisualElement>("SelectionBar");
-            selDelete = root.Q<Button>("SelDeleteButton");
-            selDuplicate = root.Q<Button>("SelDuplicateButton");
 
             // Painter icons (no font dependency).
             BindIcon("ShotIcon", DrawCameraIcon);
@@ -108,31 +100,23 @@ namespace IBMROS.Designer.Hud
             {
                 PlanTouchController.Instance?.SetTool(PlanToolMode.Browse);
                 ShowSheet(false);
-                ShowAddMenu(false);
                 SetEditingWalls(false);
             };
             btnAddFurn2D.clicked += OnFurnish;
             btnAddFurn3D.clicked += OnFurnish;
             btnDrawWall.clicked += () =>
-            {
-                ShowAddMenu(false);
                 PlanTouchController.Instance?.SetTool(PlanToolMode.DrawRect);
-            };
-            btnAddOpening.clicked += () => ShowAddMenu(addMenu.resolvedStyle.display == DisplayStyle.None);
-            btnDrawRect.clicked += () => ArmFromAddMenu(PlanToolMode.DrawRect);
-            btnAddDoor.clicked += () => ArmFromAddMenu(PlanToolMode.AddDoor);
-            btnAddWindow.clicked += () => ArmFromAddMenu(PlanToolMode.AddWindow);
-            btnResize.clicked += () => { ShowAddMenu(false); OpenSheet(); };
+            // "Add" in edit mode = ADD FURNITURE (the plugin's Door/Window/Room
+            // menu is deliberately not exposed in this workflow).
+            btnAddOpening.clicked += OnFurnish;
+            btnResize.clicked += OpenSheet;
 
             sheetApply.clicked += ApplySheet;
             sheetClose.clicked += () => ShowSheet(false);
-            selDelete.clicked += OnDeleteSelected;
-            selDuplicate.clicked += OnDuplicateSelected;
 
             UndoRedoService.OnHistoryChanged += RefreshHistoryButtons;
             DesignerModeController.OnModeChanged += RefreshMode;
             PlanTouchController.OnToolChanged += RefreshToolStates;
-            SelectionService.OnSelectionChanged += RefreshSelectionBar;
 
             ApplySafeArea();
             RefreshHistoryButtons();
@@ -148,7 +132,6 @@ namespace IBMROS.Designer.Hud
             UndoRedoService.OnHistoryChanged -= RefreshHistoryButtons;
             DesignerModeController.OnModeChanged -= RefreshMode;
             PlanTouchController.OnToolChanged -= RefreshToolStates;
-            SelectionService.OnSelectionChanged -= RefreshSelectionBar;
         }
 
         private void Start()
@@ -383,15 +366,6 @@ namespace IBMROS.Designer.Hud
                 ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
         }
 
-        private void ShowAddMenu(bool show) =>
-            addMenu.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
-
-        private void ArmFromAddMenu(PlanToolMode tool)
-        {
-            ShowAddMenu(false);
-            PlanTouchController.Instance?.SetTool(tool);
-        }
-
         // ------------------------------------------------------------------ room-size sheet
 
         private void OpenSheet()
@@ -476,27 +450,6 @@ namespace IBMROS.Designer.Hud
 
         // ------------------------------------------------------------------ selection actions
 
-        private void OnDeleteSelected()
-        {
-            string id = SelectionService.Instance?.SelectedId;
-            if (string.IsNullOrEmpty(id))
-                return;
-            SelectionService.Instance.Deselect();
-            FloorPlanEditor.DeleteItem(id);
-        }
-
-        private void OnDuplicateSelected()
-        {
-            string id = SelectionService.Instance?.SelectedId;
-            if (string.IsNullOrEmpty(id))
-                return;
-            string dupId = FloorPlanEditor.DuplicateItem(id);
-            if (!string.IsNullOrEmpty(dupId))
-            {
-                FloorPlanEditor.MoveItemBy(dupId, new Vector2(0.5f, -0.5f));
-                SelectionService.Instance.SelectById(dupId);
-            }
-        }
 
         // ------------------------------------------------------------------ state refresh
 
@@ -523,31 +476,23 @@ namespace IBMROS.Designer.Hud
             browseBar.style.display = plan && !editingWalls ? DisplayStyle.Flex : DisplayStyle.None;
             editBar.style.display = plan && editingWalls ? DisplayStyle.Flex : DisplayStyle.None;
             viewBar.style.display = plan ? DisplayStyle.None : DisplayStyle.Flex;
+
+            // Editing shows ONLY "Done" top-left; browse shows close + plan name.
+            bool editing = plan && editingWalls;
+            btnDone.style.display = editing ? DisplayStyle.Flex : DisplayStyle.None;
+            back.style.display = editing ? DisplayStyle.None : DisplayStyle.Flex;
+            planName.style.display = editing ? DisplayStyle.None : DisplayStyle.Flex;
             if (!plan)
             {
                 ShowSheet(false);
                 editingWalls = false;
             }
-            if (addMenu != null && (!plan || !editingWalls))
-                ShowAddMenu(false);
-            RefreshSelectionBar();
         }
 
-        private void RefreshSelectionBar()
-        {
-            bool show = SelectionService.Instance != null &&
-                        SelectionService.Instance.HasSelection &&
-                        DesignerModeController.Instance != null &&
-                        DesignerModeController.Instance.Mode == DesignerMode.Plan2D;
-            selectionBar.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
-        }
 
         private void RefreshToolStates(PlanToolMode tool)
         {
             SetArmed(btnDrawWall, tool == PlanToolMode.DrawRect);
-            SetArmed(btnDrawRect, tool == PlanToolMode.DrawRect);
-            SetArmed(btnAddDoor, tool == PlanToolMode.AddDoor);
-            SetArmed(btnAddWindow, tool == PlanToolMode.AddWindow);
         }
 
         private static void SetArmed(Button b, bool armed)

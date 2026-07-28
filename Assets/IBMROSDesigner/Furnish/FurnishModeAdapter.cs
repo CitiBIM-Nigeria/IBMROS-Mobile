@@ -83,9 +83,39 @@ namespace IBMROS.Designer.Furnish
                 placer.OnFurniturePlaced += OnPlacementResolved;
         }
 
+        /// <summary>Centroid of the biggest room polygon, in world space.</summary>
+        private static Vector3? LargestRoomCentre()
+        {
+            float bestArea = -1f;
+            Vector2 best = Vector2.zero;
+            foreach (var ui in Plan.PlanEditorUtil.AllSpaces())
+            {
+                var pts = Plan.PlanEditorUtil.WorldPoints(ui);
+                if (pts.Count < 3)
+                    continue;
+                float area2 = 0f;
+                var centroid = Vector2.zero;
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    Vector2 a = Plan.PlanEditorUtil.WorldToMeters(pts[i]);
+                    Vector2 b = Plan.PlanEditorUtil.WorldToMeters(pts[(i + 1) % pts.Count]);
+                    area2 += a.x * b.y - b.x * a.y;
+                    centroid += a;
+                }
+                float area = Mathf.Abs(area2) * 0.5f;
+                if (area > bestArea)
+                {
+                    bestArea = area;
+                    best = centroid / pts.Count;
+                }
+            }
+            return bestArea > 0f ? new Vector3(best.x, 0f, best.y) : (Vector3?)null;
+        }
+
         private void OnDisable()
         {
             DesignerModeController.OnModeChanged -= ApplyMode;
+            FurniturePlacer.SpawnPointProvider = null;
             if (furniturePanel != null)
                 furniturePanel.OnPanelClosed -= OnPanelClosed;
             if (detailSheet != null)
@@ -111,6 +141,16 @@ namespace IBMROS.Designer.Furnish
 
         private void Start()
         {
+            // Bird's-eye spawns land at the room centre; inside-the-room spawns
+            // keep the existing in-front-of-camera behaviour.
+            FurniturePlacer.SpawnPointProvider = () =>
+            {
+                if (DesignerModeController.Instance == null ||
+                    DesignerModeController.Instance.Mode != DesignerMode.Plan2D)
+                    return null;
+                return LargestRoomCentre();
+            };
+
             HideRoomUiChrome();
             ApplyMode(DesignerModeController.Instance != null
                 ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
@@ -177,10 +217,6 @@ namespace IBMROS.Designer.Furnish
 
             // Ghost placement steers with the pointer — the camera must not.
             SetCameraSuppressed(furnishing);
-
-            if (!furnishing)
-                SetInteractionActive(DesignerModeController.Instance == null ||
-                                     DesignerModeController.Instance.Mode != DesignerMode.Plan2D);
         }
 
         // ------------------------------------------------------------------ input arbitration
@@ -213,14 +249,13 @@ namespace IBMROS.Designer.Furnish
 
         private void ApplyMode(DesignerMode mode)
         {
-            if (FurnishUiActive)
-                return; // furnishing owns the stack until it resolves
-            SetInteractionActive(mode != DesignerMode.Plan2D);
-            if (mode == DesignerMode.Plan2D)
-            {
-                furniturePanel?.Close();
-                SetDismissOverlayVisible(false);
-            }
+            // The furniture stack stays live in EVERY mode. Disabling it in
+            // Plan2D (as this used to) killed furniture dragging AND rotation in
+            // the bird's-eye view, because ObjectDragHandler /
+            // ObjectRotationHandler only subscribe while enabled. Priority is
+            // arbitrated per-gesture instead (PlanTouchController defers when the
+            // press lands on furniture).
+            SetInteractionActive(true);
         }
 
         private void SetInteractionActive(bool active)

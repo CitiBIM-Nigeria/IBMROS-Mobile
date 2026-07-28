@@ -214,12 +214,38 @@ public class FurniturePlacer : MonoBehaviour
     //   3. That ray always hits the floor regardless of camera angle.
     // ---------------------------------------------------------------
 
+    /// <summary>
+    /// Optional spawn override, in world space. Set by the designer for the
+    /// bird's-eye view, where "in front of the camera" is meaningless (the
+    /// camera looks straight down, so flatForward collapses and the ghost landed
+    /// off to the side — often outside the room). Returning null falls back to
+    /// the in-front-of-camera behaviour used inside the room.
+    /// </summary>
+    public static System.Func<Vector3?> SpawnPointProvider;
+
     private void SnapToFloorInFrontOfCamera()
     {
         if (_mainCamera == null)
             _mainCamera = Camera.main;
 
         if (_mainCamera == null) return;
+
+        if (SpawnPointProvider != null)
+        {
+            Vector3? preferred = SpawnPointProvider();
+            if (preferred.HasValue)
+            {
+                Vector3 origin = new Vector3(preferred.Value.x,
+                                             preferred.Value.y + snapRaycastStartHeight,
+                                             preferred.Value.z);
+                if (Physics.Raycast(new Ray(origin, Vector3.down), out RaycastHit floorHit,
+                                    snapRaycastStartHeight + 20f, floorLayer))
+                    ApplyFloorOffset(floorHit.point);
+                else
+                    ApplyFloorOffset(new Vector3(preferred.Value.x, 0f, preferred.Value.z));
+                return;
+            }
+        }
 
         // Step 1 — find a point in front of the camera on the XZ plane.
         // We use the camera's yaw (Y rotation) only, ignoring pitch,

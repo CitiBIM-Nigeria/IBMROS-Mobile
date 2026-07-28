@@ -2,8 +2,9 @@
     <Style src="DesignerHud.uss"/>
     <ui:VisualElement name="DesignerHudRoot" picking-mode="Ignore" class="hud-root">
 
-        <!-- TOP BAR: back, plan name, screenshot, undo/redo (icons are painter-drawn) -->
+        <!-- TOP BAR: back / plan name in browse; a single Done while editing -->
         <ui:VisualElement name="TopBar" class="bar bar--top">
+            <ui:Button name="DoneButton" text="Done" class="btn btn--primary" style="display: none;"/>
             <ui:Button name="BackButton" text="✕" class="btn btn--icon"/>
             <ui:Label name="PlanNameLabel" text="Room" class="plan-name"/>
             <ui:VisualElement name="TopBarSpacer" picking-mode="Ignore" class="spacer"/>
@@ -28,9 +29,8 @@
             </ui:Button>
         </ui:VisualElement>
 
-        <!-- 2D EDIT-WALLS BAR (reference: Draw Wall · Resize · Add, + Done) -->
+        <!-- 2D EDIT BAR (reference: exactly Draw Wall · Resize · Add) -->
         <ui:VisualElement name="EditToolbar" class="bar bar--bottom" style="display: none;">
-            <ui:Button name="BtnDone" text="Done" class="btn btn--primary"/>
             <ui:Button name="BtnDrawWall" class="tool-col">
                 <ui:VisualElement name="DrawWallIcon" picking-mode="Ignore" class="tool-col__icon"/>
                 <ui:Label text="Draw Wall" picking-mode="Ignore" class="tool-col__label"/>
@@ -45,13 +45,6 @@
             </ui:Button>
         </ui:VisualElement>
 
-        <!-- ADD sub-menu (door / window), opened by Add in edit mode -->
-        <ui:VisualElement name="AddMenu" class="selection-bar" style="display: none;">
-            <ui:Button name="BtnAddDoor" text="Door" class="btn"/>
-            <ui:Button name="BtnAddWindow" text="Window" class="btn"/>
-            <ui:Button name="BtnDrawRect" text="Room" class="btn"/>
-        </ui:VisualElement>
-
         <!-- 3D BAR (reference: 2D · joystick · Add Furniture, all one line) -->
         <ui:VisualElement name="ViewToolbar" class="bar bar--bottom" style="display: none;">
             <ui:Button name="BtnOpen2D" class="tool-col">
@@ -63,12 +56,6 @@
                 <ui:VisualElement name="AddIcon3D" picking-mode="Ignore" class="tool-col__icon"/>
                 <ui:Label text="Add Furniture" picking-mode="Ignore" class="tool-col__label"/>
             </ui:Button>
-        </ui:VisualElement>
-
-        <!-- SELECTION BAR (floating, shown while something is selected in 2D) -->
-        <ui:VisualElement name="SelectionBar" class="selection-bar" style="display: none;">
-            <ui:Button name="SelDuplicateButton" text="Duplicate" class="btn btn--tool"/>
-            <ui:Button name="SelDeleteButton" text="Delete" class="btn btn--danger"/>
         </ui:VisualElement>
 
         <!-- ROOM SIZE SHEET (bottom card, hidden until Resize) -->

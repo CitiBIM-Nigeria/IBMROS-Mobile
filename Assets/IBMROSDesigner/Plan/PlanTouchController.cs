@@ -262,6 +262,16 @@ namespace IBMROS.Designer.Plan
                 return;
             }
 
+            // 0) FURNITURE outranks room geometry. The furniture stack owns this
+            //    gesture, so bail before touching walls and leave the camera
+            //    suppressed (ObjectManipulator re-enables it on release).
+            if (PressedOnFurniture(screenPos))
+            {
+                CameraEvents.OnRequestButtonAction?.Invoke(
+                    CameraEvents.Action.DisableCameraMoves, true);
+                return;
+            }
+
             float pxPerM = PlanEditorUtil.PixelsPerMeter();
             float handleRadM = HANDLE_RADIUS_PX / pxPerM;
             float edgeRadM = EDGE_RADIUS_PX / pxPerM;
@@ -285,60 +295,98 @@ namespace IBMROS.Designer.Plan
                 return;
             }
 
-            // Everything else operates on the SELECTED space item.
-            UIBaseItem sel = PlanEditorUtil.FindItem(SelectionService.Instance?.SelectedId);
-            if (sel == null || PlanEditorUtil.IsOpening(sel) || sel.cpc == null)
-                return;
+            // Corner/wall grabs work on ANY room, not just a selected one — the
+            // handles are always live in the plan, and requiring a prior tap was
+            // why grabbing a corner fell through to the camera and panned the
+            // whole canvas.
+            List<UIBaseItem> spaces = PlanEditorUtil.AllSpaces();
 
-            List<Vector3> world = PlanEditorUtil.WorldPoints(sel);
-            if (world.Count < 3)
-                return;
-
-            // 2) corner handle
+            // 2) corner handle (nearest across all rooms)
+            UIBaseItem cornerItem = null;
             int corner = -1;
             float bestCorner = handleRadM * handleRadM;
-            for (int i = 0; i < world.Count; i++)
+            foreach (UIBaseItem ui in spaces)
             {
-                float d = (PlanEditorUtil.WorldToMeters(world[i]) - ground).sqrMagnitude;
-                if (d < bestCorner) { bestCorner = d; corner = i; }
+                if (ui.cpc == null) continue;
+                List<Vector3> pts = PlanEditorUtil.WorldPoints(ui);
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    float d = (PlanEditorUtil.WorldToMeters(pts[i]) - ground).sqrMagnitude;
+                    if (d < bestCorner) { bestCorner = d; corner = i; cornerItem = ui; }
+                }
             }
-            if (corner >= 0)
+            if (cornerItem != null)
             {
-                BeginDrag(DragKind.Corner, sel, corner, ground);
+                SelectionService.Instance?.SelectById(cornerItem.ItemUniqueId);
+                BeginDrag(DragKind.Corner, cornerItem, corner, ground);
                 return;
             }
 
-            // 3) wall edge
+            // 3) wall edge (nearest across all rooms)
+            UIBaseItem edgeItem = null;
             int edge = -1;
             float bestEdge = edgeRadM * edgeRadM;
             Vector2 normal = default;
-            for (int i = 0; i < world.Count; i++)
+            foreach (UIBaseItem ui in spaces)
             {
-                Vector2 a = PlanEditorUtil.WorldToMeters(world[i]);
-                Vector2 b = PlanEditorUtil.WorldToMeters(world[(i + 1) % world.Count]);
-                float d = PlanEditorUtil.DistToSegmentSq(ground, a, b, out _);
-                if (d < bestEdge)
+                if (ui.cpc == null) continue;
+                List<Vector3> pts = PlanEditorUtil.WorldPoints(ui);
+                if (pts.Count < 2) continue;
+                for (int i = 0; i < pts.Count; i++)
                 {
-                    bestEdge = d; edge = i;
-                    Vector2 t = (b - a).normalized;
-                    normal = new Vector2(-t.y, t.x);
+                    Vector2 a = PlanEditorUtil.WorldToMeters(pts[i]);
+                    Vector2 b = PlanEditorUtil.WorldToMeters(pts[(i + 1) % pts.Count]);
+                    float d = PlanEditorUtil.DistToSegmentSq(ground, a, b, out _);
+                    if (d < bestEdge)
+                    {
+                        bestEdge = d; edge = i; edgeItem = ui;
+                        Vector2 t = (b - a).normalized;
+                        normal = new Vector2(-t.y, t.x);
+                    }
                 }
             }
-            if (edge >= 0)
+            if (edgeItem != null)
             {
+                SelectionService.Instance?.SelectById(edgeItem.ItemUniqueId);
                 edgeNormal = normal;
-                BeginDrag(DragKind.Edge, sel, edge, ground);
+                BeginDrag(DragKind.Edge, edgeItem, edge, ground);
                 return;
             }
 
-            // 4) inside the polygon → whole-room drag after slop
-            if (PointInPolygon(ground, world))
+            // 4) inside a polygon → whole-room drag after slop
+            foreach (UIBaseItem ui in spaces)
             {
-                pressedInsideRoom = true;
-                dragItem = sel;
-                grabMeters = ground;
-                startMeters = MetersOf(world);
+                if (ui.cpc == null) continue;
+                List<Vector3> pts = PlanEditorUtil.WorldPoints(ui);
+                if (pts.Count >= 3 && PointInPolygon(ground, pts))
+                {
+                    pressedInsideRoom = true;
+                    dragItem = ui;
+                    grabMeters = ground;
+                    startMeters = MetersOf(pts);
+                    // Suppress the camera up-front: the pan must not start while
+                    // we wait for slop to decide this is a room move.
+                    CameraEvents.OnRequestButtonAction?.Invoke(
+                        CameraEvents.Action.DisableCameraMoves, true);
+                    return;
+                }
             }
+
+            // 5) genuinely empty canvas → let the Exoa rig pan.
+            CameraEvents.OnRequestButtonAction?.Invoke(
+                CameraEvents.Action.DisableCameraMoves, false);
+        }
+
+        private static readonly int FURNITURE_MASK = 1 << 6; // Interactable
+
+        /// <summary>True when the pointer is over a furniture item.</summary>
+        private static bool PressedOnFurniture(Vector2 screenPos)
+        {
+            Camera cam = Camera.main;
+            if (cam == null)
+                return false;
+            return Physics.Raycast(cam.ScreenPointToRay(screenPos), out _, 5000f,
+                FURNITURE_MASK, QueryTriggerInteraction.Ignore);
         }
 
         private void BeginDrag(DragKind kind, UIBaseItem item, int index, Vector2 ground)
@@ -512,8 +560,10 @@ namespace IBMROS.Designer.Plan
 
         private void ClearDragState()
         {
-            if (drag != DragKind.None)
-                CameraEvents.OnRequestButtonAction?.Invoke(CameraEvents.Action.DisableCameraMoves, false);
+            // Always hand the camera back — an inside-press that never passed the
+            // slop threshold also suppressed it, and gating this on `drag` left
+            // the plan un-pannable for the rest of the session.
+            CameraEvents.OnRequestButtonAction?.Invoke(CameraEvents.Action.DisableCameraMoves, false);
             drag = DragKind.None;
             dragItem = null;
             startMeters = null;
