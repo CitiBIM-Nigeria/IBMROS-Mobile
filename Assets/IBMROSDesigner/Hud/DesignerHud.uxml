@@ -28,22 +28,37 @@
             </ui:Button>
         </ui:VisualElement>
 
-        <!-- 2D EDIT-WALLS BAR (shown after Edit Walls; Done returns) -->
+        <!-- 2D EDIT-WALLS BAR (reference: Draw Wall · Resize · Add, + Done) -->
         <ui:VisualElement name="EditToolbar" class="bar bar--bottom" style="display: none;">
             <ui:Button name="BtnDone" text="Done" class="btn btn--primary"/>
-            <ui:Button name="BtnDrawRect" text="Room" class="btn btn--tool"/>
-            <ui:Button name="BtnAddDoor" text="Door" class="btn btn--tool"/>
-            <ui:Button name="BtnAddWindow" text="Window" class="btn btn--tool"/>
-            <ui:Button name="BtnResize" text="Resize" class="btn btn--tool"/>
+            <ui:Button name="BtnDrawWall" class="tool-col">
+                <ui:VisualElement name="DrawWallIcon" picking-mode="Ignore" class="tool-col__icon"/>
+                <ui:Label text="Draw Wall" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
+            <ui:Button name="BtnResize" class="tool-col">
+                <ui:VisualElement name="ResizeIcon" picking-mode="Ignore" class="tool-col__icon"/>
+                <ui:Label text="Resize" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
+            <ui:Button name="BtnAddOpening" class="tool-col">
+                <ui:VisualElement name="AddOpeningIcon" picking-mode="Ignore" class="tool-col__icon"/>
+                <ui:Label text="Add" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
         </ui:VisualElement>
 
-        <!-- 3D BAR (reference: 2D · joystick lives above · Add Furniture) -->
+        <!-- ADD sub-menu (door / window), opened by Add in edit mode -->
+        <ui:VisualElement name="AddMenu" class="selection-bar" style="display: none;">
+            <ui:Button name="BtnAddDoor" text="Door" class="btn"/>
+            <ui:Button name="BtnAddWindow" text="Window" class="btn"/>
+            <ui:Button name="BtnDrawRect" text="Room" class="btn"/>
+        </ui:VisualElement>
+
+        <!-- 3D BAR (reference: 2D · joystick · Add Furniture, all one line) -->
         <ui:VisualElement name="ViewToolbar" class="bar bar--bottom" style="display: none;">
             <ui:Button name="BtnOpen2D" class="tool-col">
                 <ui:Label text="2D" picking-mode="Ignore" class="tool-col__glyph"/>
                 <ui:Label text="Open 2D plan" picking-mode="Ignore" class="tool-col__label"/>
             </ui:Button>
-            <ui:VisualElement picking-mode="Ignore" class="spacer"/>
+            <ui:VisualElement name="JoystickSlot" picking-mode="Ignore" class="joystick-slot"/>
             <ui:Button name="BtnAddFurn3D" class="tool-col">
                 <ui:VisualElement name="AddIcon3D" picking-mode="Ignore" class="tool-col__icon"/>
                 <ui:Label text="Add Furniture" picking-mode="Ignore" class="tool-col__label"/>

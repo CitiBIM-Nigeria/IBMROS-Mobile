@@ -40,7 +40,7 @@ namespace IBMROS.Designer.ThreeD
             if (key != null)
             {
                 key.color = KEY_COLOR;
-                key.intensity = 1.05f;
+                key.intensity = 1.25f;
                 // Sun travels toward -Z: it enters through the presets' WINDOW
                 // wall (+Z) and cannot beam through the door on the -Z wall
                 // (user report: "light coming from the door"). Steep pitch keeps

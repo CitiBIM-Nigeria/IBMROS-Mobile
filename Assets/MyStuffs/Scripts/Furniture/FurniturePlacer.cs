@@ -100,6 +100,9 @@ public class FurniturePlacer : MonoBehaviour
     {
         if (!_isPlacing || _previewObject == null) return;
 
+        if (_mainCamera == null) _mainCamera = Camera.main;
+        if (_mainCamera == null) return;
+
         Ray ray = _mainCamera.ScreenPointToRay(screenPosition);
 
         if (!Physics.Raycast(ray, out RaycastHit hit, 100f, floorLayer))
@@ -126,6 +129,9 @@ public class FurniturePlacer : MonoBehaviour
     {
         if (!_isPlacing || _previewObject == null)
             return;
+
+        if (_mainCamera == null) _mainCamera = Camera.main;
+        if (_mainCamera == null) return;
 
         Ray ray = _mainCamera.ScreenPointToRay(screenPosition);
 

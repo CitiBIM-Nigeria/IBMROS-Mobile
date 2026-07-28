@@ -49,6 +49,8 @@ public class InputManager : MonoBehaviour
     // ---------------------------------------------------------------
 
     [Header("Settings")]
+    [Tooltip("Tap slop. Scaled by DPI at runtime — a raw 10 px is ~0.6 mm on a " +
+             "420 dpi phone, so real taps registered as drags and never placed.")]
     [SerializeField] private float clickMoveThreshold = 10f;
 
     [Tooltip("Minimum pixel movement of midpoint before two-finger pan fires.")]
@@ -88,6 +90,13 @@ public class InputManager : MonoBehaviour
     // ---------------------------------------------------------------
     // UNITY LIFECYCLE
     // ---------------------------------------------------------------
+
+    void Awake()
+    {
+        // Physical-size slop: ~2 mm, floor 12 px.
+        if (Screen.dpi > 1f)
+            clickMoveThreshold = Mathf.Max(12f, Screen.dpi * 0.08f);
+    }
 
     void OnEnable()  => EnhancedTouchSupport.Enable();
     void OnDisable() => EnhancedTouchSupport.Disable();
@@ -164,9 +173,11 @@ public class InputManager : MonoBehaviour
         // ── SINGLE TOUCH ─────────────────────────────────────────────
         var touch = activeTouches[0];
 
-        // Ignore touches that started over UI
+        // Ignore touches that STARTED over UI. Tested at this touch's own
+        // position — the old any-touch test meant a thumb resting on the HUD or
+        // joystick suppressed every world tap.
         if (touch.phase == TouchPhase.Began &&
-            IsPointerOverUI(touch.screenPosition))
+            IsPointerOverUI(touch.screenPosition, touch.touchId))
         {
             _trackingTouch = false;
             return;
@@ -288,20 +299,20 @@ public class InputManager : MonoBehaviour
     // UI FILTER
     // ---------------------------------------------------------------
 
-    private bool IsPointerOverUI(Vector2 screenPosition)
+    private bool IsPointerOverUI(Vector2 screenPosition, int touchId = -1)
     {
         if (EventSystem.current == null) return false;
 
 #if UNITY_EDITOR
         return EventSystem.current.IsPointerOverGameObject(-1);
 #else
-        var activeTouches = Touch.activeTouches;
-        foreach (var touch in activeTouches)
-        {
-            if (EventSystem.current.IsPointerOverGameObject(touch.touchId))
-                return true;
-        }
-        return false;
+        // This touch only — never "any touch" (a finger parked on the HUD used to
+        // veto every world tap). Position-based raycast is the fallback because
+        // EnhancedTouch ids and InputSystemUIInputModule pointer ids are
+        // different id-spaces and do not reliably match.
+        if (touchId >= 0 && EventSystem.current.IsPointerOverGameObject(touchId))
+            return true;
+        return Exoa.Touch.InputTouch.PointOverGui(screenPosition);
 #endif
     }
 }

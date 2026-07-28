@@ -26,13 +26,18 @@ namespace IBMROS.Designer.Hud
     public sealed class DesignerHudController : MonoBehaviour
     {
         private static readonly Color ICON_COLOR = new Color(0.13f, 0.13f, 0.14f);
+        private static readonly Color ICON_COLOR_DARK = new Color(0.97f, 0.97f, 0.98f);
+
+        /// <summary>Painter icons read this so they match the active variant.</summary>
+        private static Color iconColor = ICON_COLOR;
 
         private VisualElement root;
         private Label planName;
         private Button back, shot, undo, redo;
-        private VisualElement browseBar, editBar, viewBar, sheet;
+        private VisualElement browseBar, editBar, viewBar, sheet, addMenu;
         private Button btnOpen3D, btnEditWalls, btnAddFurn2D;
-        private Button btnDone, btnDrawRect, btnAddDoor, btnAddWindow, btnResize;
+        private Button btnDone, btnDrawWall, btnResize, btnAddOpening;
+        private Button btnDrawRect, btnAddDoor, btnAddWindow;
         private Button btnOpen2D, btnAddFurn3D;
         private TextField widthField, lengthField, ceilField, thickField;
         private Button sheetApply, sheetClose;
@@ -59,10 +64,13 @@ namespace IBMROS.Designer.Hud
             btnEditWalls = root.Q<Button>("BtnEditWalls");
             btnAddFurn2D = root.Q<Button>("BtnAddFurn2D");
             btnDone = root.Q<Button>("BtnDone");
+            btnDrawWall = root.Q<Button>("BtnDrawWall");
+            btnResize = root.Q<Button>("BtnResize");
+            btnAddOpening = root.Q<Button>("BtnAddOpening");
+            addMenu = root.Q<VisualElement>("AddMenu");
             btnDrawRect = root.Q<Button>("BtnDrawRect");
             btnAddDoor = root.Q<Button>("BtnAddDoor");
             btnAddWindow = root.Q<Button>("BtnAddWindow");
-            btnResize = root.Q<Button>("BtnResize");
             btnOpen2D = root.Q<Button>("BtnOpen2D");
             btnAddFurn3D = root.Q<Button>("BtnAddFurn3D");
 
@@ -84,6 +92,9 @@ namespace IBMROS.Designer.Hud
             BindIcon("EditWallsIcon", DrawEditWallsIcon);
             BindIcon("AddIcon2D", DrawPlusIcon);
             BindIcon("AddIcon3D", DrawPlusIcon);
+            BindIcon("DrawWallIcon", DrawPencilIcon);
+            BindIcon("ResizeIcon", DrawResizeIcon);
+            BindIcon("AddOpeningIcon", DrawPlusIcon);
 
             back.clicked += OnBack;
             shot.clicked += OnScreenshot;
@@ -97,14 +108,21 @@ namespace IBMROS.Designer.Hud
             {
                 PlanTouchController.Instance?.SetTool(PlanToolMode.Browse);
                 ShowSheet(false);
+                ShowAddMenu(false);
                 SetEditingWalls(false);
             };
             btnAddFurn2D.clicked += OnFurnish;
             btnAddFurn3D.clicked += OnFurnish;
-            btnDrawRect.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.DrawRect);
-            btnAddDoor.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddDoor);
-            btnAddWindow.clicked += () => PlanTouchController.Instance?.SetTool(PlanToolMode.AddWindow);
-            btnResize.clicked += OpenSheet;
+            btnDrawWall.clicked += () =>
+            {
+                ShowAddMenu(false);
+                PlanTouchController.Instance?.SetTool(PlanToolMode.DrawRect);
+            };
+            btnAddOpening.clicked += () => ShowAddMenu(addMenu.resolvedStyle.display == DisplayStyle.None);
+            btnDrawRect.clicked += () => ArmFromAddMenu(PlanToolMode.DrawRect);
+            btnAddDoor.clicked += () => ArmFromAddMenu(PlanToolMode.AddDoor);
+            btnAddWindow.clicked += () => ArmFromAddMenu(PlanToolMode.AddWindow);
+            btnResize.clicked += () => { ShowAddMenu(false); OpenSheet(); };
 
             sheetApply.clicked += ApplySheet;
             sheetClose.clicked += () => ShowSheet(false);
@@ -160,6 +178,19 @@ namespace IBMROS.Designer.Hud
                 planName.text = name;
         }
 
+        /// <summary>
+        /// Show/hide the whole HUD (furnish mode takes the screen). Hides the
+        /// document ROOT, deliberately: hiding the individual bars loses to
+        /// RefreshMode, which re-asserts their display on every mode change —
+        /// and SetActive(false) on the GameObject would unsubscribe everything
+        /// and force UIDocument to rebuild the tree on re-enable.
+        /// </summary>
+        public void SetHudVisible(bool visible)
+        {
+            if (root != null)
+                root.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
         // ------------------------------------------------------------------ painter icons
 
         private void BindIcon(string elementName, Action<MeshGenerationContext> draw)
@@ -175,7 +206,7 @@ namespace IBMROS.Designer.Hud
             var p = ctx.painter2D;
             float cx = r.width * 0.5f, cy = r.height * 0.55f;
             float rad = Mathf.Min(r.width, r.height) * 0.32f;
-            p.strokeColor = ICON_COLOR;
+            p.strokeColor = iconColor;
             p.lineWidth = 2.2f;
             p.lineCap = LineCap.Round;
             // open arc with an arrowhead at its start (top)
@@ -199,7 +230,7 @@ namespace IBMROS.Designer.Hud
         {
             Rect r = ctx.visualElement.contentRect;
             var p = ctx.painter2D;
-            p.strokeColor = ICON_COLOR;
+            p.strokeColor = iconColor;
             p.lineWidth = 2f;
             p.lineJoin = LineJoin.Round;
             float w = r.width, h = r.height;
@@ -226,7 +257,7 @@ namespace IBMROS.Designer.Hud
             Rect r = ctx.visualElement.contentRect;
             var p = ctx.painter2D;
             float w = r.width, h = r.height;
-            p.strokeColor = ICON_COLOR;
+            p.strokeColor = iconColor;
             p.lineWidth = 2.2f;
             p.lineJoin = LineJoin.Round;
             // rectangle outline
@@ -238,7 +269,7 @@ namespace IBMROS.Designer.Hud
             p.ClosePath();
             p.Stroke();
             // corner handles
-            p.fillColor = ICON_COLOR;
+            p.fillColor = iconColor;
             foreach (Vector2 c in new[]
             {
                 new Vector2(w * 0.18f, h * 0.18f), new Vector2(w * 0.82f, h * 0.18f),
@@ -251,13 +282,62 @@ namespace IBMROS.Designer.Hud
             }
         }
 
+        private static void DrawPencilIcon(MeshGenerationContext ctx)
+        {
+            Rect r = ctx.visualElement.contentRect;
+            var p = ctx.painter2D;
+            float w = r.width, h = r.height;
+            p.strokeColor = iconColor;
+            p.lineWidth = 2.2f;
+            p.lineJoin = LineJoin.Round;
+            // pencil body
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.22f, h * 0.78f));
+            p.LineTo(new Vector2(w * 0.3f, h * 0.55f));
+            p.LineTo(new Vector2(w * 0.7f, h * 0.15f));
+            p.LineTo(new Vector2(w * 0.85f, h * 0.3f));
+            p.LineTo(new Vector2(w * 0.45f, h * 0.7f));
+            p.ClosePath();
+            p.Stroke();
+            // baseline (the wall being drawn)
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.14f, h * 0.88f));
+            p.LineTo(new Vector2(w * 0.86f, h * 0.88f));
+            p.Stroke();
+        }
+
+        private static void DrawResizeIcon(MeshGenerationContext ctx)
+        {
+            Rect r = ctx.visualElement.contentRect;
+            var p = ctx.painter2D;
+            float w = r.width, h = r.height;
+            p.strokeColor = iconColor;
+            p.lineWidth = 2.4f;
+            p.lineCap = LineCap.Round;
+            // diagonal double arrow
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.2f, h * 0.8f));
+            p.LineTo(new Vector2(w * 0.8f, h * 0.2f));
+            p.Stroke();
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.2f, h * 0.52f));
+            p.LineTo(new Vector2(w * 0.2f, h * 0.8f));
+            p.LineTo(new Vector2(w * 0.48f, h * 0.8f));
+            p.Stroke();
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.52f, h * 0.2f));
+            p.LineTo(new Vector2(w * 0.8f, h * 0.2f));
+            p.LineTo(new Vector2(w * 0.8f, h * 0.48f));
+            p.Stroke();
+        }
+
         private static void DrawPlusIcon(MeshGenerationContext ctx)
         {
             Rect r = ctx.visualElement.contentRect;
             var p = ctx.painter2D;
             float cx = r.width * 0.5f, cy = r.height * 0.5f;
             float arm = Mathf.Min(r.width, r.height) * 0.36f;
-            p.strokeColor = ICON_COLOR;
+            p.strokeColor = iconColor;
             p.lineWidth = 3f;
             p.lineCap = LineCap.Round;
             p.BeginPath();
@@ -301,6 +381,15 @@ namespace IBMROS.Designer.Hud
             editingWalls = editing;
             RefreshMode(DesignerModeController.Instance != null
                 ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
+        }
+
+        private void ShowAddMenu(bool show) =>
+            addMenu.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+
+        private void ArmFromAddMenu(PlanToolMode tool)
+        {
+            ShowAddMenu(false);
+            PlanTouchController.Instance?.SetTool(tool);
         }
 
         // ------------------------------------------------------------------ room-size sheet
@@ -421,6 +510,16 @@ namespace IBMROS.Designer.Hud
         private void RefreshMode(DesignerMode mode)
         {
             bool plan = mode == DesignerMode.Plan2D;
+
+            // Contrast variant: light pills on the bright 2D plan, dark scrim
+            // pills inside the lit 3D room (a translucent white pill vanished
+            // against white walls once the solid panels were removed).
+            if (plan) root.RemoveFromClassList("hud--dark");
+            else root.AddToClassList("hud--dark");
+            iconColor = plan ? ICON_COLOR : ICON_COLOR_DARK;
+            root.Query<VisualElement>().Class("icon").ForEach(e => e.MarkDirtyRepaint());
+            root.Query<VisualElement>().Class("tool-col__icon").ForEach(e => e.MarkDirtyRepaint());
+
             browseBar.style.display = plan && !editingWalls ? DisplayStyle.Flex : DisplayStyle.None;
             editBar.style.display = plan && editingWalls ? DisplayStyle.Flex : DisplayStyle.None;
             viewBar.style.display = plan ? DisplayStyle.None : DisplayStyle.Flex;
@@ -429,6 +528,8 @@ namespace IBMROS.Designer.Hud
                 ShowSheet(false);
                 editingWalls = false;
             }
+            if (addMenu != null && (!plan || !editingWalls))
+                ShowAddMenu(false);
             RefreshSelectionBar();
         }
 
@@ -443,6 +544,7 @@ namespace IBMROS.Designer.Hud
 
         private void RefreshToolStates(PlanToolMode tool)
         {
+            SetArmed(btnDrawWall, tool == PlanToolMode.DrawRect);
             SetArmed(btnDrawRect, tool == PlanToolMode.DrawRect);
             SetArmed(btnAddDoor, tool == PlanToolMode.AddDoor);
             SetArmed(btnAddWindow, tool == PlanToolMode.AddWindow);

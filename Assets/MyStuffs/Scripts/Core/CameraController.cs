@@ -33,8 +33,13 @@ public class CameraController : MonoBehaviour
     // ---------------------------------------------------------------
 
     [Header("Camera Feel")]
-    [Tooltip("Single-finger look sensitivity. 1.5–2.5 is natural on mobile.")]
-    public float rotationSpeed = 2f;
+    [Tooltip("Single-finger look sensitivity (degrees per pixel = value * 0.1). " +
+             "4 ≈ a full 360° in one screen-width drag.")]
+    public float rotationSpeed = 4f;
+
+    [Tooltip("Look damping. Higher settles faster; 0 disables smoothing and " +
+             "rotation snaps rigidly to the finger.")]
+    public float rotationSmoothing = 12f;
 
     [Tooltip("Joystick walk speed in world units per second.")]
     public float movementSpeed = 4f;
@@ -109,16 +114,32 @@ public class CameraController : MonoBehaviour
     private float _yaw   = 0f;
     private float _pitch = 0f;
 
+    // Look target — input writes these, Update eases the applied angles toward
+    // them so rotation glides to a stop instead of stopping dead with the finger.
+    private float _targetYaw   = 0f;
+    private float _targetPitch = 0f;
+
     // ---------------------------------------------------------------
     // UNITY LIFECYCLE
     // ---------------------------------------------------------------
 
     void Start()
     {
-        Vector3 angles = transform.eulerAngles;
-        _yaw   = angles.y;
-        _pitch = NormalisePitch(angles.x);
+        SyncFromTransform();
         LockEyeHeight();
+    }
+
+    /// <summary>
+    /// Adopt the transform's current orientation as the look state. Needed when
+    /// another system seats the camera pose (the designer's walkthrough entry)
+    /// after Start has already run — otherwise the first look input snaps back
+    /// to the stale angles.
+    /// </summary>
+    public void SyncFromTransform()
+    {
+        Vector3 angles = transform.eulerAngles;
+        _yaw   = _targetYaw   = angles.y;
+        _pitch = _targetPitch = NormalisePitch(angles.x);
     }
 
     void Update()
@@ -134,9 +155,9 @@ public class CameraController : MonoBehaviour
 
     public void RotateCamera(Vector2 screenDelta)
     {
-        _yaw   -= screenDelta.x * rotationSpeed * 0.1f;
-        _pitch -= screenDelta.y * rotationSpeed * 0.1f;
-        _pitch  = Mathf.Clamp(_pitch, -maxLookUp, maxLookDown);
+        _targetYaw   -= screenDelta.x * rotationSpeed * 0.1f;
+        _targetPitch -= screenDelta.y * rotationSpeed * 0.1f;
+        _targetPitch  = Mathf.Clamp(_targetPitch, -maxLookUp, maxLookDown);
     }
 
     // ---------------------------------------------------------------
@@ -204,6 +225,18 @@ public class CameraController : MonoBehaviour
 
     private void ApplyRotation()
     {
+        if (rotationSmoothing > 0f)
+        {
+            float t = 1f - Mathf.Exp(-rotationSmoothing * Time.deltaTime);
+            _yaw   = Mathf.LerpAngle(_yaw, _targetYaw, t);
+            _pitch = Mathf.Lerp(_pitch, _targetPitch, t);
+        }
+        else
+        {
+            _yaw   = _targetYaw;
+            _pitch = _targetPitch;
+        }
+
         transform.rotation = Quaternion.Euler(_pitch, _yaw, 0f);
     }
 

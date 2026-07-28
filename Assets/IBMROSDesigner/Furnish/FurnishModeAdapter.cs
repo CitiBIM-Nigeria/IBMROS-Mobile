@@ -1,20 +1,23 @@
+using Exoa.Events;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace IBMROS.Designer.Furnish
 {
     /// <summary>
-    /// Adapts the transplanted Room-scene furniture stack to the designer's
-    /// mode model.
+    /// Bridges the transplanted Room-scene furniture stack into the designer.
     ///
-    ///   • Hides RoomUI.uxml's own chrome (TopBar/BottomBar) — DesignerHud owns
-    ///     navigation; only the furniture panel, item-detail sheet and QR
-    ///     overlays from that document stay usable.
-    ///   • Gates the furniture interaction stack (InputManager, SelectionManager,
-    ///     ObjectManipulator…) to 3D modes so 2D plan gestures never fight
-    ///     furniture selection, and PlanTouchController never sees 3D taps
-    ///     (it already self-gates to Plan2D).
-    ///   • Exposes OpenCatalog() for DesignerHud's Furnish button.
+    /// Responsibilities:
+    ///   • Furnish mode UI: opening the catalog hides ALL normal room chrome
+    ///     (designer HUD, joystick, selection bar) and keeps it hidden through
+    ///     ghost placement — exactly the SetRoomUIVisible behaviour the old Room
+    ///     scene had. It returns when the panel closes AND placement finishes.
+    ///   • Input arbitration: while furniture is being dragged/placed, the Exoa
+    ///     camera rig stands down (CameraEvents DisableCameraMoves) so one drag
+    ///     can never move furniture and pan the room at the same time.
+    ///   • Mode gating: the furniture interaction stack only runs where it can
+    ///     do something useful, and the catalog NEVER changes the current view
+    ///     (2D stays 2D, 3D stays 3D).
     /// </summary>
     public sealed class FurnishModeAdapter : MonoBehaviour
     {
@@ -23,6 +26,21 @@ namespace IBMROS.Designer.Furnish
         [SerializeField] private RoomUIManager roomUi;
         [SerializeField] private FurniturePanelController furniturePanel;
         [SerializeField] private GameObject interactionManagers;
+
+        private Hud.DesignerHudController hud;
+        private ItemDetailSheetController detailSheet;
+        private SelectionManager selection;
+        private ActionMenuController actionMenu;
+        private ObjectManipulator manipulator;
+        private FurniturePlacer placer;
+        private ThreeD.WalkthroughController walkthrough;
+        private bool wasPlacing;
+
+        /// <summary>True from catalog-open until placement resolves.</summary>
+        public bool FurnishUiActive { get; private set; }
+
+        /// <summary>True while a furniture drag or ghost placement owns the pointer.</summary>
+        public bool FurnitureOwnsInput { get; private set; }
 
         private void Awake()
         {
@@ -40,6 +58,13 @@ namespace IBMROS.Designer.Furnish
                 var im = FindAnyObjectByType<InputManager>(FindObjectsInactive.Include);
                 if (im != null) interactionManagers = im.gameObject;
             }
+            hud = FindAnyObjectByType<Hud.DesignerHudController>(FindObjectsInactive.Include);
+            detailSheet = FindAnyObjectByType<ItemDetailSheetController>(FindObjectsInactive.Include);
+            selection = FindAnyObjectByType<SelectionManager>(FindObjectsInactive.Include);
+            actionMenu = FindAnyObjectByType<ActionMenuController>(FindObjectsInactive.Include);
+            manipulator = FindAnyObjectByType<ObjectManipulator>(FindObjectsInactive.Include);
+            placer = FindAnyObjectByType<FurniturePlacer>(FindObjectsInactive.Include);
+            walkthrough = FindAnyObjectByType<ThreeD.WalkthroughController>(FindObjectsInactive.Include);
         }
 
         private void OnEnable()
@@ -47,6 +72,15 @@ namespace IBMROS.Designer.Furnish
             DesignerModeController.OnModeChanged += ApplyMode;
             if (furniturePanel != null)
                 furniturePanel.OnPanelClosed += OnPanelClosed;
+            if (detailSheet != null)
+                detailSheet.OnSheetClosed += TryRestore;
+            if (manipulator != null)
+            {
+                manipulator.OnManipulationStart += OnFurnitureGrabbed;
+                manipulator.OnManipulationEnd += OnFurnitureReleased;
+            }
+            if (placer != null)
+                placer.OnFurniturePlaced += OnPlacementResolved;
         }
 
         private void OnDisable()
@@ -54,6 +88,25 @@ namespace IBMROS.Designer.Furnish
             DesignerModeController.OnModeChanged -= ApplyMode;
             if (furniturePanel != null)
                 furniturePanel.OnPanelClosed -= OnPanelClosed;
+            if (detailSheet != null)
+                detailSheet.OnSheetClosed -= TryRestore;
+            if (manipulator != null)
+            {
+                manipulator.OnManipulationStart -= OnFurnitureGrabbed;
+                manipulator.OnManipulationEnd -= OnFurnitureReleased;
+            }
+            if (placer != null)
+                placer.OnFurniturePlaced -= OnPlacementResolved;
+        }
+
+        private void Update()
+        {
+            // OnPlacementCancelled is unreliable, so detect the placing→idle
+            // edge (confirm OR cancel) and restore the chrome from there.
+            bool placing = placer != null && placer.IsPlacing;
+            if (wasPlacing && !placing)
+                TryRestore();
+            wasPlacing = placing;
         }
 
         private void Start()
@@ -63,33 +116,120 @@ namespace IBMROS.Designer.Furnish
                 ? DesignerModeController.Instance.Mode : DesignerMode.Plan2D);
         }
 
+        // ------------------------------------------------------------------ catalog
+
         /// <summary>
-        /// DesignerHud's Furnish/Add buttons. From the 2D plan this first drops
-        /// the user inside the room (placement needs the 3D interaction stack),
-        /// then opens the catalog with the dismiss overlay armed so tapping
-        /// outside the panel closes it (RoomUIManager only arms that overlay on
-        /// its own — hidden — bottom-bar path).
+        /// Add Furniture. Stays in the CURRENT view — a 2D bird's-eye user places
+        /// furniture from 2D, a 3D user from inside the room (previously this
+        /// force-switched to 3D). All normal room UI hides while furnishing.
         /// </summary>
         public void OpenCatalog()
         {
-            if (DesignerModeController.Instance != null &&
-                DesignerModeController.Instance.Mode == DesignerMode.Plan2D)
-                DesignerModeController.Instance.Set3D();
+            // The furniture interaction stack must run for placement raycasts,
+            // even in 2D where it is otherwise gated off.
+            SetInteractionActive(true);
+            SetFurnishUiActive(true);
             SetDismissOverlayVisible(true);
             furniturePanel?.Open();
         }
 
-        private void OnPanelClosed() => SetDismissOverlayVisible(false);
-
-        private void SetDismissOverlayVisible(bool visible)
+        private void OnPanelClosed()
         {
-            var doc = roomUi != null ? roomUi.GetComponent<UIDocument>() : null;
-            VisualElement overlay = doc != null
-                ? doc.rootVisualElement.Q<VisualElement>("FurnitureDismissOverlay")
-                : null;
-            if (overlay != null)
-                overlay.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+            SetDismissOverlayVisible(false);
+            TryRestore();
         }
+
+        private void OnPlacementResolved(FurnitureItem item) => TryRestore();
+
+        /// <summary>
+        /// Bring the room chrome back — but only once NOTHING furnish-related is
+        /// still up. Ghost placement continues after the panel closes, so the UI
+        /// must stay hidden until the item actually lands.
+        /// </summary>
+        private void TryRestore()
+        {
+            if (!FurnishUiActive)
+                return;
+            if (furniturePanel != null && furniturePanel.IsOpen)
+                return;
+            if (detailSheet != null && detailSheet.IsOpen)
+                return;
+            if (placer != null && placer.IsPlacing)
+                return;
+            SetFurnishUiActive(false);
+        }
+
+        /// <summary>Hides/restores every piece of normal room chrome at once.</summary>
+        private void SetFurnishUiActive(bool furnishing)
+        {
+            if (FurnishUiActive == furnishing)
+                return;
+            FurnishUiActive = furnishing;
+
+            hud?.SetHudVisible(!furnishing);
+            walkthrough?.SetJoystickVisible(!furnishing);
+            if (furnishing)
+            {
+                // Mirrors the old Room scene's open sequence.
+                selection?.DeselectObject();
+                actionMenu?.HidePanels();
+            }
+
+            // Ghost placement steers with the pointer — the camera must not.
+            SetCameraSuppressed(furnishing);
+
+            if (!furnishing)
+                SetInteractionActive(DesignerModeController.Instance == null ||
+                                     DesignerModeController.Instance.Mode != DesignerMode.Plan2D);
+        }
+
+        // ------------------------------------------------------------------ input arbitration
+
+        private void OnFurnitureGrabbed()
+        {
+            FurnitureOwnsInput = true;
+            SetCameraSuppressed(true);
+        }
+
+        private void OnFurnitureReleased()
+        {
+            FurnitureOwnsInput = false;
+            if (!FurnishUiActive)
+                SetCameraSuppressed(false);
+        }
+
+        /// <summary>
+        /// Tells the Exoa rig to ignore drags. Without this the ortho camera
+        /// panned the whole plan while the user dragged a piece of furniture
+        /// across it, and the perspective rig fought the first-person camera.
+        /// </summary>
+        private static void SetCameraSuppressed(bool suppressed)
+        {
+            CameraEvents.OnRequestButtonAction?.Invoke(
+                CameraEvents.Action.DisableCameraMoves, suppressed);
+        }
+
+        // ------------------------------------------------------------------ mode gating
+
+        private void ApplyMode(DesignerMode mode)
+        {
+            if (FurnishUiActive)
+                return; // furnishing owns the stack until it resolves
+            SetInteractionActive(mode != DesignerMode.Plan2D);
+            if (mode == DesignerMode.Plan2D)
+            {
+                furniturePanel?.Close();
+                SetDismissOverlayVisible(false);
+            }
+        }
+
+        private void SetInteractionActive(bool active)
+        {
+            if (interactionManagers != null && interactionManagers.activeSelf != active)
+                interactionManagers.SetActive(active);
+        }
+
+        // ------------------------------------------------------------------ RoomUI plumbing
 
         private void HideRoomUiChrome()
         {
@@ -107,18 +247,14 @@ namespace IBMROS.Designer.Furnish
                 e.style.display = DisplayStyle.None;
         }
 
-        private void ApplyMode(DesignerMode mode)
+        private void SetDismissOverlayVisible(bool visible)
         {
-            bool furnish = mode != DesignerMode.Plan2D;
-            if (interactionManagers != null && interactionManagers.activeSelf != furnish)
-                interactionManagers.SetActive(furnish);
-            if (!furnish)
-            {
-                // Programmatic Close() doesn't raise OnPanelClosed — drop the
-                // dismiss overlay ourselves or it lingers over the 2D plan.
-                furniturePanel?.Close();
-                SetDismissOverlayVisible(false);
-            }
+            var doc = roomUi != null ? roomUi.GetComponent<UIDocument>() : null;
+            VisualElement overlay = doc != null
+                ? doc.rootVisualElement.Q<VisualElement>("FurnitureDismissOverlay")
+                : null;
+            if (overlay != null)
+                overlay.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
         }
     }
 }

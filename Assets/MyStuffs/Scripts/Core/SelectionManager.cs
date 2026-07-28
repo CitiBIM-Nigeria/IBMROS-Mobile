@@ -17,6 +17,7 @@ public class SelectionManager : MonoBehaviour
     
     private Transform _selectedObject;
     private Camera _mainCamera;
+    private FurniturePlacer _placer;
 
     void Awake()
     {
@@ -42,6 +43,15 @@ public class SelectionManager : MonoBehaviour
             return;
 
         if (EventSystem.current.IsPointerOverGameObject())
+            return;
+
+        // While a ghost is being placed the confirming tap belongs to
+        // FurniturePlacer. The ghost sits under the finger on the Interactable
+        // layer with live colliders, so without this the same tap selected the
+        // ghost and the placement was lost.
+        if (_placer == null)
+            _placer = FindAnyObjectByType<FurniturePlacer>(FindObjectsInactive.Include);
+        if (_placer != null && _placer.IsPlacing)
             return;
 
         Ray ray = _mainCamera.ScreenPointToRay(screenPosition);

@@ -3,138 +3,144 @@
     justify-content: space-between;
 }
 
+/* ---------------------------------------------------------------- bars
+   No panels: the scene reads through. Legibility comes from the pill
+   behind each control, not from a full-width white strip. */
 .bar {
     flex-direction: row;
     align-items: center;
-    padding: 10px 12px;
+    background-color: rgba(0, 0, 0, 0);
+    padding: 10px 14px;
 }
 
 .bar--top {
-    background-color: rgba(252, 252, 252, 0.92);
-    border-bottom-width: 1px;
-    border-bottom-color: rgba(0, 0, 0, 0.08);
+    justify-content: flex-start;
 }
 
 .bar--bottom {
-    background-color: rgba(252, 252, 252, 0.97);
-    border-top-width: 1px;
-    border-top-color: rgba(0, 0, 0, 0.08);
-    justify-content: space-around;
-    min-height: 76px;
-    padding: 8px 18px;
+    justify-content: space-between;
+    padding: 10px 18px 16px 18px;
 }
 
-.tool-col {
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-width: 92px;
-    height: 60px;
-    padding: 4px 10px;
-    margin: 0;
-    border-width: 0;
-    background-color: rgba(0, 0, 0, 0);
-    border-radius: 12px;
-}
-
-.tool-col:active {
-    background-color: rgba(0, 0, 0, 0.07);
-}
-
-.tool-col__glyph {
-    font-size: 26px;
-    -unity-font-style: bold;
-    color: rgb(25, 25, 25);
-    -unity-text-align: middle-center;
-}
-
-.tool-col__icon {
-    width: 28px;
-    height: 28px;
-}
-
-.tool-col__label {
-    margin-top: 2px;
-    font-size: 11px;
-    color: rgb(95, 95, 95);
-    -unity-text-align: middle-center;
-}
-
-.icon {
-    width: 24px;
-    height: 24px;
-}
-
+/* ---------------------------------------------------------------- top bar */
 .plan-name {
     font-size: 17px;
     -unity-font-style: bold;
-    color: rgb(25, 25, 25);
-    margin-left: 6px;
+    color: rgb(28, 28, 30);
+    margin-left: 10px;
+    margin-right: 10px;
 }
 
 .spacer {
     flex-grow: 1;
 }
 
-.btn {
-    height: 48px;
-    min-width: 48px;
-    padding: 0 14px;
-    margin: 0 4px;
-    border-radius: 12px;
+/* Circular translucent pill — uniform 44px hit target, evenly spaced. */
+.btn--icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    margin: 0 3px;
     border-width: 0;
-    background-color: rgba(0, 0, 0, 0.05);
-    color: rgb(30, 30, 30);
-    font-size: 15px;
+    border-radius: 22px;
+    background-color: rgba(255, 255, 255, 0.72);
+    -unity-text-align: middle-center;
+    font-size: 19px;
+    color: rgb(28, 28, 30);
+    align-items: center;
+    justify-content: center;
+}
+
+.btn--icon:active {
+    background-color: rgba(226, 228, 232, 0.95);
+}
+
+.btn--icon:disabled {
+    opacity: 0.32;
+}
+
+.icon {
+    width: 22px;
+    height: 22px;
+}
+
+/* ---------------------------------------------------------------- bottom controls */
+.tool-col {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 88px;
+    height: 62px;
+    padding: 4px 12px;
+    margin: 0;
+    border-width: 0;
+    border-radius: 16px;
+    background-color: rgba(255, 255, 255, 0.72);
+}
+
+.tool-col:active {
+    background-color: rgba(226, 228, 232, 0.95);
+}
+
+.tool-col__glyph {
+    font-size: 25px;
+    -unity-font-style: bold;
+    color: rgb(24, 24, 26);
+    -unity-text-align: middle-center;
+}
+
+.tool-col__icon {
+    width: 26px;
+    height: 26px;
+}
+
+.tool-col__label {
+    margin-top: 1px;
+    font-size: 11px;
+    color: rgb(78, 78, 84);
+    -unity-text-align: middle-center;
+}
+
+/* Reserves the joystick's slot so 2D and Add Furniture sit either side of it
+   on the same line (the joystick itself is a uGUI canvas underneath). */
+.joystick-slot {
+    width: 132px;
+    height: 62px;
+}
+
+/* ---------------------------------------------------------------- edit-mode buttons */
+.btn {
+    height: 46px;
+    min-width: 46px;
+    padding: 0 16px;
+    margin: 0 4px;
+    border-radius: 14px;
+    border-width: 0;
+    background-color: rgba(255, 255, 255, 0.72);
+    color: rgb(28, 28, 30);
+    font-size: 14px;
     -unity-text-align: middle-center;
 }
 
 .btn:active {
-    background-color: rgba(0, 0, 0, 0.14);
-}
-
-.btn--icon {
-    font-size: 22px;
-    min-width: 48px;
-    padding: 0;
-    background-color: rgba(0, 0, 0, 0);
+    background-color: rgba(226, 228, 232, 0.95);
 }
 
 .btn--primary {
     background-color: rgb(28, 28, 30);
     color: rgb(255, 255, 255);
     -unity-font-style: bold;
-    min-width: 64px;
+    min-width: 72px;
 }
 
 .btn--primary:active {
-    background-color: rgb(70, 70, 74);
-}
-
-.btn--tool {
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: rgb(72, 72, 78);
 }
 
 .btn--armed {
     background-color: rgb(70, 130, 220);
     color: rgb(255, 255, 255);
-}
-
-.btn--disabled {
-    opacity: 0.35;
-}
-
-.btn:disabled {
-    opacity: 0.35;
-}
-
-.selection-bar {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 84px;
-    flex-direction: row;
-    justify-content: center;
 }
 
 .btn--danger {
@@ -146,15 +152,60 @@
     background-color: rgb(170, 50, 47);
 }
 
+.btn:disabled {
+    opacity: 0.35;
+}
+
+/* ------------------------------------------------------- dark-scene variant
+   Panels are gone, so the controls themselves carry the contrast. Over a lit
+   3D room a white pill disappears; these swap to a dark scrim with light text
+   so the toolbar stays readable without reintroducing a full-width panel. */
+.hud--dark .btn--icon,
+.hud--dark .tool-col,
+.hud--dark .btn {
+    background-color: rgba(22, 22, 26, 0.55);
+    color: rgb(248, 248, 250);
+}
+
+.hud--dark .btn--icon:active,
+.hud--dark .tool-col:active,
+.hud--dark .btn:active {
+    background-color: rgba(60, 60, 68, 0.85);
+}
+
+.hud--dark .plan-name,
+.hud--dark .tool-col__glyph {
+    color: rgb(250, 250, 252);
+}
+
+.hud--dark .tool-col__label {
+    color: rgba(240, 240, 245, 0.85);
+}
+
+.hud--dark .btn--primary {
+    background-color: rgb(248, 248, 250);
+    color: rgb(20, 20, 24);
+}
+
+/* ---------------------------------------------------------------- selection + sheet */
+.selection-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 96px;
+    flex-direction: row;
+    justify-content: center;
+}
+
 .sheet {
     position: absolute;
     left: 12px;
     right: 12px;
-    bottom: 84px;
+    bottom: 96px;
     background-color: rgb(255, 255, 255);
-    border-radius: 16px;
+    border-radius: 18px;
     border-width: 1px;
-    border-color: rgba(0, 0, 0, 0.1);
+    border-color: rgba(0, 0, 0, 0.08);
     padding: 16px;
 }
 

@@ -23,6 +23,7 @@ public class SavedRoomsRow : MonoBehaviour
     private Vector2 _dragStart;
     private float _scrollStart;
     private float _dragDistance; // px moved this gesture — suppresses tap-open
+    private const float DRAG_THRESHOLD_PX = 8f;
 
     private void OnEnable()
     {
@@ -61,36 +62,72 @@ public class SavedRoomsRow : MonoBehaviour
         }
         if (_scroll != null)
         {
+            _scroll.mode = ScrollViewMode.Horizontal;
             _scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             _scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            _scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Elastic;
+            _scroll.scrollDecelerationRate = 0.135f;
+            _scroll.elasticity = 0.1f;
+
+            // THE fix for "can't scroll": the row was being stretched to the
+            // viewport width, so the content was never wider than the view and
+            // there was nothing to scroll — the cards just overflowed invisibly.
+            // Let the row size to its children instead.
+            _scroll.contentContainer.style.flexDirection = FlexDirection.Row;
+            _row.style.flexDirection = FlexDirection.Row;
+            _row.style.flexShrink = 0;
+            _row.style.flexGrow = 0;
+            _row.style.width = StyleKeyword.Auto;
+            _row.style.minWidth = StyleKeyword.Auto;
+
             EnableDragScroll(_scroll);
         }
         _bound = true;
         Refresh();
     }
 
-    /// <summary>Pointer-drag panning for the horizontal row (mouse + touch).</summary>
+    /// <summary>
+    /// Pointer-drag panning for the horizontal row. Registered in TRICKLE-DOWN on
+    /// the ScrollView so it still sees moves after a card Button has captured the
+    /// pointer (ancestors are on a captured element's propagation path); once the
+    /// gesture reads as a drag we steal the capture so the button can't also fire.
+    /// Needed because UI Toolkit only drag-scrolls touch input, never the mouse.
+    /// </summary>
     private void EnableDragScroll(ScrollView scroll)
     {
-        VisualElement viewport = scroll.contentViewport;
-        viewport.RegisterCallback<PointerDownEvent>(e =>
+        scroll.RegisterCallback<PointerDownEvent>(e =>
         {
             _dragging = true;
             _dragStart = e.position;
             _scrollStart = scroll.scrollOffset.x;
             _dragDistance = 0f;
         }, TrickleDown.TrickleDown);
-        viewport.RegisterCallback<PointerMoveEvent>(e =>
+
+        scroll.RegisterCallback<PointerMoveEvent>(e =>
         {
             if (!_dragging)
                 return;
             float dx = e.position.x - _dragStart.x;
             _dragDistance = Mathf.Max(_dragDistance, Mathf.Abs(dx));
+            if (_dragDistance <= DRAG_THRESHOLD_PX)
+                return;
+
+            if (scroll.panel != null && scroll.panel.GetCapturingElement(e.pointerId) != scroll)
+                scroll.CapturePointer(e.pointerId);
+
             scroll.scrollOffset = new Vector2(
                 Mathf.Max(0f, _scrollStart - dx), scroll.scrollOffset.y);
+            e.StopPropagation();
         }, TrickleDown.TrickleDown);
-        viewport.RegisterCallback<PointerUpEvent>(_ => _dragging = false, TrickleDown.TrickleDown);
-        viewport.RegisterCallback<PointerLeaveEvent>(_ => _dragging = false);
+
+        scroll.RegisterCallback<PointerUpEvent>(e =>
+        {
+            if (scroll.HasPointerCapture(e.pointerId))
+                scroll.ReleasePointer(e.pointerId);
+            _dragging = false;
+        }, TrickleDown.TrickleDown);
+
+        scroll.RegisterCallback<PointerCaptureOutEvent>(_ => _dragging = false);
     }
 
     private void Refresh()
@@ -176,7 +213,7 @@ public class SavedRoomsRow : MonoBehaviour
         card.clicked += () =>
         {
             // Suppress accidental opens at the end of a drag-scroll gesture.
-            if (_dragDistance > 8f)
+            if (_dragDistance > DRAG_THRESHOLD_PX)
                 return;
             Debug.Log($"[SavedRoomsRow] Opening saved plan '{name}'.");
             RoomDesignLaunch.SetLoadPlan(name);

@@ -178,6 +178,15 @@ namespace IBMROS.Designer.Plan
                 DesignerModeController.Instance.Mode != DesignerMode.Plan2D)
                 return;
 
+            // Furniture (drag / ghost placement) outranks plan editing — one
+            // gesture must never move a sofa AND a wall.
+            var furnish = IBMROS.Designer.Furnish.FurnishModeAdapter.Instance;
+            if (furnish != null && (furnish.FurnishUiActive || furnish.FurnitureOwnsInput))
+            {
+                CancelDrag();
+                return;
+            }
+
             if (PointerDown())
                 OnPointerDown(PointerPos());
             else if (IsDragging || pressedInsideRoom)

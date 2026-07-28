@@ -52,9 +52,11 @@ namespace IBMROS.Designer.Plan
 
         // 3D ambient = LightingRig's trilight (kept in lockstep by value; the
         // rig's Start order vs ours is unreliable, so no save/restore dance)
-        private static readonly Color AMBIENT_SKY = new Color(0.55f, 0.57f, 0.60f);
-        private static readonly Color AMBIENT_EQUATOR = new Color(0.42f, 0.42f, 0.42f);
-        private static readonly Color AMBIENT_GROUND = new Color(0.25f, 0.24f, 0.22f);
+        // Interiors have no baked bounce, so ambient carries the room: lifted
+        // well above the outdoor-ish defaults or walls read flat gray.
+        private static readonly Color AMBIENT_SKY = new Color(0.86f, 0.87f, 0.90f);
+        private static readonly Color AMBIENT_EQUATOR = new Color(0.72f, 0.71f, 0.69f);
+        private static readonly Color AMBIENT_GROUND = new Color(0.45f, 0.43f, 0.40f);
 
         private void Awake()
         {
@@ -100,11 +102,16 @@ namespace IBMROS.Designer.Plan
                 RenderSettings.ambientMode = AmbientMode.Flat;
                 RenderSettings.ambientLight = PLAN_AMBIENT;
                 IBMROS.Bridge.Interaction.SelectionService.HighlightLayerExclusionMask = wallMask;
+                IBMROS.Bridge.Interaction.SelectionService.Suspended = false;
                 nextApply = 0f; // tint immediately
             }
             else
             {
-                IBMROS.Bridge.Interaction.SelectionService.HighlightLayerExclusionMask = 0;
+                // Room selection is a PLAN concept. Leaving it live in 3D let the
+                // room-wide highlight tint repaint every wall/floor (rooms went
+                // navy on entering furniture mode) and let its unmasked pick ray
+                // fight FurniturePlacer for the placement tap.
+                IBMROS.Bridge.Interaction.SelectionService.Suspended = true;
                 RestoreLook();
             }
         }
@@ -117,6 +124,37 @@ namespace IBMROS.Designer.Plan
             RenderSettings.ambientGroundColor = AMBIENT_GROUND;
             ClearWallTint();
             Apply3DLook();
+        }
+
+        /// <summary>
+        /// The 2D plan's line/handle visuals use the vendor "Exoa/AlwaysOnTop"
+        /// shader (ZTest Always, Queue Transparent+100), so in 3D they punch
+        /// straight through walls and furniture — that was the black line drawn
+        /// across every sofa at floor level. They are plan-only affordances, so
+        /// their renderers are switched off outside Plan2D. Renderers only, never
+        /// the GameObjects: PlanTouchController still hit-tests these transforms.
+        /// </summary>
+        private void SetPlanVisualsVisible(bool visible)
+        {
+            foreach (var cpc in FindObjectsByType<Exoa.Designer.ControlPointsController>(FindObjectsSortMode.None))
+            {
+                var lr = cpc.GetComponent<LineRenderer>();
+                if (lr != null && lr.enabled != visible)
+                    lr.enabled = visible;
+
+                foreach (Renderer r in cpc.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (r is LineRenderer)
+                        continue;
+                    if (r.enabled != visible)
+                        r.enabled = visible;
+                }
+                foreach (Canvas c in cpc.GetComponentsInChildren<Canvas>(true))
+                {
+                    if (c.enabled != visible)
+                        c.enabled = visible;
+                }
+            }
         }
 
         /// <summary>
@@ -156,6 +194,7 @@ namespace IBMROS.Designer.Plan
             if (Time.unscaledTime < nextApply)
                 return;
             nextApply = Time.unscaledTime + REAPPLY_INTERVAL_S;
+            SetPlanVisualsVisible(planMode);
             if (!planMode)
             {
                 Apply3DLook(); // textured interior (rebuilds recreate renderers)

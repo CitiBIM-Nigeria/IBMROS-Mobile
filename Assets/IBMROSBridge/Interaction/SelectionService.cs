@@ -86,8 +86,34 @@ namespace IBMROS.Bridge.Interaction
                 Instance = null;
         }
 
+        /// <summary>
+        /// Suspends room selection entirely: no tap-picking, no highlight tint.
+        /// Set while the app is in a 3D/furnishing context, where selection
+        /// belongs to FURNITURE. Without this, (a) the room-wide `_BaseColor`
+        /// highlight recoloured every wall/floor/ceiling (rooms turned navy the
+        /// moment furniture mode opened), and (b) this class's unmasked pick ray
+        /// competed with FurniturePlacer for the same tap.
+        /// Setting it true clears any active selection + tint.
+        /// </summary>
+        public static bool Suspended
+        {
+            get => suspended;
+            set
+            {
+                if (suspended == value)
+                    return;
+                suspended = value;
+                if (value && Instance != null)
+                    Instance.Deselect();
+            }
+        }
+
+        private static bool suspended;
+
         private void Update()
         {
+            if (suspended)
+                return;
             HandleTap();
             if (HasSelection && Time.time - lastReapply > REAPPLY_INTERVAL)
             {
