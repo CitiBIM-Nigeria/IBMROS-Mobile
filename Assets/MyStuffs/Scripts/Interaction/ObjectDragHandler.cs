@@ -92,6 +92,16 @@ public class ObjectDragHandler : MonoBehaviour
         if (_blocked)
             return false;
 
+        // THE WALL-ESCAPE HOLE: when a door/window is selected, _selectedObject IS the
+        // opening's visual, so PressedOnSelected(hit is a child of it) returns true and
+        // this handler free-dragged the visual through 3D space — the door left its
+        // wall entirely. The guard in InteractableUnder only covered the NOT-selected
+        // path. An opening has no free position under any circumstances; its movement
+        // belongs to OpeningInteraction (priority 2b), which slides it along its wall.
+        if (_selectedObject != null && !string.IsNullOrEmpty(
+                IBMROS.Designer.Openings.OpeningInteraction.OpeningIdOf(_selectedObject)))
+            return false;
+
         if (_mainCamera == null)
             _mainCamera = Camera.main;
         if (_mainCamera == null)

@@ -106,6 +106,7 @@ public class ScaleRigUI : MonoBehaviour
 
         _handles.Clear();
         lineRenderer?.ClearLines();
+        SetDimensionLabel(null, default);
     }
 
     private void SpawnHandles()
@@ -140,6 +141,15 @@ public class ScaleRigUI : MonoBehaviour
     {
         if (_currentTarget == null || _mainCamera == null)
             return;
+
+        // A door/window is a vertical rectangle in its wall, not a footprint on the
+        // floor — the furniture layout below would put all 8 handles in a horizontal
+        // ring above it, which is meaningless for something you resize by width and
+        // height. Openings get the reference layout: corners + side pills on the
+        // rectangle itself, with a live dimension readout.
+        if (UpdateOpeningRig())
+            return;
+        SetDimensionLabel(null, default);
 
         Renderer[] renderers = _currentTarget.GetComponentsInChildren<Renderer>();
 
@@ -192,6 +202,113 @@ public class ScaleRigUI : MonoBehaviour
         // Draw outline using corner positions
         Vector2[] corners = new Vector2[] { c0, c1, c2, c3 };
         lineRenderer?.DrawLines(corners, true);
+    }
+
+    /// <summary>
+    /// Rig layout for a selected door/window: the opening's actual rectangle in its
+    /// wall plane. Returns false when the selection is not an opening, so the caller
+    /// falls through to the furniture footprint layout.
+    ///
+    /// The corner order (+t+up, −t+up, −t−up, +t−up) deliberately matches the
+    /// side-handle pairing the furniture path already uses (4=top edge, 5=left,
+    /// 6=bottom, 7=right), so AlignSideHandle and SetHandleHighlight work unchanged —
+    /// and the AxisZ pills always mean HEIGHT and the AxisX pills always mean WIDTH,
+    /// on a wall of any orientation.
+    /// </summary>
+    private bool UpdateOpeningRig()
+    {
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openings == null || !openings.HasSelection)
+            return false;
+        var ui = IBMROS.Designer.Openings.OpeningAnchor.Find(openings.SelectedId);
+        Vector2? centre = IBMROS.Designer.Openings.OpeningAnchor.CentreOf(ui);
+        if (ui == null || !centre.HasValue || _handles.Count < 8)
+            return false;
+
+        var slot = IBMROS.Designer.Openings.OpeningAnchor.SlotOf(ui);
+        Vector2 t2 = slot.Valid ? slot.Tangent
+                                : IBMROS.Designer.Openings.OpeningAnchor.StoredTangent(ui);
+        Vector3 t3 = new Vector3(t2.x, 0f, t2.y);
+        float w = ui.Width, h = ui.Height, yBase = Mathf.Max(0f, ui.YPos);
+        Vector3 mid = new Vector3(centre.Value.x, yBase + h * 0.5f, centre.Value.y);
+
+        Vector3[] world =
+        {
+            mid + t3 * (w * 0.5f) + Vector3.up * (h * 0.5f),   // 0 corner +t +up
+            mid - t3 * (w * 0.5f) + Vector3.up * (h * 0.5f),   // 1 corner −t +up
+            mid - t3 * (w * 0.5f) - Vector3.up * (h * 0.5f),   // 2 corner −t −up
+            mid + t3 * (w * 0.5f) - Vector3.up * (h * 0.5f),   // 3 corner +t −up
+            mid + Vector3.up * (h * 0.5f),                     // 4 top    (AxisZ → height)
+            mid - t3 * (w * 0.5f),                             // 5 left   (AxisX → width)
+            mid - Vector3.up * (h * 0.5f),                     // 6 bottom (AxisZ → height)
+            mid + t3 * (w * 0.5f),                             // 7 right  (AxisX → width)
+        };
+
+        Vector2[] canvasPositions = new Vector2[_handles.Count];
+        for (int i = 0; i < _handles.Count && i < world.Length; i++)
+        {
+            canvasPositions[i] = WorldToCanvas(world[i]);
+            _handles[i].GetComponent<RectTransform>().anchoredPosition = canvasPositions[i];
+        }
+
+        AlignSideHandle(_handles[4], canvasPositions[0], canvasPositions[1]);
+        AlignSideHandle(_handles[5], canvasPositions[1], canvasPositions[2]);
+        AlignSideHandle(_handles[6], canvasPositions[2], canvasPositions[3]);
+        AlignSideHandle(_handles[7], canvasPositions[3], canvasPositions[0]);
+
+        lineRenderer?.DrawLines(new[]
+        {
+            canvasPositions[0], canvasPositions[1], canvasPositions[2], canvasPositions[3]
+        }, true);
+
+        // Live dimensions above the top edge — same feedback the reference shows,
+        // updating every frame of the drag because the rig reruns per frame and reads
+        // the document values the resize is writing.
+        SetDimensionLabel(w.ToString("0.00") + " m  ×  " + h.ToString("0.00") + " m",
+            canvasPositions[4] + new Vector2(0f, 46f));
+        return true;
+    }
+
+    private RectTransform _dimLabelRoot;
+    private TMPro.TextMeshProUGUI _dimLabelText;
+
+    /// <summary>Shows/hides the W × H pill (null text = hide). Built lazily in code —
+    /// the rig canvas has no authored label to reuse.</summary>
+    private void SetDimensionLabel(string text, Vector2 canvasPos)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            if (_dimLabelRoot != null)
+                _dimLabelRoot.gameObject.SetActive(false);
+            return;
+        }
+        if (_dimLabelRoot == null)
+        {
+            var go = new GameObject("OpeningDimensionLabel",
+                typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(transform, false);
+            _dimLabelRoot = (RectTransform)go.transform;
+            _dimLabelRoot.sizeDelta = new Vector2(230f, 44f);
+            var bg = go.GetComponent<Image>();
+            bg.color = new Color(1f, 1f, 1f, 0.95f);
+            bg.raycastTarget = false;
+
+            var textGo = new GameObject("Text", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+            var rt = (RectTransform)textGo.transform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = Vector2.zero;
+            _dimLabelText = textGo.AddComponent<TMPro.TextMeshProUGUI>();
+            _dimLabelText.fontSize = 24f;
+            _dimLabelText.color = new Color(0.1f, 0.35f, 0.85f, 1f);
+            _dimLabelText.alignment = TMPro.TextAlignmentOptions.Center;
+            _dimLabelText.raycastTarget = false;
+        }
+        _dimLabelRoot.gameObject.SetActive(true);
+        _dimLabelRoot.anchoredPosition = canvasPos;
+        if (_dimLabelText.text != text)
+            _dimLabelText.text = text;
     }
 
     private void AlignSideHandle(ScaleHandleUI handle, Vector2 cornerA, Vector2 cornerB)

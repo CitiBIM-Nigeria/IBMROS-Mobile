@@ -88,28 +88,30 @@ public class SelectionManager : MonoBehaviour
     /// </summary>
     private static Transform ResolveSelectable(Transform hit)
     {
-        FurnitureItem item = hit.GetComponentInParent<FurnitureItem>();
-        if (item != null)
-            return item.transform;
-
         // Doors and windows share the Interactable layer so this selection framework and
         // the contextual toolbar work for them unchanged — but they are architectural,
         // not furniture: they belong to a wall and their state lives in the floor-plan
         // document, not in a Transform. Resolve the hit to the whole opening visual and
-        // tell OpeningInteraction, which owns what can then be done to it.
+        // tell OpeningInteraction, which owns what can then be done to it. EVERY other
+        // outcome — furniture included — must clear that selection: an early return for
+        // furniture used to leave the previous door selected behind the scenes, so the
+        // toolbar kept its opening buttons and hid the rotation handle for a sofa.
         var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        string openingId = openings != null
+            ? IBMROS.Designer.Openings.OpeningInteraction.OpeningIdOf(hit)
+            : null;
+
         if (openings != null)
+            openings.Select(openingId);   // null here = deselect
+
+        if (!string.IsNullOrEmpty(openingId))
         {
-            string openingId = IBMROS.Designer.Openings.OpeningInteraction.OpeningIdOf(hit);
-            if (!string.IsNullOrEmpty(openingId))
-            {
-                openings.Select(openingId);
-                Transform visual = IBMROS.Designer.Openings.OpeningInteraction.VisualOf(openingId);
-                return visual != null ? visual : hit;
-            }
-            openings.Select(null);
+            Transform visual = IBMROS.Designer.Openings.OpeningInteraction.VisualOf(openingId);
+            return visual != null ? visual : hit;
         }
-        return hit;
+
+        FurnitureItem item = hit.GetComponentInParent<FurnitureItem>();
+        return item != null ? item.transform : hit;
     }
 
     // --- PUBLIC METHODS (Called by ObjectManipulator) ---

@@ -55,6 +55,8 @@ namespace IBMROS.Designer.Openings
         private bool dragging;
         private Vector2 pressScreen;
         private Camera cam;
+        private SelectionManager selectionManager;
+        private Transform handedVisual;   // what we last gave SelectionManager to frame
 
         /// <summary>The selected door/window's item id, or null when the selection is not one.</summary>
         public string SelectedId => selectedId;
@@ -67,6 +69,14 @@ namespace IBMROS.Designer.Openings
         /// Self-installs into any scene that has a floor plan, the same way the bridge
         /// services do — so this needs no scene authoring and cannot be missed when a
         /// scene is duplicated.
+        ///
+        /// The AfterSceneLoad hook alone was NOT enough, and it failed silently: at that
+        /// moment the serializer was not findable, the guard below returned, and because
+        /// RoomDesigner is the scene play mode STARTS in, sceneLoaded never fired again —
+        /// so Instance stayed null for the whole session and every opening interaction
+        /// was dead. Measured: Instance=false at frame 3821 while a manual Ensure() call
+        /// installed it immediately. PlanTouchController now also calls Ensure from its
+        /// OnEnable, which is a real scene component and therefore always runs.
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -79,7 +89,10 @@ namespace IBMROS.Designer.Openings
         {
             if (Instance != null)
                 return;
-            if (UnityEngine.Object.FindAnyObjectByType<FloorMapSerializer>() == null)
+            // Include inactive: the vendor hierarchy can have the serializer parked under
+            // a disabled parent during boot, which is what made the guard miss it.
+            if (UnityEngine.Object.FindAnyObjectByType<FloorMapSerializer>(
+                    FindObjectsInactive.Include) == null)
                 return;
             Instance = FindAnyObjectByType<OpeningInteraction>(FindObjectsInactive.Include);
             if (Instance == null)
@@ -100,13 +113,24 @@ namespace IBMROS.Designer.Openings
         {
             DocumentEvents.OnDocumentChanged += OnDocChanged;
             nextReassert = 0f;
+            // Selection is ONE model shared with furniture: when the user taps empty
+            // space and SelectionManager deselects, the opening deselects with it —
+            // otherwise the toolbar is gone but Delete/Rotate still have a target.
+            if (selectionManager == null)
+                selectionManager = FindAnyObjectByType<SelectionManager>(FindObjectsInactive.Include);
+            if (selectionManager != null)
+                selectionManager.onObjectDeselected += OnManagerDeselected;
         }
 
         private void OnDisable()
         {
             DocumentEvents.OnDocumentChanged -= OnDocChanged;
+            if (selectionManager != null)
+                selectionManager.onObjectDeselected -= OnManagerDeselected;
             EndDrag();
         }
+
+        private void OnManagerDeselected() => Select(null);
 
         private void OnDocChanged(DocumentChange change)
         {
@@ -124,8 +148,26 @@ namespace IBMROS.Designer.Openings
             {
                 nextReassert = Time.unscaledTime + REASSERT_INTERVAL_S;
                 StampPickable();
+                RefreshHandedVisual();
             }
             UpdateDrag();
+        }
+
+        /// <summary>
+        /// An undo/reconcile can recreate the selected opening's visual instance while
+        /// the selection (an item id) survives. The toolbar and rig hold the OLD
+        /// transform, which is now destroyed — re-hand them the live one so the UI
+        /// keeps following the item rather than a corpse.
+        /// </summary>
+        private void RefreshHandedVisual()
+        {
+            if (!HasSelection || dragging || handedVisual != null)
+                return;
+            Transform visual = VisualOf(selectedId);
+            if (visual == null || selectionManager == null)
+                return;
+            handedVisual = visual;
+            selectionManager.SelectObject(visual);
         }
 
         /// <summary>
@@ -182,6 +224,7 @@ namespace IBMROS.Designer.Openings
             if (next == selectedId)
                 return;
             selectedId = next;
+            handedVisual = next != null ? VisualOf(next) : null;
             EndDrag();
             OnSelectedOpeningChanged?.Invoke(selectedId);
             PublishDimensions();
@@ -200,21 +243,31 @@ namespace IBMROS.Designer.Openings
         // ------------------------------------------------------------------ drag
 
         /// <summary>
-        /// Begins a slide when the press lands on the selected opening. Returns false so
-        /// the caller can fall through to its own handling when it does not.
+        /// Begins a slide when the press lands on ANY opening, selecting it on the way
+        /// in — the same first-touch direct manipulation furniture has, so a window the
+        /// user has not tapped first is still draggable. Returns false when the press is
+        /// not on an opening, so the caller falls through to its own handling.
         /// </summary>
         public bool TryBeginDrag(Vector2 screenPos)
         {
-            if (!HasSelection)
-                return false;
             if (cam == null) cam = Camera.main;
             if (cam == null) return false;
 
             if (!Physics.Raycast(cam.ScreenPointToRay(screenPos), out RaycastHit hit, 5000f,
                                  1 << interactableLayer, QueryTriggerInteraction.Ignore))
                 return false;
-            if (OpeningIdOf(hit.transform) != selectedId)
+            string id = OpeningIdOf(hit.transform);
+            if (string.IsNullOrEmpty(id))
                 return false;
+
+            if (id != selectedId)
+            {
+                Select(id);
+                // Keep the shared selection model in step so the contextual toolbar
+                // frames this opening on release, exactly like a furniture grab.
+                if (selectionManager != null && handedVisual != null)
+                    selectionManager.SelectObject(handedVisual);
+            }
 
             dragging = true;
             pressScreen = screenPos;
@@ -321,35 +374,24 @@ namespace IBMROS.Designer.Openings
         /// <summary>
         /// Applies a resize drag from one rig handle.
         ///
-        /// The rig's 8 handles all lie in a HORIZONTAL ring around the target — it was
-        /// built for furniture footprints, where both axes are on the ground. A door's
-        /// two dimensions are width (along its wall) and height (vertical), so which
-        /// handle means which cannot be read off HandleType: AxisX runs along the wall
-        /// for a wall facing one way and across it for a wall facing another. Deciding
-        /// from the handle's WORLD direction against the wall tangent is what makes the
-        /// gesture behave the same on every wall orientation.
-        ///
-        /// Corner handles change both, as they do for furniture.
+        /// For openings the rig is laid out in the WALL PLANE with a fixed convention
+        /// (ScaleRigUI.UpdateOpeningRig): AxisX pills sit on the vertical edges, AxisZ
+        /// pills on the horizontal ones. So the handle type maps 1:1 to a dimension on
+        /// a wall of any orientation — AxisX = width (along the wall), AxisZ = height,
+        /// corners = both — with no world-direction guessing.
         /// </summary>
-        public bool ResizeFromHandle(Vector3 handleWorldDir, bool corner, float scaleFactor)
+        public bool ResizeFromHandle(HandleType type, float scaleFactor)
         {
-            UIBaseItem ui = OpeningAnchor.Find(selectedId);
-            if (ui == null)
-                return false;
-
             Vector2 start = ResizeStartSize;
-            if (corner)
-                return Resize(start.x * scaleFactor, start.y * scaleFactor, null);
-
-            OpeningAnchor.WallSlot slot = OpeningAnchor.SlotOf(ui);
-            Vector2 dir = new Vector2(handleWorldDir.x, handleWorldDir.z);
-            bool alongWall = true;
-            if (slot.Valid && dir.sqrMagnitude > 1e-6f)
-                alongWall = Mathf.Abs(Vector2.Dot(dir.normalized, slot.Tangent)) > 0.707f;
-
-            return alongWall
-                ? Resize(start.x * scaleFactor, null, null)
-                : Resize(null, start.y * scaleFactor, null);
+            switch (type)
+            {
+                case HandleType.Corner:
+                    return Resize(start.x * scaleFactor, start.y * scaleFactor, null);
+                case HandleType.AxisX:
+                    return Resize(start.x * scaleFactor, null, null);
+                default: // AxisZ (and the unused AxisY) = the vertical dimension
+                    return Resize(null, start.y * scaleFactor, null);
+            }
         }
 
         /// <summary>Largest width/height the selection may take where it sits.</summary>

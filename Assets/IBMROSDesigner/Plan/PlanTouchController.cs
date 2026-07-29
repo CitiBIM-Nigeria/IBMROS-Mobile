@@ -113,6 +113,10 @@ namespace IBMROS.Designer.Plan
         private void OnEnable()
         {
             PlanCameraGate.Ensure();
+            // Openings are wall-hosted, so their interaction owner belongs wherever a
+            // floor plan is edited. Installed from here because this is a real scene
+            // component: the runtime-init hook alone missed the scene play mode starts in.
+            Openings.OpeningInteraction.Ensure();
             DocumentEvents.OnDocumentChanged += HandleDocChanged;
             DesignerModeController.OnModeChanged += HandleModeChanged;
             SetCameraPanAllowed(false);

@@ -112,6 +112,9 @@ public class ActionMenuController : MonoBehaviour
             return;
 
         UpdatePanelPositions();
+
+        if (_openingPicker != null && _openingPicker.gameObject.activeSelf)
+            PositionOpeningPicker();
     }
 
     private void WireButtons()
@@ -160,6 +163,14 @@ public class ActionMenuController : MonoBehaviour
 
     private void OnColorClicked()
     {
+        // A door/window's appearance lives in the floor-plan document (per-part
+        // materials resolved by OpeningStyleLibrary), so Color opens a picker over that
+        // catalog. Furniture keeps its existing event path.
+        if (OpeningSelected)
+        {
+            ToggleOpeningPicker(materials: true);
+            return;
+        }
         OnColorModeRequested?.Invoke();
     }
 
@@ -192,12 +203,194 @@ public class ActionMenuController : MonoBehaviour
         Debug.Log("[ActionMenuController] More options tapped. Coming soon.");
     }
 
+    // ---------------------------------------------------------------- openings
+    //
+    // A selected door/window uses THIS toolbar — one contextual toolbar for
+    // everything, as in the reference — but its operations differ from furniture:
+    // Rotate means "flip within the wall" (not free yaw, so the floating rotation
+    // handle is hidden), and Replace/Color pick from the opening catalog. The extra
+    // buttons are cloned from an existing one at runtime because the toolbar is a
+    // scene-authored uGUI panel with no serialized slots for them.
+
+    private bool OpeningSelected =>
+        IBMROS.Designer.Openings.OpeningInteraction.Instance != null &&
+        IBMROS.Designer.Openings.OpeningInteraction.Instance.HasSelection;
+
+    private Button _rotateOpeningButton;
+    private Button _replaceOpeningButton;
+    private RectTransform _openingPicker;
+    private bool _pickerShowsMaterials;
+
+    private void EnsureOpeningButtons()
+    {
+        if (_rotateOpeningButton != null || duplicateButton == null)
+            return;
+        _rotateOpeningButton = CloneToolbarButton(duplicateButton, "Rotate",
+            () => IBMROS.Designer.Openings.OpeningInteraction.Instance?.Flip());
+        _replaceOpeningButton = CloneToolbarButton(duplicateButton, "Replace",
+            () => ToggleOpeningPicker(materials: false));
+    }
+
+    private Button CloneToolbarButton(Button template, string label, UnityEngine.Events.UnityAction onClick)
+    {
+        GameObject go = Instantiate(template.gameObject, template.transform.parent);
+        go.name = "Btn" + label + "_Opening";
+        go.transform.SetSiblingIndex(template.transform.GetSiblingIndex() + 1);
+        Button btn = go.GetComponent<Button>();
+        btn.onClick = new Button.ButtonClickedEvent();   // never inherit the template's action
+        btn.onClick.AddListener(onClick);
+        SetButtonLabel(go, label);
+        go.SetActive(false);
+        return btn;
+    }
+
+    private static void SetButtonLabel(GameObject go, string label)
+    {
+        TMP_Text tmp = go.GetComponentInChildren<TMP_Text>(true);
+        if (tmp != null) { tmp.text = label; return; }
+        Text legacy = go.GetComponentInChildren<Text>(true);
+        if (legacy != null) legacy.text = label;
+    }
+
+    private void SetOpeningButtonsVisible(bool visible)
+    {
+        EnsureOpeningButtons();
+        if (_rotateOpeningButton != null)
+            _rotateOpeningButton.gameObject.SetActive(visible);
+        if (_replaceOpeningButton != null)
+            _replaceOpeningButton.gameObject.SetActive(visible);
+    }
+
+    /// <summary>
+    /// The Replace / Color list for the selected opening: model ids from
+    /// Resources/OpeningModels (plus Standard = procedural) or the material names from
+    /// Resources/Opening. Built at runtime on the toolbar canvas; one tap applies —
+    /// each pick is already a single labelled undo step inside OpeningStyler.
+    /// </summary>
+    private void ToggleOpeningPicker(bool materials)
+    {
+        if (_openingPicker != null && _openingPicker.gameObject.activeSelf &&
+            _pickerShowsMaterials == materials)
+        {
+            _openingPicker.gameObject.SetActive(false);
+            return;
+        }
+        _pickerShowsMaterials = materials;
+        BuildOpeningPicker(materials);
+    }
+
+    private void CloseOpeningPicker()
+    {
+        if (_openingPicker != null)
+            _openingPicker.gameObject.SetActive(false);
+    }
+
+    private void BuildOpeningPicker(bool materials)
+    {
+        if (_openingPicker != null)
+            Destroy(_openingPicker.gameObject);
+
+        var canvas = panelAbove != null ? panelAbove.GetComponentInParent<Canvas>() : null;
+        if (canvas == null)
+            return;
+
+        var root = new GameObject(materials ? "OpeningColorPicker" : "OpeningReplacePicker",
+            typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup),
+            typeof(ContentSizeFitter));
+        _openingPicker = (RectTransform)root.transform;
+        _openingPicker.SetParent(canvas.transform, false);
+        var bg = root.GetComponent<Image>();
+        bg.color = new Color(1f, 1f, 1f, 0.97f);
+        var layout = root.GetComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(10, 10, 10, 10);
+        layout.spacing = 6;
+        layout.childForceExpandHeight = false;
+        var fitter = root.GetComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (materials)
+        {
+            foreach (string name in IBMROS.Designer.Materials.OpeningStyleLibrary.MaterialNames())
+            {
+                string picked = name;
+                Material m = IBMROS.Designer.Materials.OpeningStyleLibrary.ResolveMaterial(picked);
+                Color swatch = m != null && m.HasProperty("_BaseColor")
+                    ? m.GetColor("_BaseColor") : Color.white;
+                AddPickerRow(picked.Replace("Opening_", ""), swatch, () =>
+                {
+                    openings?.SetPartMaterial(
+                        IBMROS.Designer.Materials.OpeningStyler.Part.Frame, picked);
+                    CloseOpeningPicker();
+                });
+            }
+        }
+        else
+        {
+            AddPickerRow("Standard", Color.white, () =>
+            {
+                openings?.Replace(null);
+                CloseOpeningPicker();
+            });
+            foreach (string id in IBMROS.Designer.Materials.OpeningStyleLibrary.ModelIds())
+            {
+                string picked = id;
+                AddPickerRow(picked.Replace("Door_", "").Replace("Window_", ""),
+                    Color.white, () =>
+                {
+                    openings?.Replace(picked);
+                    CloseOpeningPicker();
+                });
+            }
+        }
+
+        PositionOpeningPicker();
+    }
+
+    private void AddPickerRow(string label, Color swatch, UnityEngine.Events.UnityAction onClick)
+    {
+        var row = new GameObject("Row_" + label, typeof(RectTransform), typeof(Image),
+            typeof(Button), typeof(LayoutElement));
+        row.transform.SetParent(_openingPicker, false);
+        row.GetComponent<LayoutElement>().preferredWidth = 260f;
+        row.GetComponent<LayoutElement>().preferredHeight = 64f;
+        var img = row.GetComponent<Image>();
+        img.color = new Color(swatch.r, swatch.g, swatch.b, 0.25f);
+        var btn = row.GetComponent<Button>();
+        btn.onClick.AddListener(onClick);
+
+        var textGo = new GameObject("Label", typeof(RectTransform));
+        textGo.transform.SetParent(row.transform, false);
+        var rt = (RectTransform)textGo.transform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.sizeDelta = Vector2.zero;
+        var tmp = textGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = label;
+        tmp.fontSize = 26f;
+        tmp.color = new Color(0.12f, 0.12f, 0.14f, 1f);
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.raycastTarget = false;
+    }
+
+    private void PositionOpeningPicker()
+    {
+        if (_openingPicker == null || panelAbove == null)
+            return;
+        float drop = (panelAbove.rect.height * panelAbove.lossyScale.y) * 0.5f
+                   + (_openingPicker.rect.height * _openingPicker.lossyScale.y) * 0.5f + 16f;
+        _openingPicker.position = panelAbove.position - new Vector3(0f, drop, 0f);
+    }
+
     // SELECTION HANDLERS
 
     private void HandleObjectSelected(Transform target)
     {
         _isScalingMode = false;
         scaleRigUI?.HideRig();
+        CloseOpeningPicker();
+        SetOpeningButtonsVisible(OpeningSelected);
 
         _targetObject   = target;
 
@@ -228,6 +421,7 @@ public class ActionMenuController : MonoBehaviour
     {
         _isScalingMode = false;
         scaleRigUI?.HideRig();
+        CloseOpeningPicker();
 
         _targetObject = null;
         _targetRenderer = null;
@@ -298,8 +492,12 @@ public class ActionMenuController : MonoBehaviour
         if (panelAbove != null)
             panelAbove.gameObject.SetActive(true);
 
+        // The lower panel is the free-rotation drag handle. A wall-hosted opening has
+        // no free rotation — its one turn (hinge-side flip) is the toolbar's Rotate
+        // button — so showing a rotation gizmo for a door would be an affordance for
+        // an operation that must not exist.
         if (panelBelow != null)
-            panelBelow.gameObject.SetActive(true);
+            panelBelow.gameObject.SetActive(!OpeningSelected);
 
         _isVisible = true;
         UpdatePanelPositions();

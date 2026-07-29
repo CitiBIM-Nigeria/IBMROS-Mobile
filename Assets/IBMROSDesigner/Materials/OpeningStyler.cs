@@ -124,8 +124,6 @@ namespace IBMROS.Designer.Materials
                 Transform host = po.transform;
                 Transform custom = host.Find(MODEL_CHILD);
 
-                ApplyFacing(ui, po);
-
                 if (model == null)
                 {
                     // Procedural look: drop any custom model, re-show the generated
@@ -134,6 +132,7 @@ namespace IBMROS.Designer.Materials
                         Destroy(custom.gameObject);
                     SetProceduralVisible(po, true);
                     ApplyPartMaterials(ui, po.doorMf, po.glassMf, po.handleMf);
+                    ApplyFacing(ui, po, null);
                     continue;
                 }
 
@@ -161,43 +160,113 @@ namespace IBMROS.Designer.Materials
                     1f);
 
                 ApplyModelMaterials(ui, custom);
+                ApplyFacing(ui, po, custom);
             }
         }
 
         /// <summary>
         /// Turns the opening's visual around within its wall plane (item field
-        /// openingFlipped) — which side the leaf swings from and the handle sits on.
+        /// openingFlipped) — the reference app's "Rotate" for a door: hinge side and
+        /// swing direction mirror, nothing else changes.
         ///
         /// Applied to the CHILD meshes, never to the instance itself: the plugin rewrites
         /// the instance's world rotation from the wall tangent on every rebuild, so a
         /// flip put there survives no time at all. Touching only children also keeps the
         /// wall hole out of it — the cut is generated from the control point, so however
         /// the door is turned the opening in the wall is identical.
+        ///
+        /// THE PIVOT MATTERS. The generated meshes are NOT centred on their transform:
+        /// ProceduralOpening builds them offset −Width/2 along local X (that is how the
+        /// instance-at-edge / hole-at-control-point geometry cancels out). A naive
+        /// 180° localRotation therefore swings the whole leaf to the OTHER side of the
+        /// pivot — a full width out of the hole, hanging in the room — which is exactly
+        /// the detached-door screenshot. So after rotating, each part is translated
+        /// along the wall so its rendered bounds centre lands back where it started;
+        /// only the mirroring (and which face of the wall the leaf swings toward)
+        /// remains. Re-measured every apply, so it is exact for any mesh layout,
+        /// including handle spheres and custom models with arbitrary pivots.
         /// </summary>
-        private static void ApplyFacing(UIBaseItem ui, ProceduralOpening po)
+        private static void ApplyFacing(UIBaseItem ui, ProceduralOpening po, Transform custom)
         {
-            Quaternion want = ui.OpeningFlipped
-                ? Quaternion.Euler(0f, 180f, 0f)
-                : Quaternion.identity;
-            SetLocalRotation(po, po.doorMf, want);
-            SetLocalRotation(po, po.glassMf, want);
-            SetLocalRotation(po, po.handleMf, want);
-            Transform custom = po.transform.Find(MODEL_CHILD);
-            if (custom != null && custom.localRotation != want)
-                custom.localRotation = want;
+            FacingTag tag = po.GetComponent<FacingTag>();
+            bool want = ui.OpeningFlipped;
+            // Idempotence: rebuilds re-run this constantly; only touch transforms when
+            // the facing, the geometry (width regenerates the meshes) or the custom
+            // model instance changed — a freshly swapped model needs its flip too.
+            if (tag != null && tag.flipped == want && tag.width == ui.Width && tag.custom == custom)
+                return;
+            if (tag == null)
+                tag = po.gameObject.AddComponent<FacingTag>();
+            tag.flipped = want;
+            tag.width = ui.Width;
+            tag.custom = custom;
+
+            Vector3 tangent = po.transform.right.normalized; // instance X runs along the wall (up to sign — reflection is sign-agnostic)
+            Quaternion rot = want ? Quaternion.Euler(0f, 180f, 0f) : Quaternion.identity;
+
+            // The mirror plane passes through the OPENING's centre (the control point).
+            // Reflecting each part about its OWN bounds centre would pin everything in
+            // place — a symmetric handle sphere would flip to exactly where it started,
+            // erasing the hinge swap that is the whole point of the operation.
+            Vector2? c = IBMROS.Designer.Openings.OpeningAnchor.CentreOf(ui);
+            Vector3 mirrorPoint = c.HasValue
+                ? new Vector3(c.Value.x, 0f, c.Value.y)
+                : po.transform.position;
+
+            FlipPart(po, po.doorMf != null ? po.doorMf.transform : null, rot, tangent, mirrorPoint, want);
+            FlipPart(po, po.glassMf != null ? po.glassMf.transform : null, rot, tangent, mirrorPoint, want);
+            FlipPart(po, po.handleMf != null ? po.handleMf.transform : null, rot, tangent, mirrorPoint, want);
+            FlipPart(po, custom, rot, tangent, mirrorPoint, want);
         }
 
-        /// <summary>
-        /// Rotates a generated part. Skips a mesh that lives directly ON the instance
-        /// rather than on a child, because that transform is rewritten from the wall
-        /// tangent every rebuild and would fight this.
-        /// </summary>
-        private static void SetLocalRotation(ProceduralOpening po, MeshFilter mf, Quaternion r)
+        private static void FlipPart(ProceduralOpening po, Transform part, Quaternion rot,
+            Vector3 tangent, Vector3 mirrorPoint, bool flipped)
         {
-            if (mf == null || mf.transform == po.transform)
+            if (part == null || part == po.transform)
                 return;
-            if (mf.transform.localRotation != r)
-                mf.transform.localRotation = r;
+
+            // Reset to the authored pose, measure, rotate.
+            part.localRotation = Quaternion.identity;
+            part.localPosition = Vector3.zero;
+            Bounds? before = RenderedBounds(part);
+            part.localRotation = rot;
+            if (!flipped || !before.HasValue)
+                return;
+            Bounds? after = RenderedBounds(part);
+            if (!after.HasValue)
+                return;
+
+            // True mirror: this part's centre must land at the reflection of where it
+            // started, about the plane through the opening centre normal to the wall.
+            // For the full-width leaf that is (almost) where it already was; for the
+            // handle it is the OTHER side of the doorway — the visible hinge swap.
+            // Height is untouched by a yaw; the wall-normal offset is left to the
+            // rotation on purpose (the leaf swinging toward the other face IS the flip).
+            float along = Vector3.Dot(before.Value.center - mirrorPoint, tangent);
+            Vector3 wanted = before.Value.center - 2f * along * tangent;
+            Vector3 drift = after.Value.center - wanted;
+            part.position -= Vector3.Project(drift, tangent);
+        }
+
+        private static Bounds? RenderedBounds(Transform t)
+        {
+            Renderer[] rs = t.GetComponentsInChildren<Renderer>(true);
+            bool has = false;
+            Bounds b = default;
+            foreach (Renderer r in rs)
+            {
+                if (!has) { b = r.bounds; has = true; }
+                else b.Encapsulate(r.bounds);
+            }
+            return has ? b : (Bounds?)null;
+        }
+
+        /// <summary>Remembers what facing/width a visual instance was last styled for.</summary>
+        private sealed class FacingTag : MonoBehaviour
+        {
+            public bool flipped;
+            public float width;
+            public Transform custom;
         }
 
         private static void SetProceduralVisible(ProceduralOpening po, bool visible)

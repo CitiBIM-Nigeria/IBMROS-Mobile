@@ -176,13 +176,11 @@ public class ObjectScaleHandler : MonoBehaviour
         var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
         if (openings != null && openings.HasSelection)
         {
-            // The handle's WORLD direction decides which of the opening's two dimensions
-            // this drag changes — see ResizeFromHandle. Mapping straight off HandleType
-            // would tie "width" to a fixed world axis and break on rotated walls.
-            openings.ResizeFromHandle(
-                _selectedObject.rotation * _activeHandle.direction,
-                _activeHandle.type == HandleType.Corner,
-                scaleFactor);
+            // The rig lays an opening's handles out deterministically (AxisX pills on
+            // the vertical edges, AxisZ pills on the horizontal ones), so HandleType
+            // maps 1:1 to a dimension on a wall of ANY orientation: AxisX = width,
+            // AxisZ = height, corners = both.
+            openings.ResizeFromHandle(_activeHandle.type, scaleFactor);
             return;
         }
 
