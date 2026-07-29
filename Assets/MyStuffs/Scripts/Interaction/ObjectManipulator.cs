@@ -225,7 +225,9 @@ public class ObjectManipulator : MonoBehaviour
         var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
         if (openings != null && openings.HasSelection)
         {
-            selectionManager.DeselectObject();
+            // Delete() clears the shared selection itself, AFTER it has read the id.
+            // Deselecting here first fired onObjectDeselected, which OpeningInteraction
+            // listens to, so the id was already null by the time Delete ran.
             openings.Delete();
             return;
         }

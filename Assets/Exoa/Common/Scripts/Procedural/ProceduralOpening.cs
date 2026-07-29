@@ -89,8 +89,14 @@ namespace Exoa.Designer
             if (type == DataModel.FloorMapItemType.Door)
             {
                 this.hasHandle = true;
-                this.height = AppController.Instance.doorsHeight < AppController.Instance.wallsHeight ?
-                    AppController.Instance.doorsHeight : AppController.Instance.wallsHeight;
+                // IBMROS: a door's height is ITS OWN, not the global doorsHeight.
+                // Overwriting it here meant the height on the item did nothing at all:
+                // every door rendered (and was cut) at doorsHeight, so resizing a door
+                // vertically changed the number in the document and the label and nothing
+                // else. doorsHeight is now only the DEFAULT for a door that has none.
+                if (this.height <= 0.01f)
+                    this.height = AppController.Instance.doorsHeight;
+                this.height = Mathf.Min(this.height, AppController.Instance.wallsHeight);
             }
             if (type == DataModel.FloorMapItemType.Window)
             {
@@ -183,10 +189,16 @@ namespace Exoa.Designer
 
         public MeshDraft GenerateGlass(DataModel.FloorMapItemType t, float width, float height)
         {
-            float yFromMiddle = yPos + wallsHeight * .5f;
-            float holeMidSizeY = height * .5f;
-            float holeTop = Mathf.Clamp(yFromMiddle + holeMidSizeY, 0, wallsHeight);
-            float holeBottom = t == DataModel.FloorMapItemType.Door ? 0 : Mathf.Clamp(yFromMiddle - holeMidSizeY, 0, wallsHeight);
+            // IBMROS: yPos is the SILL — the bottom of the opening above the floor —
+            // which is what the field means everywhere else (RoomPresets passes 0.9 for a
+            // window sill) and what OpeningAnchor's clamps assume. It used to be read as
+            // an offset from the wall's MIDDLE to the opening's CENTRE, so a window with
+            // sill 0.90 in a 3 m wall was drawn (and cut) at 1.80..3.00 — jammed against
+            // the ceiling. Measured before this change: doc sill..top 0.90..2.10, actual
+            // 1.80..3.00.
+            float holeBottom = t == DataModel.FloorMapItemType.Door
+                ? 0f : Mathf.Clamp(yPos, 0f, wallsHeight);
+            float holeTop = Mathf.Clamp(holeBottom + height, 0f, wallsHeight);
 
             MeshDraft md = MeshDraft.Quad(new Vector3(0, holeBottom, 0), Vector3.right * width, Vector3.up * height, true);
             md.FlipTriangles();
@@ -199,17 +211,11 @@ namespace Exoa.Designer
 
             MeshDraft md = new MeshDraft() { name = "Face" };
 
-            float yFromMiddle = yPos + wallsHeight * .5f;
-            float holeMidSizeY = height * .5f;
-            float holeTop = Mathf.Clamp(yFromMiddle + holeMidSizeY, 0, wallsHeight);
-            float holeBottom = Mathf.Clamp(yFromMiddle - holeMidSizeY, 0, wallsHeight);
-            //print("GenerateMesh yFromMiddle:" + yFromMiddle + " holeMidSizeY:" + holeMidSizeY + " holeBottom:" + holeBottom + " holeTop:" + holeTop);
-
-            if (type == DataModel.FloorMapItemType.Door)
-            {
-                holeBottom = 0;
-                holeTop = height;
-            }
+            // IBMROS: yPos is the SILL, not an offset from the wall's middle — see
+            // GenerateGlass. Doors sit on the floor, so their sill is always 0.
+            float holeBottom = type == DataModel.FloorMapItemType.Door
+                ? 0f : Mathf.Clamp(yPos, 0f, wallsHeight);
+            float holeTop = Mathf.Clamp(holeBottom + height, 0f, wallsHeight);
 
 
             List<Vector2> subject = new List<Vector2>();

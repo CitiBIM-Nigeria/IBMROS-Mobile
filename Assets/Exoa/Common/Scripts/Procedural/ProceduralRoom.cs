@@ -254,23 +254,33 @@ namespace Exoa.Designer
             for (int i = 0; i < openings.Count; i++)
             {
                 float xPos = openings[i].xPos;
-                float yPos = openings[i].yPos + height * .5f;
-                //float yPos = height * .5f;
-                //print("middle:" + middle);
                 float holeMidSizeX = openings[i].width * .5f;
-                float holeMidSizeY = openings[i].height * .5f;
                 float holeLeft = Mathf.Clamp(xPos - holeMidSizeX, 0, magnitude);
                 float holeRight = Mathf.Clamp(xPos + holeMidSizeX, 0, magnitude);
-                float holeTop = Mathf.Clamp(yPos + holeMidSizeY, 0, height);
-                float holeBottom = Mathf.Clamp(yPos - holeMidSizeY, 0, height);
+
+                // IBMROS: the hole is cut from the SAME rectangle the opening's mesh is
+                // built from (ProceduralOpening.GenerateFace) — sill = yPos (0 for a
+                // door, which stands on the floor), top = sill + the opening's own
+                // height. Two things were wrong here and both were user-visible:
+                //
+                //   • A DOOR was cut 0..AppController.doorsHeight, ignoring the item's
+                //     height, so a 2.10 m door got a 2.50 m hole — a strip of daylight
+                //     above every door — and resizing a door's height changed nothing.
+                //   • A WINDOW was centred on yPos + wallsHeight/2, i.e. yPos was read as
+                //     an offset from the wall's MIDDLE. A 0.90 sill in a 3 m wall was cut
+                //     at 1.80..3.00, against the ceiling, nowhere near its sill.
+                float holeBottom = openings[i].type == GenericOpening.OpeningType.Door
+                    ? 0f : Mathf.Clamp(openings[i].yPos, 0f, height);
+                float holeTop = Mathf.Clamp(holeBottom + openings[i].height, 0f, height);
 
                 List<Vector2> clip = new List<Vector2>();
 
                 if (openings[i].type == GenericOpening.OpeningType.Door)
                 {
+                    // -0.001 keeps the floor edge from co-planar clipping artefacts.
                     clip.Add(new Vector2(holeLeft, -0.001f));
-                    clip.Add(new Vector2(holeLeft, AppController.Instance.doorsHeight));
-                    clip.Add(new Vector2(holeRight, AppController.Instance.doorsHeight));
+                    clip.Add(new Vector2(holeLeft, holeTop));
+                    clip.Add(new Vector2(holeRight, holeTop));
                     clip.Add(new Vector2(holeRight, -0.001f));
                 }
                 else if (openings[i].type == GenericOpening.OpeningType.Window || openings[i].type == GenericOpening.OpeningType.Opening)

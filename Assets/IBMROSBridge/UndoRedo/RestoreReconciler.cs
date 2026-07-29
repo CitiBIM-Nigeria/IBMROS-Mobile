@@ -209,7 +209,21 @@ namespace IBMROS.Bridge.UndoRedo
                 Vector3 dir = (t.directions != null && i < t.directions.Count) ? t.directions[i] : Vector3.zero;
                 if (i < points.Count)
                 {
-                    points[i].transform.position = grid.GetWorldPosition(np);
+                    // IBMROS: FLATTEN TO y=0, exactly as the vendor's own
+                    // ControlPointsController.ReSnapControlPoints does before it writes a
+                    // control point. Grid.GetWorldPosition returns
+                    // (nx*size.x, 0, nz*size.z) + bounds.center − bounds.extents, so it
+                    // bakes in the BOTTOM of the grid's bounds — the grid plane sits at
+                    // y ≈ −0.1 in RoomDesigner. Writing that straight through moved every
+                    // control point down ~0.11 m, and because an opening's visual is
+                    // placed from its control point the whole door sank by that much,
+                    // leaving a gap above it in the wall (measured: control point
+                    // 0.00 → −0.11, door visual 1.50 → 1.39 for a purely SIDEWAYS move).
+                    // Openings made this constant, but it applied to every in-place
+                    // restore too — the height was never part of a control point's state.
+                    Vector3 world = grid.GetWorldPosition(np);
+                    world.y = 0f;
+                    points[i].transform.position = world;
                     points[i].SetNormalizedPosition(new Vector2(np.x, np.y));
                     points[i].dir = dir;
                 }

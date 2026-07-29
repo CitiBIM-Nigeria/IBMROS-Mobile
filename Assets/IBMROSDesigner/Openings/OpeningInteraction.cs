@@ -253,10 +253,23 @@ namespace IBMROS.Designer.Openings
             if (cam == null) cam = Camera.main;
             if (cam == null) return false;
 
-            if (!Physics.Raycast(cam.ScreenPointToRay(screenPos), out RaycastHit hit, 5000f,
-                                 1 << interactableLayer, QueryTriggerInteraction.Ignore))
-                return false;
-            string id = OpeningIdOf(hit.transform);
+            // RaycastAll, not Raycast: an opening's frame, glass and handle are separate
+            // colliders and two openings on the same wall can project to the same pixel
+            // at the same distance, where a single Raycast returns an arbitrary one of
+            // them — so a press could grab a different window than the one under the
+            // finger. Take the nearest hit that actually belongs to an opening.
+            RaycastHit[] hits = Physics.RaycastAll(cam.ScreenPointToRay(screenPos), 5000f,
+                                                   1 << interactableLayer, QueryTriggerInteraction.Ignore);
+            string id = null;
+            float best = float.MaxValue;
+            foreach (RaycastHit h in hits)
+            {
+                string candidate = OpeningIdOf(h.transform);
+                if (string.IsNullOrEmpty(candidate) || h.distance >= best)
+                    continue;
+                best = h.distance;
+                id = candidate;
+            }
             if (string.IsNullOrEmpty(id))
                 return false;
 
@@ -281,13 +294,57 @@ namespace IBMROS.Designer.Openings
                 return;
             if ((screenPos - pressScreen).magnitude < DRAG_SLOP_PX)
                 return;
-            if (!PlanEditorUtil.ScreenToGround(screenPos, out Vector3 ground))
+            if (!PointerOnWall(screenPos, out Vector2 onWall))
                 return;
 
             // One call, shared with the 2D plan: project onto the host wall and clamp to
             // the span that keeps the opening inside it.
-            OpeningAnchor.MoveTo(selectedId, PlanEditorUtil.WorldToMeters(ground));
+            OpeningAnchor.MoveTo(selectedId, onWall);
             PublishDimensions();
+        }
+
+        /// <summary>
+        /// Where the pointer meets the HOST WALL'S PLANE, in metres.
+        ///
+        /// This used to intersect the ground plane (y=0), which is wrong for a
+        /// wall-hosted element and is why WINDOWS could not be dragged at all. A door
+        /// stands on the floor, so a ground-plane hit lands near it and the drag
+        /// happened to work. A window sits at sill height — in the 3D view the
+        /// ground-plane intersection is metres away from where the finger actually
+        /// points, and when the camera tilts up at the window the ray never crosses y=0
+        /// in front of it at all, so the projection failed and nothing moved.
+        ///
+        /// The wall's own vertical plane is the correct surface: it contains the opening
+        /// at every height, so the hit is exactly under the finger from any camera angle,
+        /// in the plan view and inside the room alike. Falls back to the ground plane only
+        /// when the view is edge-on to the wall and the two are parallel.
+        /// </summary>
+        private bool PointerOnWall(Vector2 screenPos, out Vector2 meters)
+        {
+            meters = default;
+            if (cam == null) cam = Camera.main;
+            if (cam == null) return false;
+
+            OpeningAnchor.WallSlot slot = OpeningAnchor.SlotOf(selectedId);
+            if (slot.Valid)
+            {
+                // Vertical plane through the wall segment: normal is the wall's horizontal
+                // normal, so the plane spans the wall's full height.
+                Vector3 normal = new Vector3(-slot.Tangent.y, 0f, slot.Tangent.x);
+                var wallPlane = new Plane(normal, new Vector3(slot.A.x, 0f, slot.A.y));
+                Ray ray = cam.ScreenPointToRay(screenPos);
+                if (wallPlane.Raycast(ray, out float enter))
+                {
+                    Vector3 hit = ray.GetPoint(enter);
+                    meters = new Vector2(hit.x, hit.z);
+                    return true;
+                }
+            }
+
+            if (!PlanEditorUtil.ScreenToGround(screenPos, out Vector3 ground))
+                return false;
+            meters = PlanEditorUtil.WorldToMeters(ground);
+            return true;
         }
 
         public void EndDrag()
@@ -405,11 +462,27 @@ namespace IBMROS.Designer.Openings
 
         public bool Flip() => OpeningAnchor.Flip(selectedId);
 
+        /// <summary>
+        /// Deletes the selected opening and clears the shared selection itself.
+        ///
+        /// It has to own that ordering. ObjectManipulator used to call
+        /// SelectionManager.DeselectObject() FIRST, which fires onObjectDeselected —
+        /// and this class subscribes to that for selection sync, so Select(null) ran
+        /// before Delete() could read selectedId. Delete then captured null and did
+        /// nothing at all: the door simply would not delete. (Earlier tests passed only
+        /// because they called this method directly, never going through DeselectObject.)
+        /// </summary>
         public bool Delete()
         {
             string id = selectedId;
+            if (string.IsNullOrEmpty(id))
+                return false;
+
+            bool ok = OpeningAnchor.Delete(id);
             Select(null);
-            return OpeningAnchor.Delete(id);
+            if (selectionManager != null)
+                selectionManager.DeselectObject();
+            return ok;
         }
 
         public string Duplicate()
