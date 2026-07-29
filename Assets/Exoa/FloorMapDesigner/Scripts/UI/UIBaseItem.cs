@@ -323,6 +323,22 @@ namespace Exoa.Designer
             data.uniqueId = itemUniqueId;
 
             data.type = sequencingItemType.ToString();
+
+            // IBMROS: appearance is item state, not widget state. GetData rebuilds
+            // the item from the UI widgets on every call, so anything not mirrored
+            // on this component is lost on the round trip — that is why these are
+            // stored as fields here and copied both ways (same shape as uniqueId).
+            data.floorMaterial = floorMaterial;
+            data.wallMaterial = wallMaterial;
+            data.ceilingMaterial = ceilingMaterial;
+            data.floorTiling = floorTiling;
+            data.wallTiling = wallTiling;
+            data.ceilingTiling = ceilingTiling;
+            data.openingModel = openingModel;
+            data.frameMaterial = frameMaterial;
+            data.glassMaterial = glassMaterial;
+            data.handleMaterial = handleMaterial;
+
             data.normalizedPositions = new List<Vector3>();
 
             if (cpc != null)
@@ -338,6 +354,32 @@ namespace Exoa.Designer
             return data;
         }
 
+
+        // IBMROS: per-item appearance (surfaces for rooms, model + parts for
+        // openings). Plain fields, mirrored in GetData/SetData so they survive
+        // save, load, undo restore and every rebuild. Empty = library default,
+        // which is what every pre-existing save deserializes to.
+        [SerializeField] private string floorMaterial;
+        [SerializeField] private string wallMaterial;
+        [SerializeField] private string ceilingMaterial;
+        [SerializeField] private float floorTiling = 1f;
+        [SerializeField] private float wallTiling = 1f;
+        [SerializeField] private float ceilingTiling = 1f;
+        [SerializeField] private string openingModel;
+        [SerializeField] private string frameMaterial;
+        [SerializeField] private string glassMaterial;
+        [SerializeField] private string handleMaterial;
+
+        public string FloorMaterial { get => floorMaterial; set => floorMaterial = value; }
+        public string WallMaterial { get => wallMaterial; set => wallMaterial = value; }
+        public string CeilingMaterial { get => ceilingMaterial; set => ceilingMaterial = value; }
+        public float FloorTiling { get => floorTiling <= 0f ? 1f : floorTiling; set => floorTiling = value; }
+        public float WallTiling { get => wallTiling <= 0f ? 1f : wallTiling; set => wallTiling = value; }
+        public float CeilingTiling { get => ceilingTiling <= 0f ? 1f : ceilingTiling; set => ceilingTiling = value; }
+        public string OpeningModel { get => openingModel; set => openingModel = value; }
+        public string FrameMaterial { get => frameMaterial; set => frameMaterial = value; }
+        public string GlassMaterial { get => glassMaterial; set => glassMaterial = value; }
+        public string HandleMaterial { get => handleMaterial; set => handleMaterial = value; }
 
         // IBMROS: A2 — stable per-item identity (see GetData/SetData).
         private string itemUniqueId;
@@ -356,6 +398,18 @@ namespace Exoa.Designer
             // IBMROS: A2 — adopt the persisted identity; old saves carry null and get
             // a fresh id (persisted on their next save).
             itemUniqueId = string.IsNullOrEmpty(data.uniqueId) ? System.Guid.NewGuid().ToString() : data.uniqueId;
+
+            // IBMROS: adopt persisted appearance (see the fields' note above).
+            floorMaterial = data.floorMaterial;
+            wallMaterial = data.wallMaterial;
+            ceilingMaterial = data.ceilingMaterial;
+            floorTiling = data.floorTiling <= 0f ? 1f : data.floorTiling;
+            wallTiling = data.wallTiling <= 0f ? 1f : data.wallTiling;
+            ceilingTiling = data.ceilingTiling <= 0f ? 1f : data.ceilingTiling;
+            openingModel = data.openingModel;
+            frameMaterial = data.frameMaterial;
+            glassMaterial = data.glassMaterial;
+            handleMaterial = data.handleMaterial;
 
             Enum.TryParse<DataModel.FloorMapItemType>(data.type, out sequencingItemType);
             Name = data.name;

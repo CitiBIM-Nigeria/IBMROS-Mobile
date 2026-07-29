@@ -124,6 +124,25 @@ namespace Exoa.Designer
             public List<Vector3> normalizedPositions;
             public List<Vector3> directions;
 
+            // IBMROS: per-surface appearance. Additive like uniqueId (R4): old saves
+            // deserialize these as null/0 and the room falls back to the palette look,
+            // so nothing written before this field existed breaks. Names are resolved
+            // against Resources/{Floor|Wall|Ceiling}/ by RoomMaterialLibrary.
+            public string floorMaterial;
+            public string wallMaterial;
+            public string ceilingMaterial;
+            public float floorTiling;
+            public float wallTiling;
+            public float ceilingTiling;
+
+            // IBMROS: openings — which visual model represents this door/window
+            // (RoomMaterialLibrary/OpeningModelLibrary id) and its per-part materials.
+            // Empty = the plugin's procedural door/window, i.e. previous behaviour.
+            public string openingModel;
+            public string frameMaterial;
+            public string glassMaterial;
+            public string handleMaterial;
+
             public FloorMapItemType GetItemType(GameObject go = null)
             {
                 DataModel.FloorMapItemType t = DataModel.FloorMapItemType.Room;
