@@ -150,17 +150,8 @@ namespace IBMROS.Designer.Materials
                     custom = inst.transform;
                 }
 
-                // Scale the authored model to this opening's real size. Width runs
-                // along local X (the wall tangent), height along local Y.
-                float w = ui.Width > 0.01f ? ui.Width : model.ReferenceSize.x;
-                float h = ui.Height > 0.01f ? ui.Height : model.ReferenceSize.y;
-                custom.localScale = new Vector3(
-                    w / Mathf.Max(0.01f, model.ReferenceSize.x),
-                    h / Mathf.Max(0.01f, model.ReferenceSize.y),
-                    1f);
-
+                FitToOpening(ui, po, custom);
                 ApplyModelMaterials(ui, custom);
-                ApplyFacing(ui, po, custom);
             }
         }
 
@@ -216,7 +207,8 @@ namespace IBMROS.Designer.Materials
             FlipPart(po, po.doorMf != null ? po.doorMf.transform : null, rot, tangent, mirrorPoint, want);
             FlipPart(po, po.glassMf != null ? po.glassMf.transform : null, rot, tangent, mirrorPoint, want);
             FlipPart(po, po.handleMf != null ? po.handleMf.transform : null, rot, tangent, mirrorPoint, want);
-            FlipPart(po, custom, rot, tangent, mirrorPoint, want);
+            // NOT the custom model: FitToOpening folds the flip into its own rotation
+            // and then re-centres from measurement, which is exact for any pivot.
         }
 
         private static void FlipPart(ProceduralOpening po, Transform part, Quaternion rot,
@@ -267,6 +259,128 @@ namespace IBMROS.Designer.Materials
             public bool flipped;
             public float width;
             public Transform custom;
+        }
+
+        /// <summary>
+        /// Seats a model in its opening by MEASURING it, not by trusting how it was
+        /// authored. This is the whole replacement strategy, and it replaced one that
+        /// could not work in general.
+        ///
+        /// WHY THE PREVIOUS APPROACH FAILED. It parented the model at localPosition zero
+        /// and scaled it by a referenceSize declared on the prefab. That is only correct
+        /// if the artist happened to author the model with its pivot exactly on the
+        /// opening's centre, its base exactly at the sill, its width exactly on local X,
+        /// and its declared size exactly matching its mesh. Real assets satisfy none of
+        /// that — and worse, the anchor itself is not the opening's centre. Measured on a
+        /// 0.9 x 2.1 door: the ProceduralOpening instance origin sits at (+0.45, -1.05)
+        /// from the true opening centre, i.e. half a width along the wall and a half
+        /// height below it, because the plugin places the instance at
+        /// controlPoint + direction * Width/2 and builds its own mesh from local x = 0..W
+        /// running back along -X. So a correctly authored, centred model still landed
+        /// half a width to one side and a half height low. That is the offset in every
+        /// one of the reported screenshots, and it applied to the two shipped prefabs too.
+        ///
+        /// WHAT THIS DOES INSTEAD, with no assumption about the asset:
+        ///   1. reset the child, so measurement is of the raw model;
+        ///   2. auto-orient — whichever horizontal axis is WIDER is the width, so a model
+        ///      authored along Z is turned 90 degrees automatically (Window.glb and
+        ///      door2.glb disagree about this, and both now work);
+        ///   3. fold the hinge flip into the same rotation, which makes the mirror exact
+        ///      for free — the re-centre below cancels the pivot drift that a naive 180
+        ///      degree spin produces;
+        ///   4. scale each axis from the MEASURED extent to the opening's real width and
+        ///      height, so referenceSize is no longer load-bearing (it stays only as a
+        ///      hint for prefabs with no renderers);
+        ///   5. solve localPosition so the model's measured bounds CENTRE lands on the
+        ///      opening's true centre — taken from the document (centre along the wall,
+        ///      sill + height/2), the same rectangle the wall hole is cut from.
+        ///
+        /// The result is that any prefab, with any pivot, any authored size and either
+        /// horizontal orientation, seats itself correctly in any opening.
+        /// </summary>
+        private static void FitToOpening(UIBaseItem ui, ProceduralOpening po, Transform custom)
+        {
+            Transform anchor = po.transform;
+
+            custom.localPosition = Vector3.zero;
+            custom.localRotation = Quaternion.identity;
+            custom.localScale = Vector3.one;
+
+            Bounds b = MeasureInParent(anchor, custom);
+            if (b.size.x < 1e-4f && b.size.y < 1e-4f && b.size.z < 1e-4f)
+                return;                                   // nothing renderable to fit
+
+            // (2) + (3): the wider horizontal axis is the width; the flip adds 180.
+            float yaw = b.size.z > b.size.x ? 90f : 0f;
+            if (ui.OpeningFlipped)
+                yaw += 180f;
+            if (!Mathf.Approximately(yaw, 0f))
+            {
+                custom.localRotation = Quaternion.Euler(0f, yaw, 0f);
+                b = MeasureInParent(anchor, custom);      // re-measure in the turned frame
+            }
+
+            // (4) scale from measured extents to the opening's real size.
+            float targetW = Mathf.Max(0.02f, ui.Width);
+            float targetH = Mathf.Max(0.02f, ui.Height);
+            float sx = targetW / Mathf.Max(1e-4f, b.size.x);
+            float sy = targetH / Mathf.Max(1e-4f, b.size.y);
+            // Depth follows the width so the profile is not squashed, but a deep model
+            // must not end up as a slab sticking metres out of a thin wall.
+            float sz = sx;
+            if (b.size.z * sz > MAX_MODEL_DEPTH_M)
+                sz = MAX_MODEL_DEPTH_M / Mathf.Max(1e-4f, b.size.z);
+            custom.localScale = new Vector3(sx, sy, sz);
+
+            // (5) put the measured centre on the opening's true centre.
+            Vector2? centre = IBMROS.Designer.Openings.OpeningAnchor.CentreOf(ui);
+            if (!centre.HasValue)
+                return;
+            float sill = ui.sequencingItemType == FloorMapItemType.Door
+                ? 0f : Mathf.Max(0f, ui.YPos);
+            Vector3 worldTarget = new Vector3(centre.Value.x, sill + targetH * 0.5f, centre.Value.y);
+            Vector3 localTarget = anchor.InverseTransformPoint(worldTarget);
+            custom.localPosition = localTarget - Vector3.Scale(b.center, custom.localScale);
+        }
+
+        /// <summary>A model that much deeper than the wall reads as a slab, not a door.</summary>
+        private const float MAX_MODEL_DEPTH_M = 0.36f;
+
+        /// <summary>
+        /// The child's rendered extents expressed in the PARENT's local space, with the
+        /// child's current local transform applied and scale assumed 1. Mesh bounds are
+        /// used rather than Renderer.bounds because the latter is a world AABB that has
+        /// already lost the orientation this needs to reason about.
+        /// </summary>
+        private static Bounds MeasureInParent(Transform parent, Transform child)
+        {
+            bool has = false;
+            Bounds acc = default;
+            foreach (Renderer r in child.GetComponentsInChildren<Renderer>(true))
+            {
+                Mesh mesh = null;
+                if (r is SkinnedMeshRenderer smr) mesh = smr.sharedMesh;
+                else
+                {
+                    MeshFilter mf = r.GetComponent<MeshFilter>();
+                    if (mf != null) mesh = mf.sharedMesh;
+                }
+                if (mesh == null)
+                    continue;
+                Bounds lb = mesh.bounds;
+                Matrix4x4 m = parent.worldToLocalMatrix * r.transform.localToWorldMatrix;
+                for (int i = 0; i < 8; i++)
+                {
+                    var corner = new Vector3(
+                        (i & 1) == 0 ? lb.min.x : lb.max.x,
+                        (i & 2) == 0 ? lb.min.y : lb.max.y,
+                        (i & 4) == 0 ? lb.min.z : lb.max.z);
+                    Vector3 v = m.MultiplyPoint3x4(corner);
+                    if (!has) { acc = new Bounds(v, Vector3.zero); has = true; }
+                    else acc.Encapsulate(v);
+                }
+            }
+            return acc;
         }
 
         private static void SetProceduralVisible(ProceduralOpening po, bool visible)
