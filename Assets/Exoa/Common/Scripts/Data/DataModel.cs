@@ -46,11 +46,31 @@ namespace Exoa.Designer
 
         }
 
+        /// <summary>
+        /// IBMROS: one placed furniture item. Furniture is part of the room the
+        /// user made, so it belongs in the room document rather than in a
+        /// side file — saving the plan saves the furnishing with it.
+        /// </summary>
+        [System.Serializable]
+        public struct FurnitureRecord
+        {
+            public string uniqueId;   // stable identity across save/load/undo
+            public string modelKey;   // catalog/GLB key used to respawn it
+            public string displayName;
+            public Vector3 position;
+            public Vector3 eulerAngles;
+            public Vector3 scale;
+        }
+
         [System.Serializable]
         public struct FloorMapLevel
         {
             public string uniqueId;
             public List<FloorMapItem> spaces;
+
+            // IBMROS: additive — old saves deserialize this as null and simply
+            // have no furniture, and older readers ignore the extra field.
+            public List<FurnitureRecord> furniture;
 
             public string GenerateUniqueId()
             {

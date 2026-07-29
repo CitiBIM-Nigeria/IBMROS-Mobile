@@ -1,155 +1,166 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using Exoa.Designer;
-using Exoa.Events;
 using UnityEngine;
+using static Exoa.Designer.DataModel;
 
 namespace IBMROS.Designer.Furnish
 {
     /// <summary>
-    /// Persists furniture placements alongside the floor plan.
+    /// Makes furniture part of the room document.
     ///
-    /// Format: a sidecar file "FloorMaps/{plan}.furniture.json" (kept out of the
-    /// FloorMapV2 schema for now — the settled end-state folds furniture into
-    /// the document additively; the sidecar keys by the same plan name so that
-    /// migration is a straight import).
+    /// Furniture used to live in a side file ({plan}.furniture.json) written on
+    /// save and read on load. That kept plan and furnishing as two artefacts that
+    /// could drift, and left furniture outside the document that everything else
+    /// (save, load, undo, future sync) treats as the source of truth. It is now
+    /// gathered into FloorMapLevel.furniture by the serializer and recreated from
+    /// there on load, through FurnitureDocumentBridge.
     ///
-    /// Save: every plan save (GameEditorEvents.OnFileSaved) snapshots all placed
-    /// FurnitureItems (model key + pose). Load: after a plan load, existing
-    /// placed items are cleared and the sidecar respawned through
-    /// FurnitureSpawnManager.SpawnSavedItem.
+    /// Legacy sidecars are imported once per plan and then removed, so existing
+    /// saved rooms keep their furniture.
     /// </summary>
     public sealed class FurniturePersistence : MonoBehaviour
     {
-        [Serializable]
-        private class Entry
+        private void OnEnable()
+        {
+            FurnitureDocumentBridge.Provider = Gather;
+            FurnitureDocumentBridge.Restorer = Restore;
+        }
+
+        private void OnDisable()
+        {
+            if (FurnitureDocumentBridge.Provider == Gather)
+                FurnitureDocumentBridge.Provider = null;
+            if (FurnitureDocumentBridge.Restorer == Restore)
+                FurnitureDocumentBridge.Restorer = null;
+        }
+
+        // ------------------------------------------------------------------ save
+
+        /// <summary>Snapshot of every placed item, in document form.</summary>
+        private List<FurnitureRecord> Gather()
+        {
+            var list = new List<FurnitureRecord>();
+            foreach (FurnitureItem item in FindObjectsByType<FurnitureItem>(FindObjectsSortMode.None))
+            {
+                // Ghosts mid-placement are not part of the room yet, and a deleted
+                // item is kept inactive for undo — neither should be saved.
+                if (!item.IsPlaced || !item.gameObject.activeSelf)
+                    continue;
+                Transform t = item.transform;
+                list.Add(new FurnitureRecord
+                {
+                    uniqueId = item.GetInstanceID().ToString(),
+                    modelKey = item.FurnitureId,
+                    displayName = item.FurnitureName,
+                    position = t.position,
+                    eulerAngles = t.eulerAngles,
+                    scale = t.localScale,
+                });
+            }
+            return list;
+        }
+
+        // ------------------------------------------------------------------ load
+
+        private void Restore(List<FurnitureRecord> records)
+        {
+            // A document restore during undo replays the load path. That is a plan
+            // rebuild, not a new document: re-spawning here would duplicate live
+            // furniture and strand the undo history on dead GameObjects.
+            if (IBMROS.Bridge.UndoRedo.UndoRedoService.RestoreInProgress)
+                return;
+            StartCoroutine(RestoreRoutine(records));
+        }
+
+        private System.Collections.IEnumerator RestoreRoutine(List<FurnitureRecord> records)
+        {
+            // Clear what the previous plan left behind.
+            foreach (FurnitureItem item in FindObjectsByType<FurnitureItem>(FindObjectsSortMode.None))
+                Destroy(item.gameObject);
+            yield return null; // let the destroys land before respawning
+
+            List<FurnitureRecord> toSpawn = records;
+            if (toSpawn == null || toSpawn.Count == 0)
+                toSpawn = ImportLegacySidecar();
+            if (toSpawn == null || toSpawn.Count == 0)
+                yield break;
+
+            FurnitureSpawnManager spawner =
+                FindAnyObjectByType<FurnitureSpawnManager>(FindObjectsInactive.Include);
+            if (spawner == null)
+            {
+                Debug.LogWarning("[FurniturePersistence] No FurnitureSpawnManager — cannot restore.");
+                yield break;
+            }
+
+            int restored = 0;
+            foreach (FurnitureRecord r in toSpawn)
+            {
+                if (this == null)
+                    yield break;
+                var task = spawner.SpawnSavedItem(r.modelKey, r.position,
+                    Quaternion.Euler(r.eulerAngles),
+                    r.scale == Vector3.zero ? Vector3.one : r.scale);
+                while (!task.IsCompleted)
+                    yield return null;
+                if (task.Result != null)
+                    restored++;
+            }
+            Debug.Log($"[FurniturePersistence] Restored {restored}/{toSpawn.Count} item(s) from the document.");
+        }
+
+        // ------------------------------------------------------------------ migration
+
+        /// <summary>
+        /// Reads a pre-document sidecar once, then retires it. Keeps rooms saved
+        /// before furniture moved into the document.
+        /// </summary>
+        private static List<FurnitureRecord> ImportLegacySidecar()
+        {
+            string plan = UISaving.instance != null ? UISaving.instance.CurrentFileName : null;
+            if (string.IsNullOrEmpty(plan))
+                return null;
+            string path = Path.Combine(Application.persistentDataPath,
+                HDSettings.EXT_FLOORMAP_FOLDER, plan + ".furniture.json");
+            if (!File.Exists(path))
+                return null;
+
+            try
+            {
+                var file = JsonUtility.FromJson<LegacySidecar>(File.ReadAllText(path));
+                var list = new List<FurnitureRecord>();
+                if (file?.items != null)
+                {
+                    foreach (LegacyEntry e in file.items)
+                    {
+                        list.Add(new FurnitureRecord
+                        {
+                            modelKey = e.modelKey,
+                            position = e.position,
+                            eulerAngles = e.eulerAngles,
+                            scale = e.localScale == Vector3.zero ? Vector3.one : e.localScale,
+                        });
+                    }
+                }
+                File.Move(path, path + ".migrated");
+                Debug.Log($"[FurniturePersistence] Imported {list.Count} item(s) from the legacy sidecar for '{plan}'.");
+                return list;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[FurniturePersistence] Legacy sidecar import failed for '{plan}': {e.Message}");
+                return null;
+            }
+        }
+
+        [System.Serializable] private class LegacySidecar { public int version; public List<LegacyEntry> items; }
+        [System.Serializable] private class LegacyEntry
         {
             public string modelKey;
             public Vector3 position;
             public Vector3 eulerAngles;
             public Vector3 localScale;
-        }
-
-        [Serializable]
-        private class SidecarFile
-        {
-            public int version = 1;
-            public List<Entry> items = new List<Entry>();
-        }
-
-        private void OnEnable()
-        {
-            GameEditorEvents.OnFileSaved += HandleSaved;
-            GameEditorEvents.OnFileLoaded += HandleLoaded;
-        }
-
-        private void OnDisable()
-        {
-            GameEditorEvents.OnFileSaved -= HandleSaved;
-            GameEditorEvents.OnFileLoaded -= HandleLoaded;
-        }
-
-        private static string SidecarPath(string planName) =>
-            Path.Combine(Application.persistentDataPath, HDSettings.EXT_FLOORMAP_FOLDER,
-                planName + ".furniture.json");
-
-        // ------------------------------------------------------------------ save
-
-        private void HandleSaved(string name, GameEditorEvents.FileType fileType)
-        {
-            if (fileType != GameEditorEvents.FileType.FloorMapFile || string.IsNullOrEmpty(name))
-                return;
-            // SaveSystem's save callback reports the file name WITH extension
-            // (its load API takes it without — known API asymmetry). Normalize.
-            if (name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                name = name.Substring(0, name.Length - 5);
-            try
-            {
-                var file = new SidecarFile();
-                foreach (FurnitureItem item in FindObjectsByType<FurnitureItem>(FindObjectsSortMode.None))
-                {
-                    if (!item.IsPlaced)
-                        continue;
-                    file.items.Add(new Entry
-                    {
-                        modelKey = item.FurnitureId,
-                        position = item.transform.position,
-                        eulerAngles = item.transform.eulerAngles,
-                        localScale = item.transform.localScale,
-                    });
-                }
-                Directory.CreateDirectory(Path.GetDirectoryName(SidecarPath(name)));
-                File.WriteAllText(SidecarPath(name), JsonUtility.ToJson(file, true));
-                Debug.Log($"[FurniturePersistence] Saved {file.items.Count} item(s) for '{name}'.");
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[FurniturePersistence] Save failed for '{name}': {e.Message}");
-            }
-        }
-
-        // ------------------------------------------------------------------ load
-
-        private void HandleLoaded(GameEditorEvents.FileType fileType)
-        {
-            if (fileType != GameEditorEvents.FileType.FloorMapFile)
-                return;
-            // An undo that falls back to a full document restore replays the file-load
-            // code path (clear-all → deserialize → OnFileLoaded). That is a rebuild of
-            // the PLAN, not a new document: re-reading the sidecar here would destroy
-            // every furniture item — including unsaved ones — and leave the undo
-            // history holding references to dead GameObjects.
-            if (IBMROS.Bridge.UndoRedo.UndoRedoService.RestoreInProgress)
-                return;
-            string name = UISaving.instance != null ? UISaving.instance.CurrentFileName : null;
-            if (string.IsNullOrEmpty(name))
-                return;
-            Restore(name);
-        }
-
-        private async void Restore(string planName)
-        {
-            string path = SidecarPath(planName);
-
-            // A load replaces the whole world — clear items from the previous plan.
-            foreach (FurnitureItem item in FindObjectsByType<FurnitureItem>(FindObjectsSortMode.None))
-                Destroy(item.gameObject);
-
-            if (!File.Exists(path))
-                return;
-
-            SidecarFile file;
-            try
-            {
-                file = JsonUtility.FromJson<SidecarFile>(File.ReadAllText(path));
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[FurniturePersistence] Sidecar unreadable for '{planName}': {e.Message}");
-                return;
-            }
-            if (file == null || file.items == null || file.items.Count == 0)
-                return;
-
-            FurnitureSpawnManager spawner = FindAnyObjectByType<FurnitureSpawnManager>(FindObjectsInactive.Include);
-            if (spawner == null)
-            {
-                Debug.LogWarning("[FurniturePersistence] No FurnitureSpawnManager — cannot restore items.");
-                return;
-            }
-
-            int restored = 0;
-            foreach (Entry e in file.items)
-            {
-                if (this == null) // scene tore down mid-restore
-                    return;
-                GameObject go = await spawner.SpawnSavedItem(
-                    e.modelKey, e.position, Quaternion.Euler(e.eulerAngles), e.localScale);
-                if (go != null)
-                    restored++;
-            }
-            Debug.Log($"[FurniturePersistence] Restored {restored}/{file.items.Count} item(s) for '{planName}'.");
         }
     }
 }

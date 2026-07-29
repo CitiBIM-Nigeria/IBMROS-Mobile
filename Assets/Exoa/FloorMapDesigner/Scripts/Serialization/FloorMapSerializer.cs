@@ -260,6 +260,10 @@ namespace Exoa.Designer
                     floorMapMenu.CreateNewUIItem(c, c.type);
                 }
             }
+
+            // IBMROS: recreate the furniture stored with this floor. Runs after the
+            // spaces exist so placement has floors/colliders to land on.
+            FurnitureDocumentBridge.Restorer?.Invoke(floor.furniture);
         }
 
         override public string SerializeScene()
@@ -283,6 +287,13 @@ namespace Exoa.Designer
                     {
                         level.spaces = floorMapMenu.GetItemsData();
                         level.uniqueId = floorsMenu.CurrentFloorId;
+                        // IBMROS: furniture is part of the room the user built, so it
+                        // is gathered into the document alongside the spaces. Null
+                        // provider (no furniture stack in this scene) leaves whatever
+                        // the level already carried, so a plan opened in a
+                        // furniture-less context never loses its furnishing.
+                        if (FurnitureDocumentBridge.Provider != null)
+                            level.furniture = FurnitureDocumentBridge.Provider();
                     }
                     newList.Add(level);
                 }
