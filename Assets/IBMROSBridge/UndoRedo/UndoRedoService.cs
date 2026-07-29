@@ -37,6 +37,13 @@ namespace IBMROS.Bridge.UndoRedo
     /// if it finds a change no event announced, that is an A1 invariant violation and is
     /// logged as an error to be fixed at the source — release builds never poll.
     ///
+    /// Furniture (P5): furniture lives in scene GameObjects, not in the plan document,
+    /// so a document memento can never restore it. Those operations enter the SAME
+    /// history as command steps via RecordCommand (SnapshotHistory holds both kinds in
+    /// one ordered list) — the user gets one Undo stack in the order they worked, and
+    /// each domain is reverted by the mechanism that suits it. All furniture call sites
+    /// reach this through UndoRedoManager.Record, which forwards here when present.
+    ///
     /// Primary interaction is touch (UndoRedoHud buttons + 3-finger-tap undo); the
     /// keyboard shortcuts are compiled only into the editor for development testing.
     /// </summary>
@@ -136,27 +143,103 @@ namespace IBMROS.Bridge.UndoRedo
         {
             if (restoring)
                 return;
-            // Commit an in-flight edit first (so Redo can return to it) — but ONLY when
-            // a change signal actually arrived. An unconditional serialize-compare here
-            // pushed phantom steps from round-trip drift on rapid consecutive undos,
-            // truncating redo (part of the "undo only works once" report).
-            if (changeSignalSeen)
+            FlushPendingCapture();
+            SnapshotHistory.Step step = history.Undo();
+            if (step.Command != null)
             {
-                changeSignalSeen = false;
-                CaptureIfChanged(ConsumePendingLabel());
+                // Furniture step: the document did not change, so restoring it would be
+                // a wasteful no-op that also kicks off a resync coroutine. Apply the
+                // command's own inverse instead.
+                ApplyCommand(step.Command, undo: true);
+                OnHistoryChanged?.Invoke();
+                return;
             }
-            string state = history.Undo();
-            if (state != null)
-                Restore(state);
+            if (step.State != null)
+                Restore(step.State);
         }
 
         public void Redo()
         {
             if (restoring)
                 return;
-            string state = history.Redo();
-            if (state != null)
-                Restore(state);
+            SnapshotHistory.Step step = history.Redo();
+            if (step.Command != null)
+            {
+                ApplyCommand(step.Command, undo: false);
+                OnHistoryChanged?.Invoke();
+                return;
+            }
+            if (step.State != null)
+                Restore(step.State);
+        }
+
+        /// <summary>
+        /// Records a furniture operation as one step in this history, in sequence with
+        /// the document steps around it. Any in-flight document edit is committed first
+        /// so the two domains never land out of order. Returns false when the service
+        /// cannot host the step (no baseline yet).
+        ///
+        /// Callers do not use this directly — UndoRedoManager.Record forwards here, so
+        /// every existing furniture call site (drag, rotate, scale, place, delete,
+        /// duplicate) participates without knowing about the bridge.
+        /// </summary>
+        public bool RecordCommand(IUndoableAction command, string label = null)
+        {
+            if (command == null || restoring)
+                return false;
+
+            FlushPendingCapture();
+
+            // Every cursor position must resolve to a document state; make sure the
+            // baseline exists before the first furniture step of a session.
+            if (history.Count == 0)
+                CaptureIfChanged("Baseline");
+            if (history.Count == 0)
+                return false;
+
+            if (!history.PushCommand(command, label ?? command.Description ?? DEFAULT_LABEL))
+                return false;
+            OnHistoryChanged?.Invoke();
+            return true;
+        }
+
+        /// <summary>
+        /// True while a document restore is rebuilding the scene. Consumers that react
+        /// to load events (furniture persistence) must stand down: an undo is not a
+        /// file load, and re-reading the saved sidecar mid-undo would destroy the very
+        /// furniture the history still holds references to.
+        /// </summary>
+        public bool IsRestoring => restoring;
+
+        /// <summary>Static form of <see cref="IsRestoring"/>, safe before the service installs.</summary>
+        public static bool RestoreInProgress => Instance != null && Instance.restoring;
+
+        private static void ApplyCommand(IUndoableAction command, bool undo)
+        {
+            try
+            {
+                if (undo) command.Undo();
+                else command.Redo();
+            }
+            catch (Exception e)
+            {
+                HDLogger.LogError("[IBMROS Undo] Furniture step failed: " + e.Message,
+                    HDLogger.LogCategory.General);
+            }
+        }
+
+        /// <summary>
+        /// Commits an in-flight document edit so a following step can never be recorded
+        /// before it — but ONLY when a change signal actually arrived. An unconditional
+        /// serialize-compare here pushed phantom steps from round-trip drift on rapid
+        /// consecutive undos, truncating redo (part of the "undo only works once" report).
+        /// </summary>
+        private void FlushPendingCapture()
+        {
+            if (!changeSignalSeen)
+                return;
+            changeSignalSeen = false;
+            CaptureIfChanged(ConsumePendingLabel());
         }
 
         /// <summary>

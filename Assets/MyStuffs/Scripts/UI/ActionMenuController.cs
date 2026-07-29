@@ -345,14 +345,11 @@ public class ActionMenuController : MonoBehaviour
         // Panel Above
         if (panelAbove != null && panelAbove.gameObject.activeSelf)
         {
-            float scaleFactor = panelAbove.lossyScale.y;
-            float halfW = panelAbove.rect.width  * scaleFactor * 0.5f;
-            float halfH = panelAbove.rect.height * scaleFactor * 0.5f;
+            float halfW = panelAbove.rect.width * panelAbove.lossyScale.y * 0.5f;
 
             float x = Mathf.Clamp(screenBounds.CenterX,
                 safeArea.xMin + halfW, safeArea.xMax - halfW);
-            float y = screenBounds.TopY + verticalPadding;
-            y = Mathf.Clamp(y, safeArea.yMin + halfH, safeArea.yMax - halfH);
+            float y = PlaceClearOf(panelAbove, screenBounds, safeArea, above: true);
 
             panelAbove.position = new Vector3(x, y, 0f);
         }
@@ -366,8 +363,7 @@ public class ActionMenuController : MonoBehaviour
 
             float x = Mathf.Clamp(screenBounds.CenterX,
                 safeArea.xMin + halfW, safeArea.xMax - halfW);
-            float y = screenBounds.BottomY - verticalPadding;
-            y = Mathf.Clamp(y, safeArea.yMin + halfH, safeArea.yMax - halfH);
+            float y = PlaceClearOf(panelBelow, screenBounds, safeArea, above: false);
 
             // Ensure minimum gap between above and below panels
             if (panelAbove != null && panelAbove.gameObject.activeSelf)
@@ -389,6 +385,49 @@ public class ActionMenuController : MonoBehaviour
 
             panelBelow.position = new Vector3(x, y, 0f);
         }
+    }
+
+    /// <summary>
+    /// Screen Y for a selection panel so its NEAR EDGE clears the item by
+    /// verticalPadding — not its centre, which is what the old code positioned.
+    ///
+    /// This is load-bearing, not cosmetic. These panels are raycast targets, and
+    /// InputManager drops any world press that starts over UI. Centring a ~100 px tall
+    /// bar 20 px above the item's top edge parks half of it ON the item, and in the
+    /// bird's-eye plan — where a chair is small on screen — the two panels together
+    /// covered it completely: the item could be tapped (panels are hidden until
+    /// something is selected) and rotated (the handle is itself UI), but never dragged,
+    /// because no press on it ever reached the world.
+    ///
+    /// If the safe area cannot fit the panel on its preferred side, it flips to the
+    /// other side rather than sitting on top of the item.
+    /// </summary>
+    private float PlaceClearOf(RectTransform panel,
+                               ScreenSpaceHelper.ObjectScreenBounds bounds,
+                               Rect safeArea,
+                               bool above)
+    {
+        float scale = panel.lossyScale.y;
+        // Offsets from the panel's pivot to its own edges (pivot may not be centred).
+        float toTop = panel.rect.yMax * scale;
+        float toBottom = panel.rect.yMin * scale;   // negative
+
+        float minY = safeArea.yMin - toBottom;      // pivot Y with the bottom edge on the floor
+        float maxY = safeArea.yMax - toTop;         // pivot Y with the top edge on the ceiling
+        if (minY > maxY)                            // panel taller than the safe area
+            return Mathf.Clamp(bounds.TopY, safeArea.yMin, safeArea.yMax);
+
+        float wantAbove = bounds.TopY + verticalPadding - toBottom;
+        float wantBelow = bounds.BottomY - verticalPadding - toTop;
+
+        float first = above ? wantAbove : wantBelow;
+        float second = above ? wantBelow : wantAbove;
+
+        if (first >= minY && first <= maxY)
+            return first;
+        if (second >= minY && second <= maxY)
+            return second;   // flip to the side that fits
+        return Mathf.Clamp(first, minY, maxY);
     }
 
     public float topBarLimit = 72f;

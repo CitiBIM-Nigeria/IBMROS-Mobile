@@ -10,8 +10,8 @@ using UnityEditor;
 [InitializeOnLoad]
 internal static class McpBridgeKick
 {
-    private const string StatusPath = "/private/tmp/claude-501/-Users-samuelshonubi-Documents-Dev-IBMROS-Mobile/1b41a91a-c0b8-425e-996d-85320fc19e52/scratchpad/mcp-bridge-kick.log";
-    private const string SessionKey = "McpBridgeKick.Done.v2";
+    private const string StatusPath = "/private/tmp/claude-501/-Users-samuelshonubi-Documents-Dev-IBMROS-Mobile/ae9b87f5-9bf2-4ac9-8a15-6554113381f2/scratchpad/mcp-bridge-kick.log";
+    private const string SessionKey = "McpBridgeKick.Done.v3";
 
     static McpBridgeKick()
     {

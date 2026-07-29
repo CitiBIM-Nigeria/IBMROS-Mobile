@@ -95,6 +95,13 @@ namespace IBMROS.Designer.Furnish
         {
             if (fileType != GameEditorEvents.FileType.FloorMapFile)
                 return;
+            // An undo that falls back to a full document restore replays the file-load
+            // code path (clear-all → deserialize → OnFileLoaded). That is a rebuild of
+            // the PLAN, not a new document: re-reading the sidecar here would destroy
+            // every furniture item — including unsaved ones — and leave the undo
+            // history holding references to dead GameObjects.
+            if (IBMROS.Bridge.UndoRedo.UndoRedoService.RestoreInProgress)
+                return;
             string name = UISaving.instance != null ? UISaving.instance.CurrentFileName : null;
             if (string.IsNullOrEmpty(name))
                 return;

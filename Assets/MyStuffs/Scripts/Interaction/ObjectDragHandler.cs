@@ -10,6 +10,17 @@ public class ObjectDragHandler : MonoBehaviour
     [SerializeField] private LayerMask floorLayer;
     [SerializeField] private float     wallMargin = 0.08f;  // inset from wall (m)
 
+    // A press is "on the item" only if the item is the nearest INTERACTABLE thing under
+    // the finger. Testing the nearest collider of ANY layer (the old rule) let ordinary
+    // room geometry veto the drag: from the bird's-eye camera the ray crosses the room's
+    // ceiling collider on its way down, so every press on a sofa was refused and the
+    // gesture fell through to the camera — the plan panned instead of the sofa moving.
+    private const string INTERACTABLE_LAYER = "Interactable";
+
+    // The bird's-eye camera sits ~36 m above the floor, so a 100 m budget is not a
+    // matter of taste — it is the difference between reaching the room and not.
+    private const float PICK_DISTANCE = 5000f;
+
     public event Action OnDragStart;
     public event Action OnDragEnd;
 
@@ -23,6 +34,7 @@ public class ObjectDragHandler : MonoBehaviour
     public bool IsDragging => _isDragging;
     
     private LayerMask _wallMask = 0;
+    private LayerMask _interactableMask = 0;
 
     // Floor extents, captured when a drag starts — the item's footprint is
     // clamped to this so it stays in the room (stops at walls, slides along them).
@@ -36,6 +48,7 @@ public class ObjectDragHandler : MonoBehaviour
         // Only WALLS block dragging. Including "Default" made the cast hit the
         // floor/ceiling/props (and the model itself) → drag felt stuck/jumpy.
         _wallMask = LayerMask.GetMask("Wall");
+        _interactableMask = LayerMask.GetMask(INTERACTABLE_LAYER);
 
         // The sweep can only stop the item if the walls actually have colliders
         // ON the "Wall" layer. If this fires, the item will only be held in by the
@@ -78,41 +91,89 @@ public class ObjectDragHandler : MonoBehaviour
         if (_blocked || _selectedObject == null)
             return false;
 
-        Ray ray = _mainCamera.ScreenPointToRay(screenPosition);
-
-        if (!Physics.Raycast(ray, out RaycastHit hit, 100f))
+        if (_mainCamera == null)
+            _mainCamera = Camera.main;
+        if (_mainCamera == null)
             return false;
 
-        bool hitSelected = hit.transform == _selectedObject
-                           || hit.transform.IsChildOf(_selectedObject);
+        Ray ray = _mainCamera.ScreenPointToRay(screenPosition);
 
-        if (!hitSelected)
+        if (!PressedOnSelected(ray))
             return false;
 
         _isDragging        = true;
         _dragStartPosition = _selectedObject.position;
 
-        // Only store XZ grab offset — Y is always calculated from floor
-        if (Physics.Raycast(ray, out RaycastHit floorHit, 100f, floorLayer))
+        // The drag plane. Prefer the floor under the finger; fall back to the floor the
+        // item is already standing on, so a missing/misconfigured floor collider costs
+        // the room clamp but never the drag itself.
+        if (Physics.Raycast(ray, out RaycastHit floorHit, PICK_DISTANCE, floorLayer))
         {
-            // XZ offset only — keeps object under finger horizontally
-            _grabOffset = new Vector3(
-                _selectedObject.position.x - floorHit.point.x,
-                0f,  // Y handled separately in UpdateDrag
-                _selectedObject.position.z - floorHit.point.z
-            );
             _roomBounds    = floorHit.collider.bounds;   // room footprint to clamp to
             _floorY        = floorHit.point.y;           // plane height for UpdateDrag
             _hasRoomBounds = true;
         }
         else
         {
-            _grabOffset    = Vector3.zero;
+            _floorY        = BaseY(_selectedObject);
             _hasRoomBounds = false;
+        }
+
+        // XZ grab offset — keeps the item under the finger instead of snapping its
+        // pivot there. Derived from the drag plane so it matches UpdateDrag exactly.
+        Plane dragPlane = new Plane(Vector3.up, new Vector3(0f, _floorY, 0f));
+        if (dragPlane.Raycast(ray, out float enter))
+        {
+            Vector3 grabPoint = ray.GetPoint(enter);
+            _grabOffset = new Vector3(
+                _selectedObject.position.x - grabPoint.x,
+                0f,  // Y handled separately in UpdateDrag
+                _selectedObject.position.z - grabPoint.z
+            );
+        }
+        else
+        {
+            _grabOffset = Vector3.zero;
         }
 
         OnDragStart?.Invoke();
         return true;
+    }
+
+    /// <summary>
+    /// True when the selected item is the nearest interactable thing under the pointer.
+    /// Masked to Interactable on purpose: room geometry (ceiling, roof, floor) and
+    /// screen-space rig helpers must not be able to shadow the item, but another piece
+    /// of furniture in front of it still wins — pressing the sofa behind a table should
+    /// not move the sofa.
+    /// </summary>
+    private bool PressedOnSelected(Ray ray)
+    {
+        if (_interactableMask.value == 0)
+            _interactableMask = LayerMask.GetMask(INTERACTABLE_LAYER);
+
+        if (!Physics.Raycast(ray, out RaycastHit hit, PICK_DISTANCE, _interactableMask,
+                             QueryTriggerInteraction.Ignore))
+            return false;
+
+        return hit.transform == _selectedObject
+               || hit.transform.IsChildOf(_selectedObject);
+    }
+
+    /// <summary>World Y of the bottom of an item's visible bounds (its standing height).</summary>
+    private static float BaseY(Transform t)
+    {
+        Renderer[] renderers = t.GetComponentsInChildren<Renderer>();
+        bool has = false;
+        Bounds combined = default;
+        foreach (var r in renderers)
+        {
+            if (r is ParticleSystemRenderer || r.gameObject.name == "DynamicBlobShadow")
+                continue;
+            if (!has) { combined = r.bounds; has = true; }
+            else combined.Encapsulate(r.bounds);
+        }
+        return has ? combined.min.y : t.position.y;
     }
 
     public void UpdateDrag(Vector2 screenPosition)
@@ -235,6 +296,9 @@ public class ObjectDragHandler : MonoBehaviour
     }
 
  
+    /// <summary>Below this (1 mm) a "drag" was really a tap — no undo step for it.</summary>
+    private const float MIN_UNDO_MOVE_M = 0.001f;
+
     public void EndDrag()
     {
         if (!_isDragging)
@@ -243,8 +307,17 @@ public class ObjectDragHandler : MonoBehaviour
         _isDragging = false;
         OnDragEnd?.Invoke();
 
+        if (_selectedObject == null)
+            return;
+
+        // Record only real moves. Without this every press-and-release on a selected
+        // item pushed an identity step, so Undo spent taps doing nothing visible.
+        Vector3 end = _selectedObject.position;
+        if ((end - _dragStartPosition).sqrMagnitude < MIN_UNDO_MOVE_M * MIN_UNDO_MOVE_M)
+            return;
+
         UndoRedoManager.Instance?.Record(
-            new MoveAction(_selectedObject, _dragStartPosition, _selectedObject.position)
+            new MoveAction(_selectedObject, _dragStartPosition, end)
         );
     }
 

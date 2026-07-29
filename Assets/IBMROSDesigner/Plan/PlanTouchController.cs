@@ -42,6 +42,15 @@ namespace IBMROS.Designer.Plan
         /// <summary>Raised every preview frame and after commits — visuals refresh hook.</summary>
         public static event Action OnPlanVisualsDirty;
 
+        /// <summary>
+        /// Raised when the user TAPS a part of the canvas that owns no interaction:
+        /// not furniture, an opening, a corner handle, a wall, the inside of a room,
+        /// or UI. Consumers treat it as "leave the current sub-mode" (the HUD exits
+        /// Edit Walls). Only a tap qualifies — a drag from the same spot is a camera
+        /// pan and is deliberately left alone.
+        /// </summary>
+        public static event Action OnEmptyCanvasTap;
+
         public PlanToolMode Tool { get; private set; } = PlanToolMode.Browse;
         public bool IsDragging => drag != DragKind.None && dragItem != null;
         public string DragItemId => IsDragging ? dragItem.ItemUniqueId : null;
@@ -55,6 +64,10 @@ namespace IBMROS.Designer.Plan
         private const float OPENING_WALL_SEARCH_M = 1.5f; // wall search radius while dragging an opening
         private const float PLACE_WALL_SEARCH_M = 0.6f;  // wall search radius for tap-to-place
         private const float MIN_COMMIT_MOVE_M = 0.005f;
+        // A tap on nothing = short press that barely moved. Same thresholds
+        // SelectionService uses, so "tap" means the same thing everywhere.
+        private const float TAP_MAX_MOVE_PX = 12f;
+        private const float TAP_MAX_SECONDS = 0.35f;
 
         private enum DragKind { None, Corner, Edge, Room, Opening }
 
@@ -66,6 +79,8 @@ namespace IBMROS.Designer.Plan
         private Vector2 edgeNormal;            // unit normal for edge drags
         private bool moved;
         private bool pressedInsideRoom;        // waiting for slop before Room drag
+        private bool pressedEmptyCanvas;       // press landed on nothing — tap = leave sub-mode
+        private float pressTime;
         private Vector2 pressScreenPos;
 
         private void Awake()
@@ -189,7 +204,7 @@ namespace IBMROS.Designer.Plan
 
             if (PointerDown())
                 OnPointerDown(PointerPos());
-            else if (IsDragging || pressedInsideRoom)
+            else if (IsDragging || pressedInsideRoom || pressedEmptyCanvas)
             {
                 if (PointerHeld())
                     OnPointerMove(PointerPos());
@@ -253,6 +268,8 @@ namespace IBMROS.Designer.Plan
                 return;
             Vector2 ground = PlanEditorUtil.WorldToMeters(groundWorld);
             pressScreenPos = screenPos;
+            pressTime = Time.unscaledTime;
+            pressedEmptyCanvas = false;
 
             // Armed placement tools: one tap = one opening.
             if (Tool == PlanToolMode.AddDoor || Tool == PlanToolMode.AddWindow)
@@ -372,7 +389,10 @@ namespace IBMROS.Designer.Plan
                 }
             }
 
-            // 5) genuinely empty canvas → let the Exoa rig pan.
+            // 5) genuinely empty canvas → let the Exoa rig pan, and remember the press:
+            //    if it turns out to be a TAP (not the start of a pan) it means
+            //    "nothing here" and the HUD leaves Edit Walls on release.
+            pressedEmptyCanvas = true;
             CameraEvents.OnRequestButtonAction?.Invoke(
                 CameraEvents.Action.DisableCameraMoves, false);
         }
@@ -404,6 +424,10 @@ namespace IBMROS.Designer.Plan
 
         private void OnPointerMove(Vector2 screenPos)
         {
+            // Moving past tap slop means this is a camera pan, not a tap on nothing.
+            if (pressedEmptyCanvas && (screenPos - pressScreenPos).magnitude > TAP_MAX_MOVE_PX)
+                pressedEmptyCanvas = false;
+
             // Promote an inside-press to a room drag once past slop.
             if (pressedInsideRoom && drag == DragKind.None)
             {
@@ -512,6 +536,10 @@ namespace IBMROS.Designer.Plan
             UIBaseItem item = dragItem;
             DragKind kind = drag;
 
+            bool emptyTap = pressedEmptyCanvas && !wasDragging &&
+                            (PointerPos() - pressScreenPos).magnitude <= TAP_MAX_MOVE_PX &&
+                            Time.unscaledTime - pressTime <= TAP_MAX_SECONDS;
+
             if (wasDragging && moved && item != null)
             {
                 Vector2 last = PointerPos();
@@ -540,6 +568,9 @@ namespace IBMROS.Designer.Plan
 
             ClearDragState();
             OnPlanVisualsDirty?.Invoke();
+
+            if (emptyTap)
+                OnEmptyCanvasTap?.Invoke();
         }
 
         private static bool Distinct(List<Vector2> a, List<Vector2> b)
@@ -568,6 +599,7 @@ namespace IBMROS.Designer.Plan
             dragItem = null;
             startMeters = null;
             pressedInsideRoom = false;
+            pressedEmptyCanvas = false;
             moved = false;
         }
 

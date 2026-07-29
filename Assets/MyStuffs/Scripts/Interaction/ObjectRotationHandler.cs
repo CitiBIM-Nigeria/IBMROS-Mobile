@@ -94,18 +94,28 @@ public class ObjectRotationHandler : MonoBehaviour
         );
     }
 
+    /// <summary>Below this a "rotation" was a tap on the handle — no undo step for it.</summary>
+    private const float MIN_UNDO_ANGLE_DEG = 0.25f;
+
     private void HandleDragEnd(PointerEventData data)
     {
         if (!_isRotating)
             return;
 
         _isRotating = false;
+        OnRotationEnd?.Invoke();
+
+        if (_selectedObject == null)
+            return;
+
+        // Record only real rotations, so Undo never spends a tap on an identity step.
+        Quaternion end = _selectedObject.rotation;
+        if (Quaternion.Angle(_rotationStart, end) < MIN_UNDO_ANGLE_DEG)
+            return;
 
         UndoRedoManager.Instance?.Record(
-            new RotateAction(_selectedObject, _rotationStart, _selectedObject.rotation)
+            new RotateAction(_selectedObject, _rotationStart, end)
         );
-
-        OnRotationEnd?.Invoke();
     }
 
     private void CancelRotation()

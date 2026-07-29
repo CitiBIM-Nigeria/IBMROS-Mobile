@@ -96,6 +96,9 @@ public class ObjectScaleHandler : MonoBehaviour
         PerformScaling(screenPosition);
     }
 
+    /// <summary>Below this a "scale" was a tap on a handle — no undo step for it.</summary>
+    private const float MIN_UNDO_SCALE_DELTA = 0.0005f;
+
     private void HandleUp(ScaleHandleUI handle, Vector2 screenPosition)
     {
         if (!_isScaling) return;
@@ -104,11 +107,22 @@ public class ObjectScaleHandler : MonoBehaviour
         scaleRigUI?.ClearHighlights();
         SnapToFloor(); // ← move it here, fire once on release
 
-        UndoRedoManager.Instance?.Record(
-            new ScaleAction(_selectedObject, _initialScale, _selectedObject.localScale)
-        );
-
         OnScaleEnd?.Invoke();
+
+        if (_selectedObject == null)
+            return;
+
+        // Record only real scales, and record the POSITION with them — scaling
+        // anchors the opposite side and re-snaps to the floor, so scale alone is
+        // not enough to put the item back.
+        Vector3 endScale = _selectedObject.localScale;
+        if ((endScale - _initialScale).sqrMagnitude < MIN_UNDO_SCALE_DELTA * MIN_UNDO_SCALE_DELTA)
+            return;
+
+        UndoRedoManager.Instance?.Record(
+            new ScaleAction(_selectedObject, _initialScale, endScale,
+                            _initialObjectPosition, _selectedObject.position)
+        );
     }
 
     private void PerformScaling(Vector2 currentScreenPos)

@@ -117,6 +117,7 @@ namespace IBMROS.Designer.Hud
             UndoRedoService.OnHistoryChanged += RefreshHistoryButtons;
             DesignerModeController.OnModeChanged += RefreshMode;
             PlanTouchController.OnToolChanged += RefreshToolStates;
+            PlanTouchController.OnEmptyCanvasTap += ExitEditingOnEmptyTap;
 
             ApplySafeArea();
             RefreshHistoryButtons();
@@ -132,6 +133,23 @@ namespace IBMROS.Designer.Hud
             UndoRedoService.OnHistoryChanged -= RefreshHistoryButtons;
             DesignerModeController.OnModeChanged -= RefreshMode;
             PlanTouchController.OnToolChanged -= RefreshToolStates;
+            PlanTouchController.OnEmptyCanvasTap -= ExitEditingOnEmptyTap;
+        }
+
+        /// <summary>
+        /// Tapping a part of the plan that owns no interaction leaves Edit Walls —
+        /// "Done" is no longer the only way out. Walls, corner handles, furniture,
+        /// openings, the inside of a room and every control keep their own behaviour;
+        /// PlanTouchController only raises this once it has ruled all of them out, and
+        /// only for a tap, so dragging empty canvas still pans the camera.
+        /// </summary>
+        private void ExitEditingOnEmptyTap()
+        {
+            if (!editingWalls)
+                return;
+            PlanTouchController.Instance?.SetTool(PlanToolMode.Browse);
+            ShowSheet(false);
+            SetEditingWalls(false);
         }
 
         private void Start()
