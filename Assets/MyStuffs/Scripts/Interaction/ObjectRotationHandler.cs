@@ -92,6 +92,10 @@ public class ObjectRotationHandler : MonoBehaviour
             -data.delta.x * rotationSpeed,
             Space.World
         );
+
+        // Turning an item in place sweeps its corners outward, so a piece that fitted
+        // against a wall can rotate straight through it. Nothing validated that before.
+        IBMROS.Designer.Furnish.RoomFootprint.ClampInside(_selectedObject);
     }
 
     /// <summary>Below this a "rotation" was a tap on the handle — no undo step for it.</summary>

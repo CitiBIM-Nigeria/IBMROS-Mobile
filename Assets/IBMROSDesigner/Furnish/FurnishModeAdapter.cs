@@ -13,8 +13,9 @@ namespace IBMROS.Designer.Furnish
     ///     ghost placement — exactly the SetRoomUIVisible behaviour the old Room
     ///     scene had. It returns when the panel closes AND placement finishes.
     ///   • Input arbitration: while furniture is being dragged/placed, the Exoa
-    ///     camera rig stands down (CameraEvents DisableCameraMoves) so one drag
-    ///     can never move furniture and pan the room at the same time.
+    ///     camera rig stands down — via a PlanCameraGate reason, never by writing
+    ///     the vendor flag — so one drag can never move furniture and pan the room
+    ///     at the same time, and releasing our reason cannot cancel anyone else's.
     ///   • Mode gating: the furniture interaction stack only runs where it can
     ///     do something useful, and the catalog NEVER changes the current view
     ///     (2D stays 2D, 3D stays 3D).
@@ -216,7 +217,7 @@ namespace IBMROS.Designer.Furnish
             }
 
             // Ghost placement steers with the pointer — the camera must not.
-            SetCameraSuppressed(furnishing);
+            Plan.PlanCameraGate.Set(Plan.PlanCameraGate.Reason.FurnishUi, furnishing);
         }
 
         // ------------------------------------------------------------------ input arbitration
@@ -224,25 +225,20 @@ namespace IBMROS.Designer.Furnish
         private void OnFurnitureGrabbed()
         {
             FurnitureOwnsInput = true;
-            SetCameraSuppressed(true);
-        }
-
-        private void OnFurnitureReleased()
-        {
-            FurnitureOwnsInput = false;
-            if (!FurnishUiActive)
-                SetCameraSuppressed(false);
+            Plan.PlanCameraGate.Hold(Plan.PlanCameraGate.Reason.Furniture);
         }
 
         /// <summary>
-        /// Tells the Exoa rig to ignore drags. Without this the ortho camera
-        /// panned the whole plan while the user dragged a piece of furniture
-        /// across it, and the perspective rig fought the first-person camera.
+        /// Clears only OUR reason. This used to push the vendor flag straight to
+        /// "moves allowed" whenever the catalog was closed, which silently cancelled
+        /// the 2D plan's own hold and left Plan2D freely pannable at rest. The gate
+        /// composes the reasons instead, so releasing this one cannot re-enable
+        /// panning while the plan still wants the rig held.
         /// </summary>
-        private static void SetCameraSuppressed(bool suppressed)
+        private void OnFurnitureReleased()
         {
-            CameraEvents.OnRequestButtonAction?.Invoke(
-                CameraEvents.Action.DisableCameraMoves, suppressed);
+            FurnitureOwnsInput = false;
+            Plan.PlanCameraGate.Release(Plan.PlanCameraGate.Reason.Furniture);
         }
 
         // ------------------------------------------------------------------ mode gating

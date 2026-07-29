@@ -29,7 +29,10 @@
             </ui:Button>
         </ui:VisualElement>
 
-        <!-- 2D EDIT BAR (reference: exactly Draw Wall · Resize · Add) -->
+        <!-- TRANSIENT HINT (tool guidance / rejection feedback; hidden when empty) -->
+        <ui:Label name="HintLabel" text="" picking-mode="Ignore" class="hint" style="display: none;"/>
+
+        <!-- 2D EDIT BAR (reference: exactly Draw Wall · Resize · Split · Add) -->
         <ui:VisualElement name="EditToolbar" class="bar bar--bottom" style="display: none;">
             <ui:Button name="BtnDrawWall" class="tool-col">
                 <ui:VisualElement name="DrawWallIcon" picking-mode="Ignore" class="tool-col__icon"/>
@@ -38,6 +41,10 @@
             <ui:Button name="BtnResize" class="tool-col">
                 <ui:VisualElement name="ResizeIcon" picking-mode="Ignore" class="tool-col__icon"/>
                 <ui:Label text="Resize" picking-mode="Ignore" class="tool-col__label"/>
+            </ui:Button>
+            <ui:Button name="BtnSplit" class="tool-col">
+                <ui:VisualElement name="SplitIcon" picking-mode="Ignore" class="tool-col__icon"/>
+                <ui:Label text="Split" picking-mode="Ignore" class="tool-col__label"/>
             </ui:Button>
             <ui:Button name="BtnAddOpening" class="tool-col">
                 <ui:VisualElement name="AddOpeningIcon" picking-mode="Ignore" class="tool-col__icon"/>

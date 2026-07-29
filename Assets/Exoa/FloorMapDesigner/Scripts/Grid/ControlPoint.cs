@@ -156,8 +156,31 @@ namespace Exoa.Designer
             }
         }
 
+        /// <summary>
+        /// IBMROS: the touch 2D editor draws its own world-space wall dimensions
+        /// (IBMROSDesigner/Plan/DimensionLabels) for the selected room, so this
+        /// per-control-point length label is a duplicate — every wall showed two
+        /// numbers, the large one and this small grey plate underneath it.
+        ///
+        /// The suppression has to live here rather than in an external sweep:
+        /// UpdateLabel re-activates the canvas on every OnPathChanged (each drag
+        /// frame, rebuild and undo), so deactivating it from outside can never hold.
+        /// Gating on cpc.drawPath was not an option either — that same flag draws the
+        /// path LineRenderer, which IS the visible 2D wall.
+        ///
+        /// Off by default, so the vendor scenes and the golden harness are unchanged;
+        /// PlanTouchController opts the designer in.
+        /// </summary>
+        public static bool SuppressLengthLabels;
+
         virtual public void UpdateLabel()
         {
+            if (SuppressLengthLabels)
+            {
+                if (canvas != null && canvas.gameObject.activeSelf)
+                    canvas.gameObject.SetActive(false);
+                return;
+            }
 
             if ((prevCP == null || prevCP.parent != transform.parent || (cpc != null && !cpc.drawPath)) && label.gameObject.activeSelf)
             {

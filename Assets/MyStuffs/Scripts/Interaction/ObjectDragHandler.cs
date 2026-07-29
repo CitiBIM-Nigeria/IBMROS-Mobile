@@ -35,6 +35,7 @@ public class ObjectDragHandler : MonoBehaviour
     
     private LayerMask _wallMask = 0;
     private LayerMask _interactableMask = 0;
+    private FurniturePlacer _placer;
 
     // Floor extents, captured when a drag starts — the item's footprint is
     // clamped to this so it stays in the room (stops at walls, slides along them).
@@ -88,7 +89,7 @@ public class ObjectDragHandler : MonoBehaviour
     // Called by ObjectManipulator in priority order
     public bool TryBeginDrag(Vector2 screenPosition)
     {
-        if (_blocked || _selectedObject == null)
+        if (_blocked)
             return false;
 
         if (_mainCamera == null)
@@ -98,8 +99,24 @@ public class ObjectDragHandler : MonoBehaviour
 
         Ray ray = _mainCamera.ScreenPointToRay(screenPosition);
 
+        // DIRECT MANIPULATION: a press on any furniture drags it, selecting it on the
+        // way in. This used to require the item to be selected ALREADY, which made the
+        // first press-and-drag a dead gesture — and it did not even select, because
+        // SelectionManager listens to OnPointerClick and the movement suppresses the
+        // click. So an item the user had not tapped first simply felt unmovable.
         if (!PressedOnSelected(ray))
-            return false;
+        {
+            Transform grabbed = InteractableUnder(ray);
+            if (grabbed == null)
+                return false;
+            // A ghost mid-placement is on the Interactable layer with live colliders;
+            // that gesture belongs to FurniturePlacer, not to a drag.
+            if (IsPlacing())
+                return false;
+            if (selectionManager != null)
+                selectionManager.SelectObject(grabbed); // fires onObjectSelected → _selectedObject
+            _selectedObject = grabbed;                  // also correct with no manager wired
+        }
 
         _isDragging        = true;
         _dragStartPosition = _selectedObject.position;
@@ -149,6 +166,11 @@ public class ObjectDragHandler : MonoBehaviour
     /// </summary>
     private bool PressedOnSelected(Ray ray)
     {
+        // Nothing selected is a legitimate state now that TryBeginDrag can grab an
+        // unselected item — IsChildOf(null) throws.
+        if (_selectedObject == null)
+            return false;
+
         if (_interactableMask.value == 0)
             _interactableMask = LayerMask.GetMask(INTERACTABLE_LAYER);
 
@@ -158,6 +180,32 @@ public class ObjectDragHandler : MonoBehaviour
 
         return hit.transform == _selectedObject
                || hit.transform.IsChildOf(_selectedObject);
+    }
+
+    /// <summary>
+    /// The furniture item under the pointer, resolved to the transform that owns it.
+    /// Colliders live on the model's mesh children, so a raw hit.transform is usually
+    /// a child — dragging that would move one mesh out of the item while
+    /// FurnitureItem (and therefore everything that saves the layout) stays put.
+    /// </summary>
+    private Transform InteractableUnder(Ray ray)
+    {
+        if (_interactableMask.value == 0)
+            _interactableMask = LayerMask.GetMask(INTERACTABLE_LAYER);
+
+        if (!Physics.Raycast(ray, out RaycastHit hit, PICK_DISTANCE, _interactableMask,
+                             QueryTriggerInteraction.Ignore))
+            return null;
+
+        FurnitureItem item = hit.transform.GetComponentInParent<FurnitureItem>();
+        return item != null ? item.transform : hit.transform;
+    }
+
+    private bool IsPlacing()
+    {
+        if (_placer == null)
+            _placer = FindAnyObjectByType<FurniturePlacer>(FindObjectsInactive.Include);
+        return _placer != null && _placer.IsPlacing;
     }
 
     /// <summary>World Y of the bottom of an item's visible bounds (its standing height).</summary>
@@ -259,6 +307,12 @@ public class ObjectDragHandler : MonoBehaviour
         }
 
         _selectedObject.position = targetPosition;
+
+        // ORIENTED footprint containment (the sweep above casts an axis-aligned box, so
+        // a rotated item was tested as its bounding square and its real corners could
+        // end up inside a wall). Exact against the room polygon from the document; a
+        // no-op in scenes without one, where the clamps above remain the only rule.
+        IBMROS.Designer.Furnish.RoomFootprint.ClampInside(_selectedObject, wallMargin);
     }
 
     // Collide-and-slide: move the footprint from 'from' toward 'to', stopping at

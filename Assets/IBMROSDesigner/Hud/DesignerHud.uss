@@ -197,6 +197,26 @@
     justify-content: center;
 }
 
+/* -------------------------------------------------------------------- hint
+   Transient one-line guidance / rejection feedback (currently the split tool).
+   Sits just above the bottom bar so it never covers the plan the user is aiming
+   at, and never takes input — a hint that swallows the next tap is worse than no
+   hint. Sized inline in the controller only where structure demands it; the look
+   lives here. */
+.hint {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 104px;
+    padding: 9px 14px;
+    background-color: rgba(20, 20, 22, 0.86);
+    border-radius: 12px;
+    color: rgb(248, 248, 250);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    white-space: normal;
+}
+
 .sheet {
     position: absolute;
     left: 12px;

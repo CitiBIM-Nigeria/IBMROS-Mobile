@@ -48,8 +48,21 @@ namespace Exoa.Cameras
         /// </summary>
         virtual protected void Update()
         {
+            // IBMROS: same fix as CameraOrthoBase — DisableMoves blocks USER input, not
+            // scripted camera animation (its own doc says so). Freezing the focus here
+            // meant any programmatic framing/focus requested while the rig was held (a
+            // furniture drag, a plan drag, the furnish UI) was dropped rather than
+            // deferred. Input stays suppressed; a scripted focus still completes.
             if (disableMoves)
+            {
+                if (isFocusing)
+                {
+                    HandleFocus();
+                    finalPosition = CalculatePosition(finalOffset, finalRotation, finalDistance);
+                    ApplyToCamera();
+                }
                 return;
+            }
 
             List<TouchFinger> twoFingers = CameraInputs.TwoFingerFilter.UpdateAndGetFingers();
             List<TouchFinger> oneFinger = CameraInputs.OneFingerFilter.UpdateAndGetFingers();

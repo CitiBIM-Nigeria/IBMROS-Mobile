@@ -6,7 +6,7 @@ using Grid = Exoa.Designer.Grid;
 namespace IBMROS.Designer.Plan
 {
     /// <summary>Which 2D tool is armed (owned by PlanTouchController).</summary>
-    public enum PlanToolMode { Browse, AddDoor, AddWindow, DrawRect }
+    public enum PlanToolMode { Browse, AddDoor, AddWindow, DrawRect, SplitRoom }
 
     /// <summary>
     /// Shared math/lookup helpers for the touch 2D editor. Everything is meters

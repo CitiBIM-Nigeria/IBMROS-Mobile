@@ -167,9 +167,21 @@ namespace IBMROS.Designer.Plan
             float needed = Mathf.Max(size.y * 0.5f, size.x * 0.5f / aspect);
             float orthoSize = needed * 1.35f; // margin for handles + dimension labels
 
-            ortho.SetResetValues(new Vector3(centre.x, 0f, centre.y),
-                Quaternion.Euler(90f, 0f, 0f), orthoSize);
-            ortho.ResetCamera();
+            Vector3 centre3 = new Vector3(centre.x, 0f, centre.y);
+
+            // Record the fit as the reset target, so a later user-triggered reset frames
+            // the same way...
+            ortho.SetResetValues(centre3, Quaternion.Euler(90f, 0f, 0f), orthoSize);
+
+            // ...but APPLY it directly rather than through ResetCamera's focus spring.
+            // That spring reports completion from the offset channel alone, so framing a
+            // room centred on the grid origin finished the offset in a few frames and cut
+            // the size animation off part-way (measured: 5.94 of a 6.94 target, leaving
+            // the side walls on the screen edges with their dimension labels outside the
+            // viewport). Entering 2D should snap to a correct frame anyway.
+            ortho.FinalOffset = centre3;
+            ortho.SetSizeImmediate(orthoSize);
+            ortho.SetPositionByOffset();
         }
 
         /// <summary>

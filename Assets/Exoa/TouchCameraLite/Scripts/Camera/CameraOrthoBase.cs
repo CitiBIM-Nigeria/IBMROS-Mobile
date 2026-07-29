@@ -45,8 +45,26 @@ namespace Exoa.Cameras
 
         void Update()
         {
+            // IBMROS: DisableMoves means "ignore USER input" — see its own doc comment
+            // on CameraBase: "This blocks the user input moves, in order to move/animate
+            // the camera by script". Returning from the whole Update also froze the
+            // scripted FOCUS animation, which is how programmatic framing is applied
+            // (PlanLookController.FramePlan → ResetCamera → FocusCamera). With the 2D
+            // plan holding the rig for its whole duration, that framing silently never
+            // landed: the plan opened at the prefab's serialized size instead of the
+            // computed fit, which is why a room's side walls sat exactly on the screen
+            // edges and their dimension labels fell outside the viewport.
+            // Keep input suppressed; let a scripted focus finish.
             if (disableMoves)
+            {
+                if (isFocusing)
+                {
+                    HandleFocus();
+                    finalPosition = CalculatePosition(finalOffset, finalRotation, finalDistance);
+                    ApplyToCamera();
+                }
                 return;
+            }
 
             List<TouchFinger> twoFingers = CameraInputs.TwoFingerFilter.UpdateAndGetFingers();
             List<TouchFinger> oneFinger = CameraInputs.OneFingerFilter.UpdateAndGetFingers();
@@ -172,6 +190,25 @@ namespace Exoa.Cameras
         }
 
 
+
+        /// <summary>
+        /// IBMROS: apply an orthographic size at once, with no focus spring.
+        ///
+        /// FocusCamera animates size, offset and rotation together but decides the focus
+        /// is FINISHED from the offset spring alone — HandleFocus passes OnFocusCompleted
+        /// only to the offset Update. So when the camera is already close to its target
+        /// position, which is exactly the case when framing a room centred on the grid
+        /// origin, the offset converges within a few frames and StopFocus cuts the size
+        /// spring off mid-flight: the view ends up part-way to the computed fit.
+        ///
+        /// Programmatic framing has to be exact rather than hoping the spring outlives
+        /// the position, so PlanLookController.FramePlan sets the size through here.
+        /// Still clamped to sizeMinMax, like every other size write.
+        /// </summary>
+        public void SetSizeImmediate(float size)
+        {
+            finalSize = Mathf.Clamp(size, sizeMinMax.x, sizeMinMax.y);
+        }
 
         /// <summary>
         /// Converts a distance from ground to a camera orthographic size

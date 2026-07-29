@@ -194,6 +194,10 @@ public class ObjectScaleHandler : MonoBehaviour
 
         // Keep object on floor after scaling
         SnapToFloor();
+
+        // Growing an item pushes its footprint outward, so scaling up against a wall
+        // used to drive the mesh into it — the only limits here were min/maxScale.
+        IBMROS.Designer.Furnish.RoomFootprint.ClampInside(_selectedObject);
     }
 
     private void SnapToFloor()

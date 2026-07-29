@@ -141,6 +141,12 @@ public class FurniturePlacer : MonoBehaviour
         _previewObject.transform.position = hit.point;
         ApplyFloorOffset(hit.point);
 
+        // Confirming a placement used to accept the tap position unconditionally: the
+        // floor raycast alone let an item land half inside a wall, and a rotated ghost
+        // could straddle one entirely. Pull the oriented footprint back into the room
+        // before the item becomes real (no-op where there is no document room).
+        IBMROS.Designer.Furnish.RoomFootprint.ClampInside(_previewObject.transform);
+
         SetPreviewMaterial(false);
         _previewItem.SetPlaced(true);
 

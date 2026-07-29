@@ -25,15 +25,27 @@ namespace IBMROS.Designer.Plan
     /// (SetNormalizedPosition + position + CreatePathVisualization — never raises
     /// document events), commits go through FloorPlanEditor (one undo step each),
     /// and final geometry is always computed from the points captured at drag
-    /// start, never from live preview state. Camera gestures are disabled during
-    /// drags via CameraEvents (same pattern the vendor CPC used).
+    /// start, never from live preview state. Camera gestures stand down during
+    /// drags via a PlanCameraGate reason, never by writing the vendor flag.
     ///
     /// Tap-to-select stays with SelectionService (collider raycast, 12 px/0.35 s);
     /// this class only ever starts drags on the already-selected item, openings,
     /// or armed tools, so the two input layers cannot fight.
+    ///
+    /// Camera arbitration is NOT done here: this class only raises and clears its own
+    /// reasons on PlanCameraGate, which owns the rig's DisableMoves flag. See that
+    /// class for why (four writers, no owner, undefined order).
     /// </summary>
+    [DefaultExecutionOrder(ORDER)]
     public sealed class PlanTouchController : MonoBehaviour
     {
+        /// <summary>
+        /// Classify the press before any camera samples the finger, so an empty-canvas
+        /// pan starts on the very frame it is recognised. After PlanCameraGate.ORDER,
+        /// ahead of the Exoa cameras (default 0).
+        /// </summary>
+        public const int ORDER = -400;
+
         public static PlanTouchController Instance { get; private set; }
 
         /// <summary>Raised when the armed tool changes.</summary>
@@ -100,35 +112,40 @@ namespace IBMROS.Designer.Plan
 
         private void OnEnable()
         {
+            PlanCameraGate.Ensure();
             DocumentEvents.OnDocumentChanged += HandleDocChanged;
             DesignerModeController.OnModeChanged += HandleModeChanged;
             SetCameraPanAllowed(false);
         }
 
         /// <summary>
-        /// Panning the plan is OPT-IN, not opt-out.
+        /// Panning the plan is OPT-IN, not opt-out: the rig is held for the whole of
+        /// Plan2D and released only for a gesture positively identified as starting on
+        /// EMPTY canvas. A press we fail to classify therefore does nothing at all,
+        /// instead of dragging the room out from under the user's finger.
         ///
-        /// The Exoa ortho rig pans on any one-finger drag. Previously it was left
-        /// enabled and switched off reactively when a press landed on furniture or
-        /// a handle — so anything that made us miss that press (a frame of ordering,
-        /// an input-backend difference on device, an over-UI veto) meant the camera
-        /// panned instead of the object moving, which is exactly the reported bug.
-        ///
-        /// Now the rig is muted for the whole of Plan2D and only un-muted for a
-        /// gesture we have positively identified as starting on EMPTY canvas.
-        /// A missed press therefore does nothing at all instead of dragging the
-        /// whole room out from under the user's finger.
+        /// This raises/clears ONE reason on PlanCameraGate rather than writing the
+        /// vendor flag. Writing it directly is what broke: the drag-state teardown
+        /// below runs on every frame of a furniture drag, and it used to hand the
+        /// camera back each time — so the plan panned while the finger dragged a sofa.
         /// </summary>
         private static void SetCameraPanAllowed(bool allowed)
         {
-            CameraEvents.OnRequestButtonAction?.Invoke(
-                CameraEvents.Action.DisableCameraMoves, !allowed);
+            PlanCameraGate.Set(PlanCameraGate.Reason.PlanMode, !allowed);
         }
 
         private void OnDisable()
         {
             DocumentEvents.OnDocumentChanged -= HandleDocChanged;
             DesignerModeController.OnModeChanged -= HandleModeChanged;
+
+            // Never leave our reasons held or the furniture stack blocked behind us —
+            // a disabled plan editor that still muted the camera would strand the rig.
+            PlanCameraGate.Release(PlanCameraGate.Reason.PlanDrag);
+            PlanCameraGate.Release(PlanCameraGate.Reason.PlanMode);
+            var drag = UnityEngine.Object.FindAnyObjectByType<ObjectDragHandler>(FindObjectsInactive.Include);
+            if (drag != null)
+                drag.SetBlocked(false);
         }
 
         // ------------------------------------------------------------------ tools
@@ -144,6 +161,20 @@ namespace IBMROS.Designer.Plan
             RectRoomTool rect = RectRoomTool.Instance;
             if (rect != null)
                 rect.SetActive(mode == PlanToolMode.DrawRect);
+
+            splitting = false;
+            if (Tool != PlanToolMode.SplitRoom && splitTool != null)
+                splitTool.Reset();     // never leave half a cut armed
+
+            // An ARMED tool owns the canvas outright. Furniture normally outranks plan
+            // geometry, and the drag handler grabs whatever interactable is under the
+            // pointer — so in a furnished room a tap meant for "place a door here" or
+            // "cut the room along this line" would ALSO pick up and drag the chair it
+            // happened to land on. Standing the furniture drag down while a tool is
+            // armed keeps one gesture to one meaning.
+            var drag = UnityEngine.Object.FindAnyObjectByType<ObjectDragHandler>(FindObjectsInactive.Include);
+            if (drag != null)
+                drag.SetBlocked(Tool != PlanToolMode.Browse);
 
             OnToolChanged?.Invoke(Tool);
         }
@@ -184,11 +215,29 @@ namespace IBMROS.Designer.Plan
 
         private static void DisableVendorCpcs()
         {
+            // The vendor's per-control-point length label duplicates DimensionLabels
+            // (two numbers on every wall). ControlPoint honours this flag from inside
+            // UpdateLabel, which is the only durable place — see the flag's docs.
+            ControlPoint.SuppressLengthLabels = true;
+
             foreach (ControlPointsController cpc in
                      UnityEngine.Object.FindObjectsByType<ControlPointsController>(FindObjectsSortMode.None))
             {
                 if (cpc.enabled)
                     cpc.enabled = false;
+
+                // Hide labels that are already up: the flag alone only takes effect on
+                // the next UpdateLabel, so without this pass the duplicates linger
+                // until something changes the path.
+                List<ControlPoint> cps = cpc.GetPointsList();
+                if (cps != null)
+                {
+                    foreach (ControlPoint cp in cps)
+                    {
+                        if (cp != null && cp.canvas != null && cp.canvas.gameObject.activeSelf)
+                            cp.canvas.gameObject.SetActive(false);
+                    }
+                }
 
                 // Disabling a CPC before its first frame means its Start() — where
                 // the wall-line styling lives — never runs. Style here instead:
@@ -225,12 +274,23 @@ namespace IBMROS.Designer.Plan
             var furnish = IBMROS.Designer.Furnish.FurnishModeAdapter.Instance;
             if (furnish != null && (furnish.FurnishUiActive || furnish.FurnitureOwnsInput))
             {
-                CancelDrag();
+                // Only tear down when we actually have something in flight. Calling
+                // this unconditionally every frame is how the teardown's camera
+                // hand-back used to fire ~60 times a second during a furniture drag.
+                if (IsDragging || pressedInsideRoom || pressedEmptyCanvas)
+                    CancelDrag();
                 return;
             }
 
             if (PointerDown())
                 OnPointerDown(PointerPos());
+            else if (splitting)
+            {
+                if (PointerHeld())
+                    OnSplitAim(PointerPos());
+                if (PointerUp())
+                    OnSplitRelease(PointerPos());
+            }
             else if (IsDragging || pressedInsideRoom || pressedEmptyCanvas)
             {
                 if (PointerHeld())
@@ -238,6 +298,34 @@ namespace IBMROS.Designer.Plan
                 if (PointerUp())
                     OnPointerUp();
             }
+        }
+
+        // ------------------------------------------------------------------ split tool
+
+        private SplitRoomTool splitTool;
+        private bool splitting;
+
+        private void EnsureSplitTool()
+        {
+            if (splitTool == null)
+                splitTool = gameObject.GetComponent<SplitRoomTool>() ?? gameObject.AddComponent<SplitRoomTool>();
+        }
+
+        private void OnSplitAim(Vector2 screenPos)
+        {
+            if (splitTool == null || !PlanEditorUtil.ScreenToGround(screenPos, out Vector3 gw))
+                return;
+            splitTool.Aim(PlanEditorUtil.WorldToMeters(gw));
+        }
+
+        private void OnSplitRelease(Vector2 screenPos)
+        {
+            splitting = false;
+            if (splitTool == null || !PlanEditorUtil.ScreenToGround(screenPos, out Vector3 gw))
+                return;
+            bool wasDrag = (screenPos - pressScreenPos).magnitude > TAP_MAX_MOVE_PX;
+            if (splitTool.Release(PlanEditorUtil.WorldToMeters(gw), wasDrag))
+                OnPlanVisualsDirty?.Invoke();
         }
 
         // Single-pointer abstraction: first touch on device, left mouse in editor.
@@ -306,15 +394,24 @@ namespace IBMROS.Designer.Plan
                 return;
             }
 
-            // 0) FURNITURE outranks room geometry. The furniture stack owns this
-            //    gesture, so bail before touching walls and leave the camera
-            //    suppressed (ObjectManipulator re-enables it on release).
-            if (PressedOnFurniture(screenPos))
+            // Split: anchor here, aim while held, cut on release.
+            if (Tool == PlanToolMode.SplitRoom)
             {
-                CameraEvents.OnRequestButtonAction?.Invoke(
-                    CameraEvents.Action.DisableCameraMoves, true);
+                EnsureSplitTool();
+                if (!splitTool.HasAnchor)
+                    splitTool.Press(ground);
+                else
+                    splitTool.Aim(ground);
+                splitting = true;
                 return;
             }
+
+            // 0) FURNITURE outranks room geometry. The furniture stack owns this
+            //    gesture, so bail before touching walls. Nothing to do about the
+            //    camera: PlanMode is held for the whole of Plan2D, and the furnish
+            //    adapter raises its own reason for the duration of the manipulation.
+            if (PressedOnFurniture(screenPos))
+                return;
 
             float pxPerM = PlanEditorUtil.PixelsPerMeter();
             float handleRadM = HANDLE_RADIUS_PX / pxPerM;
@@ -408,10 +505,9 @@ namespace IBMROS.Designer.Plan
                     dragItem = ui;
                     grabMeters = ground;
                     startMeters = MetersOf(pts);
-                    // Suppress the camera up-front: the pan must not start while
-                    // we wait for slop to decide this is a room move.
-                    CameraEvents.OnRequestButtonAction?.Invoke(
-                        CameraEvents.Action.DisableCameraMoves, true);
+                    // Hold up-front: the pan must not start while we wait for slop
+                    // to decide whether this is a room move.
+                    PlanCameraGate.Hold(PlanCameraGate.Reason.PlanDrag);
                     return;
                 }
             }
@@ -443,7 +539,7 @@ namespace IBMROS.Designer.Plan
             grabMeters = ground;
             moved = false;
             startMeters = MetersOf(PlanEditorUtil.WorldPoints(item));
-            CameraEvents.OnRequestButtonAction?.Invoke(CameraEvents.Action.DisableCameraMoves, true);
+            PlanCameraGate.Hold(PlanCameraGate.Reason.PlanDrag);
         }
 
         // ------------------------------------------------------------------ move
@@ -461,7 +557,7 @@ namespace IBMROS.Designer.Plan
                     return;
                 drag = DragKind.Room;
                 moved = false;
-                CameraEvents.OnRequestButtonAction?.Invoke(CameraEvents.Action.DisableCameraMoves, true);
+                PlanCameraGate.Hold(PlanCameraGate.Reason.PlanDrag);
             }
 
             if (!IsDragging)
@@ -618,10 +714,14 @@ namespace IBMROS.Designer.Plan
 
         private void ClearDragState()
         {
-            // Always hand the camera back — an inside-press that never passed the
-            // slop threshold also suppressed it, and gating this on `drag` left
-            // the plan un-pannable for the rest of the session.
-            CameraEvents.OnRequestButtonAction?.Invoke(CameraEvents.Action.DisableCameraMoves, false);
+            // Clear ONLY our own drag reason. This used to hand the whole camera back
+            // unconditionally, which cancelled the Plan2D hold and the furnish
+            // adapter's hold alike — and because Update() called it on every frame that
+            // furniture owned the pointer, it re-enabled the ortho pan ~60 times a
+            // second mid-drag. That is the "dragging the chair moves the whole
+            // building" bug. An unheld reason clears to a no-op, so an inside-press
+            // that never passed slop is still released here.
+            PlanCameraGate.Release(PlanCameraGate.Reason.PlanDrag);
             drag = DragKind.None;
             dragItem = null;
             startMeters = null;

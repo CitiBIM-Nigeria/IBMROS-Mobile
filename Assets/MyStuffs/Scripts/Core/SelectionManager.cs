@@ -59,18 +59,37 @@ public class SelectionManager : MonoBehaviour
 
         if (Physics.Raycast(ray, out hit, 100f, interactableLayer))
         {
-            if (_selectedObject == hit.transform)
+            Transform target = ResolveSelectable(hit.transform);
+
+            if (_selectedObject == target)
             {
-                onObjectReSelected?.Invoke(hit.transform);
+                onObjectReSelected?.Invoke(target);
                 return;
             }
 
-            SelectObject(hit.transform);
+            SelectObject(target);
         }
         else
         {
             DeselectObject();
         }
+    }
+
+    /// <summary>
+    /// Walks a collider hit up to the transform that OWNS the furniture item.
+    ///
+    /// FurnitureSpawnManager puts a MeshCollider on every mesh child, so a raw hit is
+    /// usually a child of the model while FurnitureItem sits on the root. Selecting the
+    /// child made every downstream operation act on one mesh instead of the item: drag
+    /// and rotate moved part of the model, Delete hid a single mesh, Duplicate cloned a
+    /// fragment, and FurniturePersistence — which saves FurnitureItem.transform — wrote
+    /// the untouched root, so a saved room did not match what the user had arranged.
+    /// Anything without a FurnitureItem (scene props, handles) selects as-is.
+    /// </summary>
+    private static Transform ResolveSelectable(Transform hit)
+    {
+        FurnitureItem item = hit.GetComponentInParent<FurnitureItem>();
+        return item != null ? item.transform : hit;
     }
 
     // --- PUBLIC METHODS (Called by ObjectManipulator) ---

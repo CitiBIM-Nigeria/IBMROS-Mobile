@@ -38,7 +38,8 @@ namespace IBMROS.Designer.Hud
         private Button back, shot, undo, redo;
         private VisualElement browseBar, editBar, viewBar, sheet;
         private Button btnOpen3D, btnEditWalls, btnAddFurn2D;
-        private Button btnDone, btnDrawWall, btnResize, btnAddOpening;
+        private Button btnDone, btnDrawWall, btnResize, btnSplit, btnAddOpening;
+        private Label hint;
         private Button btnOpen2D, btnAddFurn3D;
         private TextField widthField, lengthField, ceilField, thickField;
         private Button sheetApply, sheetClose;
@@ -65,7 +66,9 @@ namespace IBMROS.Designer.Hud
             btnDone = root.Q<Button>("DoneButton");
             btnDrawWall = root.Q<Button>("BtnDrawWall");
             btnResize = root.Q<Button>("BtnResize");
+            btnSplit = root.Q<Button>("BtnSplit");
             btnAddOpening = root.Q<Button>("BtnAddOpening");
+            hint = root.Q<Label>("HintLabel");
             btnOpen2D = root.Q<Button>("BtnOpen2D");
             btnAddFurn3D = root.Q<Button>("BtnAddFurn3D");
 
@@ -86,6 +89,7 @@ namespace IBMROS.Designer.Hud
             BindIcon("AddIcon3D", DrawPlusIcon);
             BindIcon("DrawWallIcon", DrawPencilIcon);
             BindIcon("ResizeIcon", DrawResizeIcon);
+            BindIcon("SplitIcon", DrawSplitIcon);
             BindIcon("AddOpeningIcon", DrawPlusIcon);
 
             back.clicked += OnBack;
@@ -110,6 +114,8 @@ namespace IBMROS.Designer.Hud
             // menu is deliberately not exposed in this workflow).
             btnAddOpening.clicked += OnFurnish;
             btnResize.clicked += OpenSheet;
+            btnSplit.clicked += () =>
+                PlanTouchController.Instance?.SetTool(PlanToolMode.SplitRoom);
 
             sheetApply.clicked += ApplySheet;
             sheetClose.clicked += () => ShowSheet(false);
@@ -118,6 +124,7 @@ namespace IBMROS.Designer.Hud
             DesignerModeController.OnModeChanged += RefreshMode;
             PlanTouchController.OnToolChanged += RefreshToolStates;
             PlanTouchController.OnEmptyCanvasTap += ExitEditingOnEmptyTap;
+            Plan.SplitRoomTool.OnHint += ShowHint;
 
             ApplySafeArea();
             RefreshHistoryButtons();
@@ -134,6 +141,21 @@ namespace IBMROS.Designer.Hud
             DesignerModeController.OnModeChanged -= RefreshMode;
             PlanTouchController.OnToolChanged -= RefreshToolStates;
             PlanTouchController.OnEmptyCanvasTap -= ExitEditingOnEmptyTap;
+            Plan.SplitRoomTool.OnHint -= ShowHint;
+        }
+
+        /// <summary>
+        /// One-line tool guidance / rejection feedback. Empty hides it. Feedback matters
+        /// most on the failure path: FloorPlanEditor.SplitRoom returns (null, null) when
+        /// a line does not cleanly divide a room, which without this is indistinguishable
+        /// from a dead tap.
+        /// </summary>
+        private void ShowHint(string message)
+        {
+            if (hint == null)
+                return;
+            hint.text = message ?? string.Empty;
+            hint.style.display = string.IsNullOrEmpty(hint.text) ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         /// <summary>
@@ -332,6 +354,35 @@ namespace IBMROS.Designer.Hud
             p.Stroke();
         }
 
+        /// <summary>Room outline with a dashed cut down the middle.</summary>
+        private static void DrawSplitIcon(MeshGenerationContext ctx)
+        {
+            Rect r = ctx.visualElement.contentRect;
+            var p = ctx.painter2D;
+            float w = r.width, h = r.height;
+            p.strokeColor = iconColor;
+            p.lineWidth = 2.2f;
+            p.lineJoin = LineJoin.Round;
+            p.BeginPath();
+            p.MoveTo(new Vector2(w * 0.16f, h * 0.2f));
+            p.LineTo(new Vector2(w * 0.84f, h * 0.2f));
+            p.LineTo(new Vector2(w * 0.84f, h * 0.8f));
+            p.LineTo(new Vector2(w * 0.16f, h * 0.8f));
+            p.ClosePath();
+            p.Stroke();
+            // dashed dividing line
+            p.lineCap = LineCap.Butt;
+            for (int i = 0; i < 4; i++)
+            {
+                float y0 = h * (0.22f + i * 0.15f);
+                float y1 = y0 + h * 0.09f;
+                p.BeginPath();
+                p.MoveTo(new Vector2(w * 0.5f, y0));
+                p.LineTo(new Vector2(w * 0.5f, y1));
+                p.Stroke();
+            }
+        }
+
         private static void DrawPlusIcon(MeshGenerationContext ctx)
         {
             Rect r = ctx.visualElement.contentRect;
@@ -511,6 +562,11 @@ namespace IBMROS.Designer.Hud
         private void RefreshToolStates(PlanToolMode tool)
         {
             SetArmed(btnDrawWall, tool == PlanToolMode.DrawRect);
+            SetArmed(btnSplit, tool == PlanToolMode.SplitRoom);
+            if (tool == PlanToolMode.SplitRoom)
+                ShowHint("Press inside a room, drag across it, let go to divide");
+            else
+                ShowHint(string.Empty);
         }
 
         private static void SetArmed(Button b, bool armed)
