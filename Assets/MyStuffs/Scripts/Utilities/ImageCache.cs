@@ -3,8 +3,29 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
-//using WebP;
+using WebP;
 
+/// <summary>
+/// Downloads, decodes and caches catalog imagery.
+///
+/// FORMAT CONTRACT (verified against S3, not inferred from docs). The ingestion
+/// pipeline's background-removal step writes exactly two WebP objects per product
+/// variant, both derived from the original photo:
+///
+///   images/{variant}/display.webp         transparent cutout, full size
+///   images/{variant}/display_thumb.webp   transparent cutout, 400 px
+///   images/{variant}/display_original.jpg the un-removed original — ALWAYS present
+///
+/// WebP is therefore the primary format and is not optional: the transparency is the
+/// entire point of the background-removal step, and only the WebP objects carry it.
+/// When a decode fails for any reason the fallback is the ORIGINAL JPEG — a degraded
+/// but always-available image. There is deliberately no PNG in this chain: no PNG is
+/// ever written, so the old ".webp -> .png" rewrite could only ever 403.
+///
+/// Model textures are NOT part of this: they are embedded inside each variant's
+/// self-contained model.glb as PNG/JPEG and are decoded by glTFast. Nothing here
+/// touches them.
+/// </summary>
 public static class ImageCache
 {
     private const int MAX_TEXTURES = 50;
@@ -51,12 +72,16 @@ public static class ImageCache
         {
             var texture = await DownloadTexture(url);
 
-            // If WebP failed fall back to PNG
+            // WebP unavailable → the original JPEG, which exists for every variant.
             if (texture == null && url.EndsWith(".webp"))
             {
-                string pngUrl = url.Replace(".webp", ".png");
-                Debug.Log($"[ImageCache] WebP failed, trying PNG: {pngUrl}");
-                texture = await DownloadTexture(pngUrl);
+                string jpgUrl = OriginalJpegUrl(url);
+                if (!string.IsNullOrEmpty(jpgUrl))
+                {
+                    Debug.LogWarning($"[ImageCache] WebP unusable, falling back to the " +
+                                     $"original JPEG (no transparency): {jpgUrl}");
+                    texture = await DownloadTexture(jpgUrl);
+                }
             }
 
             if (texture != null)
@@ -68,6 +93,23 @@ public static class ImageCache
         {
             _inProgress.Remove(url);
         }
+    }
+
+    /// <summary>
+    /// The degraded fallback for a WebP URL: the original photo in the same variant
+    /// folder. Both `display.webp` and `display_thumb.webp` sit beside
+    /// `display_original.jpg`, so this swaps the file name and keeps the path.
+    /// Returns null for anything that is not one of those two.
+    /// </summary>
+    private static string OriginalJpegUrl(string webpUrl)
+    {
+        int slash = webpUrl.LastIndexOf('/');
+        if (slash < 0)
+            return null;
+        string file = webpUrl.Substring(slash + 1);
+        if (file != "display.webp" && file != "display_thumb.webp")
+            return null;
+        return webpUrl.Substring(0, slash + 1) + "display_original.jpg";
     }
 
     // Add a texture to the in-memory LRU cache, evicting the oldest if at limit.
@@ -87,22 +129,10 @@ public static class ImageCache
         _accessOrder.AddFirst(url);
     }
 
-    /// <summary>
-    /// Download + decode a texture WITHOUT putting it in the shared LRU cache.
-    /// Use for long-lived textures (e.g. textures applied to spawned 3D models)
-    /// that must not be Destroy()'d by cache eviction. Handles webp/png/jpg, with
-    /// the same .webp→.png fallback. Caller owns the returned Texture2D.
-    /// </summary>
-    public static async Task<Texture2D> LoadTextureUncached(string url)
-    {
-        if (string.IsNullOrEmpty(url)) return null;
-        var fromDisk = LoadFromDisk(url);
-        if (fromDisk != null) return fromDisk;
-        var texture = await DownloadTexture(url);
-        if (texture == null && url.EndsWith(".webp"))
-            texture = await DownloadTexture(url.Replace(".webp", ".png"));
-        return texture;
-    }
+    // LoadTextureUncached: removed 2026-07-29 along with the colour-swap workflow in
+    // FurnitureModelLoader, which was its only caller. It existed so model textures
+    // could bypass the LRU cache's Destroy()-on-evict; per-variant GLBs made it
+    // redundant.
 
     private static async Task<Texture2D> DownloadTexture(string url)
     {
@@ -133,8 +163,17 @@ public static class ImageCache
                 return null;
             }
 
-            SaveToDisk(url, data);          // persist for instant load next launch
-            return DecodeBytes(data, url);
+            // DECODE FIRST, THEN PERSIST. The old order saved the bytes before
+            // decoding, so a file we cannot turn into a texture was still written to
+            // disk — and LoadFromDisk then re-decoded and re-failed it on every launch,
+            // forever, without ever re-downloading. That is how a temporarily
+            // undecodable WebP became a permanent hole in the catalogue.
+            Texture2D decoded = DecodeBytes(data, url);
+            if (decoded == null)
+                return null;
+
+            SaveToDisk(url, data);          // only what we know we can read back
+            return decoded;
         }
         catch (Exception e)
         {
@@ -163,6 +202,40 @@ public static class ImageCache
     private static string DiskDir =>
         System.IO.Path.Combine(Application.persistentDataPath, "ImageCache");
 
+    /// <summary>
+    /// Bumped when previously-cached bytes can no longer be trusted. v2: everything
+    /// written before the decode-then-persist fix could be an undecodable WebP that
+    /// would keep failing from disk forever, so the whole directory is dropped once.
+    /// A marker file records the migration, so this costs one file check per launch.
+    /// </summary>
+    private const int DISK_CACHE_VERSION = 2;
+    private static bool _diskChecked;
+
+    private static void EnsureDiskCacheVersion()
+    {
+        if (_diskChecked)
+            return;
+        _diskChecked = true;
+        try
+        {
+            string marker = System.IO.Path.Combine(DiskDir, $".v{DISK_CACHE_VERSION}");
+            if (System.IO.File.Exists(marker))
+                return;
+            if (System.IO.Directory.Exists(DiskDir))
+            {
+                System.IO.Directory.Delete(DiskDir, true);
+                Debug.Log("[ImageCache] Cleared the old disk cache " +
+                          $"(migrating to v{DISK_CACHE_VERSION}).");
+            }
+            System.IO.Directory.CreateDirectory(DiskDir);
+            System.IO.File.WriteAllText(marker, "");
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[ImageCache] disk cache migration failed: {e.Message}");
+        }
+    }
+
     private static string DiskPath(string url)
     {
         string ext = url.EndsWith(".webp") ? ".webp"
@@ -176,6 +249,7 @@ public static class ImageCache
     {
         try
         {
+            EnsureDiskCacheVersion();
             System.IO.Directory.CreateDirectory(DiskDir);
             System.IO.File.WriteAllBytes(DiskPath(url), data);
         }
@@ -189,9 +263,18 @@ public static class ImageCache
     {
         try
         {
+            EnsureDiskCacheVersion();
             string p = DiskPath(url);
             if (!System.IO.File.Exists(p)) return null;
-            return DecodeBytes(System.IO.File.ReadAllBytes(p), url);
+            Texture2D fromDisk = DecodeBytes(System.IO.File.ReadAllBytes(p), url);
+            if (fromDisk == null)
+            {
+                // Belt and braces alongside decode-then-persist: if a cached file ever
+                // does turn out to be unreadable, drop it so the next request
+                // re-downloads instead of failing from disk for the rest of time.
+                try { System.IO.File.Delete(p); } catch { }
+            }
+            return fromDisk;
         }
         catch
         {
@@ -199,9 +282,15 @@ public static class ImageCache
         }
     }
 
+    /// <summary>
+    /// Decode via libwebp (com.netpyoung.webp). Catches DllNotFoundException on its own
+    /// rather than letting it escape: if the native library is ever missing for a
+    /// platform, every product image degrades to its original JPEG instead of the whole
+    /// catalogue rendering blank.
+    /// </summary>
     private static Texture2D DecodeWebP(byte[] data, string url)
     {
-        /*try
+        try
         {
             Error error = Error.Success;
             Texture2D tex = Texture2DExt.CreateTexture2DFromWebP(
@@ -224,16 +313,29 @@ public static class ImageCache
                 return null;
             }
 
-            Debug.Log($"[ImageCache] WebP decoded: {tex.width}x{tex.height} | {url}");
             return tex;
+        }
+        catch (DllNotFoundException e)
+        {
+            // Native libwebp absent/unloadable on this platform — log once loudly,
+            // because it means every image on this build is running degraded.
+            if (!_warnedMissingNative)
+            {
+                _warnedMissingNative = true;
+                Debug.LogError("[ImageCache] libwebp native library is not available on " +
+                               $"this platform ({Application.platform}) — all product " +
+                               $"images will fall back to their original JPEG. {e.Message}");
+            }
+            return null;
         }
         catch (Exception e)
         {
             Debug.LogWarning($"[ImageCache] WebP exception: {e.Message} | {url}");
             return null;
-        }*/
-        return null;
+        }
     }
+
+    private static bool _warnedMissingNative;
 
     public static void Clear()
     {

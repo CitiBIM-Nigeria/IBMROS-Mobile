@@ -19,7 +19,7 @@ public class FurnitureModelLoader : MonoBehaviour
     // Bump this string whenever the pipeline re-uploads models at the SAME S3
     // paths (e.g. after a re-scrape). On startup, if the cached version differs,
     // the whole model cache is wiped so old bytes can't be served. This is what
-    // stops a stale, texture-stripped mesh.glb from loading after a re-scrape.
+    // stops a stale, texture-stripped model.glb from loading after a re-scrape.
     private const string CacheVersion = "2026-06-23-per-colour-clean";
 
     void Awake()
@@ -296,78 +296,18 @@ public class FurnitureModelLoader : MonoBehaviour
         }
     }
 
-    // ---------------------------------------------------------------
-    // COLOUR SWAP (texture-swap workflow)
-    // ---------------------------------------------------------------
-
-    // baseColor textures live on spawned models, so they must NOT go through the
-    // shared LRU cache (which can Destroy() them). We hold them here instead, keyed
-    // by URL, so repeat swaps are instant. Call ClearBaseColorCache when leaving a
-    // product to free them.
-    private readonly Dictionary<string, Texture2D> _baseColorCache = new();
-
-    private async Task<Texture2D> GetBaseColorTexture(string url)
-    {
-        if (string.IsNullOrEmpty(url)) return null;
-        if (_baseColorCache.TryGetValue(url, out var cached) && cached != null)
-            return cached;
-        var tex = await ImageCache.LoadTextureUncached(url);
-        if (tex != null) _baseColorCache[url] = tex;
-        return tex;
-    }
-
-    // Recolour an already-loaded model by swapping the baseColor (fabric) texture
-    // on its material. The shared mesh.glb already embeds the PRIMARY colour, so
-    // this is only needed to switch to a different colour.
-    public async Task ApplyBaseColor(GameObject model, string baseColorUrl)
-    {
-        if (model == null || string.IsNullOrEmpty(baseColorUrl))
-            return;
-
-        var tex = await GetBaseColorTexture(baseColorUrl);
-        if (tex == null)
-        {
-            Debug.LogWarning($"[FurnitureModelLoader] baseColor load failed: {baseColorUrl}");
-            return;
-        }
-
-        int applied = 0;
-        foreach (var renderer in model.GetComponentsInChildren<Renderer>(true))
-        {
-            foreach (var mat in renderer.materials)
-            {
-                if (mat == null) continue;
-                if (mat.HasProperty("_BaseMap"))
-                {
-                    mat.SetTexture("_BaseMap", tex);
-                    if (mat.HasProperty("_BaseColor"))
-                        mat.SetColor("_BaseColor", Color.white);
-                    applied++;
-                }
-                else if (mat.HasProperty("baseColorTexture"))
-                {
-                    mat.SetTexture("baseColorTexture", tex);
-                    applied++;
-                }
-            }
-        }
-        Debug.Log($"[FurnitureModelLoader] Recoloured {applied} material(s) on {model.name}.");
-    }
-
-    // Pre-download the other colours' textures when a product opens so a later
-    // swap is instant. Fire-and-forget.
-    public async Task PrefetchBaseColor(string baseColorUrl)
-    {
-        await GetBaseColorTexture(baseColorUrl);
-    }
-
-    // Free the held baseColor textures (call when leaving a product / room).
-    public void ClearBaseColorCache()
-    {
-        foreach (var tex in _baseColorCache.Values)
-            if (tex != null) Destroy(tex);
-        _baseColorCache.Clear();
-    }
+    // COLOUR SWAP: removed 2026-07-29. This was a texture-swap workflow that fetched a
+    // per-variant `base_color.webp` and re-assigned _BaseMap on a loaded model. Nothing
+    // called any of it — ApplyBaseColor, PrefetchBaseColor, ClearBaseColorCache,
+    // GetBaseColorTexture and _baseColorCache all had zero references — because colour
+    // variants moved to one self-contained GLB PER VARIANT
+    // (models/variants/{variant}/model.glb, selected via ProductVariant.ModelUrl), so
+    // there is nothing left to re-texture. The pipeline stopped writing base_color at
+    // the same time; its header comment claiming otherwise was simply stale.
+    //
+    // Do not reintroduce this to "support WebP model textures": model textures are
+    // embedded in the GLB as PNG/JPEG and glTFast handles them. The WebP decoder exists
+    // for catalogue DISPLAY images only.
 
     // Clears the entire local model cache
     public void ClearCache()
