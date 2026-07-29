@@ -102,6 +102,27 @@ namespace IBMROS.Designer.Plan
         {
             DocumentEvents.OnDocumentChanged += HandleDocChanged;
             DesignerModeController.OnModeChanged += HandleModeChanged;
+            SetCameraPanAllowed(false);
+        }
+
+        /// <summary>
+        /// Panning the plan is OPT-IN, not opt-out.
+        ///
+        /// The Exoa ortho rig pans on any one-finger drag. Previously it was left
+        /// enabled and switched off reactively when a press landed on furniture or
+        /// a handle — so anything that made us miss that press (a frame of ordering,
+        /// an input-backend difference on device, an over-UI veto) meant the camera
+        /// panned instead of the object moving, which is exactly the reported bug.
+        ///
+        /// Now the rig is muted for the whole of Plan2D and only un-muted for a
+        /// gesture we have positively identified as starting on EMPTY canvas.
+        /// A missed press therefore does nothing at all instead of dragging the
+        /// whole room out from under the user's finger.
+        /// </summary>
+        private static void SetCameraPanAllowed(bool allowed)
+        {
+            CameraEvents.OnRequestButtonAction?.Invoke(
+                CameraEvents.Action.DisableCameraMoves, !allowed);
         }
 
         private void OnDisable()
@@ -134,6 +155,12 @@ namespace IBMROS.Designer.Plan
                 CancelDrag();
                 if (Tool != PlanToolMode.Browse)
                     SetTool(PlanToolMode.Browse);
+                // 3D owns its own camera (walkthrough / orbit) — hand control back.
+                SetCameraPanAllowed(true);
+            }
+            else
+            {
+                SetCameraPanAllowed(false); // opt-in per gesture, see the helper
             }
         }
 
@@ -393,8 +420,7 @@ namespace IBMROS.Designer.Plan
             //    if it turns out to be a TAP (not the start of a pan) it means
             //    "nothing here" and the HUD leaves Edit Walls on release.
             pressedEmptyCanvas = true;
-            CameraEvents.OnRequestButtonAction?.Invoke(
-                CameraEvents.Action.DisableCameraMoves, false);
+            SetCameraPanAllowed(true);   // only this gesture, re-muted on release
         }
 
         private static readonly int FURNITURE_MASK = 1 << 6; // Interactable
@@ -567,6 +593,7 @@ namespace IBMROS.Designer.Plan
             }
 
             ClearDragState();
+            SetCameraPanAllowed(false);  // gesture over — back to opt-in
             OnPlanVisualsDirty?.Invoke();
 
             if (emptyTap)
