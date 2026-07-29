@@ -87,13 +87,42 @@ namespace IBMROS.Designer.ThreeD
                 ScheduleProbeRefresh();
         }
 
+        /// <summary>Gradient sky shown through openings in 3D. Resources so it ships.</summary>
+        private const string SKY_MATERIAL = "Sky/Sky_Daylight";
+        private static Material sky;
+
         private void ApplyBackground(DesignerMode mode)
         {
             Camera cam = Camera.main;
             if (cam == null)
                 return;
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = mode == DesignerMode.Plan2D ? BG_PLAN : BG_3D;
+
+            if (mode == DesignerMode.Plan2D)
+            {
+                // The plan is a drawing: flat paper, no horizon.
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = BG_PLAN;
+                return;
+            }
+
+            // A window used to look out onto the camera's flat clear colour, because the
+            // scene had no skybox assigned at all (m_SkyboxMaterial: 0) and the camera
+            // cleared to a solid grey. So the one thing that makes an interior read as
+            // real — that you can see OUT of it — was simply absent: every opening was a
+            // grey rectangle. A gradient sky costs nothing on mobile (no cubemap, no
+            // texture fetch) and gives openings a horizon.
+            if (sky == null)
+                sky = Resources.Load<Material>(SKY_MATERIAL);
+            if (sky != null)
+            {
+                RenderSettings.skybox = sky;
+                cam.clearFlags = CameraClearFlags.Skybox;
+            }
+            else
+            {
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = BG_3D;
+            }
         }
 
         private void ScheduleProbeRefresh()

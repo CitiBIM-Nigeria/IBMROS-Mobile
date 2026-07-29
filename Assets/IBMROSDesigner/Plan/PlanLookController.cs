@@ -51,9 +51,18 @@ namespace IBMROS.Designer.Plan
         // rig's Start order vs ours is unreliable, so no save/restore dance)
         // Interiors have no baked bounce, so ambient carries the room: lifted
         // well above the outdoor-ish defaults or walls read flat gray.
-        private static readonly Color AMBIENT_SKY = new Color(0.86f, 0.87f, 0.90f);
-        private static readonly Color AMBIENT_EQUATOR = new Color(0.72f, 0.71f, 0.69f);
-        private static readonly Color AMBIENT_GROUND = new Color(0.45f, 0.43f, 0.40f);
+        //
+        // THE GROUND TERM IS WHY CEILINGS LOOKED DIRTY GREY. Trilight ambient is a
+        // gradient sampled by surface NORMAL, and a ceiling faces DOWN — so it takes
+        // the GROUND colour, not the sky one. At 0.45 that painted every ceiling a
+        // mid-grey no matter which white material was assigned to it, which is exactly
+        // the olive-grey ceiling in the reports. Outdoors a dark ground term is right
+        // (soil absorbs); INSIDE a room the "ground" is a lit floor bouncing light back
+        // up, so it belongs close to the equator value. Raised to 0.74 — near-uniform
+        // interior ambient, which is what baked GI would have produced anyway.
+        private static readonly Color AMBIENT_SKY = new Color(0.92f, 0.93f, 0.95f);
+        private static readonly Color AMBIENT_EQUATOR = new Color(0.88f, 0.87f, 0.85f);
+        private static readonly Color AMBIENT_GROUND = new Color(0.88f, 0.86f, 0.82f);
 
         private void Awake()
         {
@@ -194,6 +203,18 @@ namespace IBMROS.Designer.Plan
         /// </summary>
         private void SetPlanVisualsVisible(bool visible)
         {
+            // The editor grid is drawing-surface furniture: a quad of white gridlines at
+            // y ≈ -0.1 that belongs under the PLAN. Left on in 3D it is what you see
+            // THROUGH a window — the room appears to float over graph paper instead of
+            // over ground — so it goes away with the rest of the plan chrome.
+            Exoa.Designer.Grid grid = PlanEditorUtil.SceneGrid;
+            if (grid != null)
+            {
+                foreach (Renderer r in grid.GetComponentsInChildren<Renderer>(true))
+                    if (r.enabled != visible)
+                        r.enabled = visible;
+            }
+
             foreach (var cpc in FindObjectsByType<Exoa.Designer.ControlPointsController>(FindObjectsSortMode.None))
             {
                 var lr = cpc.GetComponent<LineRenderer>();
