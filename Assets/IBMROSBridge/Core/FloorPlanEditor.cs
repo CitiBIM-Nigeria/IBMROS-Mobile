@@ -249,6 +249,17 @@ namespace IBMROS.Core
             target.normalizedPositions = normalized;
             bool isRoom = ui.sequencingItemType == FloorMapItemType.Room ||
                           ui.sequencingItemType == FloorMapItemType.Outside;
+
+            // An opening is a HOLE in someone's wall, so moving one has to rebuild
+            // the wall it is leaving as well as the wall it is arriving at —
+            // otherwise the old hole stays punched and the new one is never cut.
+            // Capture the departure position before the points move.
+            List<Vector3> beforeWorld = null;
+            if (!isRoom)
+            {
+                beforeWorld = new List<Vector3>(ui.cpc.GetPointsWorldPositionList());
+            }
+
             using (BeginAction("Move Points"))
             {
                 // Same in-place recipe the A5 reconciler uses for geometry restores.
@@ -257,6 +268,14 @@ namespace IBMROS.Core
                 // (the host registry lets them follow even a large move).
                 if (isRoom && ui.drawer is Exoa.Designer.SpaceController sc)
                     ScopedRebuild.RepositionOpeningsNear(sc);
+                else if (!isRoom)
+                {
+                    // Old host first (close), then the new one (cut). Both go through
+                    // the scoped rebuild so untouched rooms are left alone.
+                    if (beforeWorld != null && beforeWorld.Count > 0)
+                        ScopedRebuild.ForOpeningPositions(beforeWorld);
+                    ScopedRebuild.ForOpeningPositions(ui.cpc.GetPointsWorldPositionList());
+                }
                 DocumentEvents.RaiseChanged(DocumentChangeKind.Geometry, "Move Points");
             }
             return true;

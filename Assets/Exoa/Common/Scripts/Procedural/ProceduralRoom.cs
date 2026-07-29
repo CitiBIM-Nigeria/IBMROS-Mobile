@@ -58,23 +58,34 @@ namespace Exoa.Designer
         {
             if (addMeshColliders)
             {
-                if (walls != null && walls.GetComponent<MeshCollider>() == null)
-                    walls.gameObject.AddComponent<MeshCollider>();
-                if (floor != null && floor.GetComponent<MeshCollider>() == null)
-                    floor.gameObject.AddComponent<MeshCollider>();
-                if (ceiling != null && ceiling.GetComponent<MeshCollider>() == null)
-                    ceiling.gameObject.AddComponent<MeshCollider>();
+                // IBMROS: re-point the collider at the CURRENT mesh, not just add one
+                // when missing. A MeshCollider keeps whatever sharedMesh it was given;
+                // it does not follow MeshFilter when generation swaps the mesh. So
+                // after the first build every rebuild left physics one step behind —
+                // a moved door kept its hole where it used to be (and the new opening
+                // stayed solid) for raycasts, furniture placement and walkthrough
+                // collision, even though the room LOOKED correct.
+                SyncCollider(walls);
+                SyncCollider(floor);
+                SyncCollider(ceiling);
                 if (separateWallsList != null && separateWallsList.Count > 0)
                 {
                     foreach (MeshFilter filter in separateWallsList)
-                    {
-                        if (filter != null && filter.GetComponent<MeshCollider>() == null)
-                        {
-                            filter.gameObject.AddComponent<MeshCollider>();
-                        }
-                    }
+                        SyncCollider(filter);
                 }
             }
+        }
+
+        /// <summary>Ensures a MeshCollider exists and matches the filter's current mesh.</summary>
+        private static void SyncCollider(MeshFilter filter)
+        {
+            if (filter == null)
+                return;
+            MeshCollider col = filter.GetComponent<MeshCollider>();
+            if (col == null)
+                col = filter.gameObject.AddComponent<MeshCollider>();
+            if (col.sharedMesh != filter.sharedMesh)
+                col.sharedMesh = filter.sharedMesh;
         }
 
         private void GenerateRoomBox()
