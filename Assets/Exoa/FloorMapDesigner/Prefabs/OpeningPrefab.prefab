@@ -128,7 +128,7 @@ MonoBehaviour:
   doorMf: {fileID: 3997818557065711823}
   glassMf: {fileID: 3997818556046985468}
   handleMf: {fileID: 3997818557225790305}
-  addMeshColliders: 0
+  addMeshColliders: 1
   worldPos: {x: 0, y: 0, z: 0}
   dir: {x: 0, y: 0, z: 1}
   width: 1

@@ -338,6 +338,7 @@ namespace Exoa.Designer
             data.frameMaterial = frameMaterial;
             data.glassMaterial = glassMaterial;
             data.handleMaterial = handleMaterial;
+            data.openingFlipped = openingFlipped;
 
             data.normalizedPositions = new List<Vector3>();
 
@@ -369,6 +370,7 @@ namespace Exoa.Designer
         [SerializeField] private string frameMaterial;
         [SerializeField] private string glassMaterial;
         [SerializeField] private string handleMaterial;
+        [SerializeField] private bool openingFlipped;
 
         public string FloorMaterial { get => floorMaterial; set => floorMaterial = value; }
         public string WallMaterial { get => wallMaterial; set => wallMaterial = value; }
@@ -380,6 +382,9 @@ namespace Exoa.Designer
         public string FrameMaterial { get => frameMaterial; set => frameMaterial = value; }
         public string GlassMaterial { get => glassMaterial; set => glassMaterial = value; }
         public string HandleMaterial { get => handleMaterial; set => handleMaterial = value; }
+
+        /// <summary>IBMROS: opening facing within its wall plane (see DataModel.openingFlipped).</summary>
+        public bool OpeningFlipped { get => openingFlipped; set => openingFlipped = value; }
 
         // IBMROS: A2 — stable per-item identity (see GetData/SetData).
         private string itemUniqueId;
@@ -410,6 +415,7 @@ namespace Exoa.Designer
             frameMaterial = data.frameMaterial;
             glassMaterial = data.glassMaterial;
             handleMaterial = data.handleMaterial;
+            openingFlipped = data.openingFlipped;
 
             Enum.TryParse<DataModel.FloorMapItemType>(data.type, out sequencingItemType);
             Name = data.name;

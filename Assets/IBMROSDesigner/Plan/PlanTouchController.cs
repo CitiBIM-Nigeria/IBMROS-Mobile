@@ -671,7 +671,23 @@ namespace IBMROS.Designer.Plan
                     List<Vector2> final = ComputePreview(ground, ground - grabMeters);
                     if (final != null && Distinct(final, startMeters))
                     {
-                        bool ok = FloorPlanEditor.MoveItemPoints(item.ItemUniqueId, final);
+                        // An opening commits through OpeningAnchor, which projects onto
+                        // the host wall AND clamps to the span that keeps the whole
+                        // opening inside it. The preview only projected onto the nearest
+                        // wall LINE, so a door could be dragged past the end of its wall
+                        // and end up cut into nothing. Same call the 3D slide uses, so
+                        // both views perform one operation on one document.
+                        bool ok;
+                        if (kind == DragKind.Opening)
+                        {
+                            // final[0] already IS the centre — the control point is the
+                            // opening's centre, not an edge (see OpeningAnchor's notes).
+                            ok = Openings.OpeningAnchor.MoveTo(item.ItemUniqueId, final[0]);
+                        }
+                        else
+                        {
+                            ok = FloorPlanEditor.MoveItemPoints(item.ItemUniqueId, final);
+                        }
                         if (!ok)
                             Debug.LogWarning("[PlanTouchController] MoveItemPoints rejected; restoring.");
                         if (!ok)

@@ -116,6 +116,16 @@ public class ObjectManipulator : MonoBehaviour
             return;
         }
 
+        // Priority 2b — slide a selected door/window along its wall. Architectural
+        // elements are constrained, so they get their own handler rather than the free
+        // drag above; it comes after furniture so a chair in front of a door still wins.
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openings != null && openings.TryBeginDrag(screenPosition))
+        {
+            OnManipulationStart?.Invoke();
+            return;
+        }
+
         // Priority 3 — camera look rotation (finger on empty space)
         _isRotatingCamera = true;
         _lastScreenPos    = screenPosition;
@@ -139,6 +149,13 @@ public class ObjectManipulator : MonoBehaviour
             return;
         }
 
+        var openingsMove = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openingsMove != null && openingsMove.OwnsInput)
+        {
+            openingsMove.UpdateDrag(screenPosition);
+            return;
+        }
+
         if (_isRotatingCamera)
         {
             Vector2 delta  = screenPosition - _lastScreenPos;
@@ -159,6 +176,14 @@ public class ObjectManipulator : MonoBehaviour
         if (dragHandler.IsDragging)
         {
             dragHandler.EndDrag();
+            OnManipulationEnd?.Invoke();
+            return;
+        }
+
+        var openingsUp = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openingsUp != null && openingsUp.OwnsInput)
+        {
+            openingsUp.EndDrag();
             OnManipulationEnd?.Invoke();
             return;
         }
@@ -193,6 +218,18 @@ public class ObjectManipulator : MonoBehaviour
 
     public void DeleteSelectedObject()
     {
+        // An opening is deleted THROUGH the document, not by hiding a GameObject: the
+        // wall's mesh is generated from the room's opening list, so removing the item is
+        // what closes the hole — and it updates the 2D plan and undo in the same step.
+        // Hiding the visual here would leave a hole in the wall with nothing in it.
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openings != null && openings.HasSelection)
+        {
+            selectionManager.DeselectObject();
+            openings.Delete();
+            return;
+        }
+
         if (_selectedObject == null) return;
 
         GameObject go = _selectedObject.gameObject;
@@ -208,6 +245,16 @@ public class ObjectManipulator : MonoBehaviour
 
     public void DuplicateSelectedObject()
     {
+        // Instantiating an opening's visual would clone a mesh with no wall behind it.
+        // Duplicating the ITEM gives a real second opening, cut into the same wall and
+        // slid clear of the original.
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openings != null && openings.HasSelection)
+        {
+            openings.Duplicate();
+            return;
+        }
+
         if (_selectedObject == null) return;
 
         Vector3 offset = new Vector3(0.5f, 0f, 0.5f);

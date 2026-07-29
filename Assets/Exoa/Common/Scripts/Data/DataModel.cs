@@ -163,6 +163,17 @@ namespace Exoa.Designer
             public string glassMaterial;
             public string handleMaterial;
 
+            // IBMROS: an opening's facing within its wall plane, i.e. which side the
+            // leaf/handle is on. This has to be ITEM state rather than live transform
+            // state: ControlPointsController.ReSnapControlPoints re-derives every
+            // control point's `dir` from the wall it snaps to on each rebuild, so a
+            // flip written into `dir` is wiped the next time anything re-snaps. Stored
+            // additively (old saves read false = the previous facing), and applied as a
+            // 180-degree turn of the VISUAL only — the wall hole is cut from the
+            // control point and is independent of appearance, so flipping can never
+            // detach the opening from its wall or disturb the cut.
+            public bool openingFlipped;
+
             public FloorMapItemType GetItemType(GameObject go = null)
             {
                 DataModel.FloorMapItemType t = DataModel.FloorMapItemType.Room;

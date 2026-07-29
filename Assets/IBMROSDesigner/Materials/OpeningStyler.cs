@@ -124,6 +124,8 @@ namespace IBMROS.Designer.Materials
                 Transform host = po.transform;
                 Transform custom = host.Find(MODEL_CHILD);
 
+                ApplyFacing(ui, po);
+
                 if (model == null)
                 {
                     // Procedural look: drop any custom model, re-show the generated
@@ -160,6 +162,42 @@ namespace IBMROS.Designer.Materials
 
                 ApplyModelMaterials(ui, custom);
             }
+        }
+
+        /// <summary>
+        /// Turns the opening's visual around within its wall plane (item field
+        /// openingFlipped) — which side the leaf swings from and the handle sits on.
+        ///
+        /// Applied to the CHILD meshes, never to the instance itself: the plugin rewrites
+        /// the instance's world rotation from the wall tangent on every rebuild, so a
+        /// flip put there survives no time at all. Touching only children also keeps the
+        /// wall hole out of it — the cut is generated from the control point, so however
+        /// the door is turned the opening in the wall is identical.
+        /// </summary>
+        private static void ApplyFacing(UIBaseItem ui, ProceduralOpening po)
+        {
+            Quaternion want = ui.OpeningFlipped
+                ? Quaternion.Euler(0f, 180f, 0f)
+                : Quaternion.identity;
+            SetLocalRotation(po, po.doorMf, want);
+            SetLocalRotation(po, po.glassMf, want);
+            SetLocalRotation(po, po.handleMf, want);
+            Transform custom = po.transform.Find(MODEL_CHILD);
+            if (custom != null && custom.localRotation != want)
+                custom.localRotation = want;
+        }
+
+        /// <summary>
+        /// Rotates a generated part. Skips a mesh that lives directly ON the instance
+        /// rather than on a child, because that transform is rewritten from the wall
+        /// tangent every rebuild and would fight this.
+        /// </summary>
+        private static void SetLocalRotation(ProceduralOpening po, MeshFilter mf, Quaternion r)
+        {
+            if (mf == null || mf.transform == po.transform)
+                return;
+            if (mf.transform.localRotation != r)
+                mf.transform.localRotation = r;
         }
 
         private static void SetProceduralVisible(ProceduralOpening po, bool visible)

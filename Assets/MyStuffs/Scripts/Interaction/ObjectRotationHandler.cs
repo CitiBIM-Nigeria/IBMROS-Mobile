@@ -74,6 +74,18 @@ public class ObjectRotationHandler : MonoBehaviour
 
     private void HandleDragStart(PointerEventData data)
     {
+        // A wall-hosted opening has exactly one meaningful rotation: turning it around
+        // within its wall plane (which side the leaf swings from). Free yaw is not
+        // available to it — its facing is re-derived from the wall on every rebuild — so
+        // the handle acts as a discrete flip and no drag rotation is started. That is
+        // also what keeps it from ever being rotated off its wall.
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openings != null && openings.HasSelection)
+        {
+            openings.Flip();
+            return;
+        }
+
         if (_blocked || _selectedObject == null)
             return;
 

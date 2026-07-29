@@ -245,6 +245,26 @@ namespace IBMROS.Bridge.UndoRedo
             ui.WindowSizeV = t.windowSizeV;
             ui.WindowSubDivH = t.windowSubDivH;
             ui.WindowSubDivV = t.windowSubDivV;
+
+            // IBMROS: the additive appearance/facing fields (P1 room surfaces, P4 opening
+            // model + per-part materials, opening facing). These were missing here, so a
+            // scoped restore compared two states as EQUAL whenever only appearance
+            // differed and applied nothing — undoing "change floor material", "replace
+            // door" or "turn door" did nothing at all until some later geometry change
+            // forced a full clear-and-deserialize, at which point several steps' worth of
+            // appearance reverted at once. Verified by walking an undo chain: Change Frame
+            // Material / Change Opening Model / Turn Door each left the item untouched.
+            ui.FloorMaterial = t.floorMaterial;
+            ui.WallMaterial = t.wallMaterial;
+            ui.CeilingMaterial = t.ceilingMaterial;
+            ui.FloorTiling = t.floorTiling;
+            ui.WallTiling = t.wallTiling;
+            ui.CeilingTiling = t.ceilingTiling;
+            ui.OpeningModel = t.openingModel;
+            ui.FrameMaterial = t.frameMaterial;
+            ui.GlassMaterial = t.glassMaterial;
+            ui.HandleMaterial = t.handleMaterial;
+            ui.OpeningFlipped = t.openingFlipped;
         }
 
         private static bool ScalarsEqual(FloorMapItem a, FloorMapItem b)
@@ -253,7 +273,15 @@ namespace IBMROS.Bridge.UndoRedo
                    a.ypos == b.ypos && a.hasWindow == b.hasWindow &&
                    a.windowFrameSize == b.windowFrameSize &&
                    a.windowSizeH == b.windowSizeH && a.windowSizeV == b.windowSizeV &&
-                   a.windowSubDivH == b.windowSubDivH && a.windowSubDivV == b.windowSubDivV;
+                   a.windowSubDivH == b.windowSubDivH && a.windowSubDivV == b.windowSubDivV &&
+                   // IBMROS: appearance/facing are item state too — see ApplyScalars.
+                   a.floorMaterial == b.floorMaterial && a.wallMaterial == b.wallMaterial &&
+                   a.ceilingMaterial == b.ceilingMaterial &&
+                   a.floorTiling == b.floorTiling && a.wallTiling == b.wallTiling &&
+                   a.ceilingTiling == b.ceilingTiling &&
+                   a.openingModel == b.openingModel && a.frameMaterial == b.frameMaterial &&
+                   a.glassMaterial == b.glassMaterial && a.handleMaterial == b.handleMaterial &&
+                   a.openingFlipped == b.openingFlipped;
         }
 
         private static bool SettingsEqual(BuildingSettings a, BuildingSettings b)

@@ -83,6 +83,11 @@ public class ObjectScaleHandler : MonoBehaviour
         _activeHandle = handle;
         _initialScale = _selectedObject.localScale;
         _initialObjectPosition = _selectedObject.position;
+
+        // Openings resize as document width/height, not Transform scale.
+        var openingsDown = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openingsDown != null && openingsDown.HasSelection)
+            openingsDown.BeginResize();
         _initialPointerPosition = screenPosition;
 
         scaleRigUI?.SetHandleHighlight(handle);
@@ -108,6 +113,14 @@ public class ObjectScaleHandler : MonoBehaviour
         SnapToFloor(); // ← move it here, fire once on release
 
         OnScaleEnd?.Invoke();
+
+        var openingsUp = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openingsUp != null && openingsUp.HasSelection)
+        {
+            // The gateway already recorded the whole gesture as one step.
+            openingsUp.EndResize();
+            return;
+        }
 
         if (_selectedObject == null)
             return;
@@ -155,6 +168,23 @@ public class ObjectScaleHandler : MonoBehaviour
 
         float scaleFactor = Mathf.Clamp(
             currentProjection / initialProjection, 0.1f, 10f);
+
+        // A door's size is two numbers in the floor-plan document (Width, Height) that
+        // the wall opening is cut from — not a Transform scale. Scaling the visual would
+        // leave the hole the old size and be wiped by the next rebuild, so the same drag
+        // maths is applied to those fields instead, clamped to the wall space.
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openings != null && openings.HasSelection)
+        {
+            // The handle's WORLD direction decides which of the opening's two dimensions
+            // this drag changes — see ResizeFromHandle. Mapping straight off HandleType
+            // would tie "width" to a fixed world axis and break on rotated walls.
+            openings.ResizeFromHandle(
+                _selectedObject.rotation * _activeHandle.direction,
+                _activeHandle.type == HandleType.Corner,
+                scaleFactor);
+            return;
+        }
 
         Vector3 newScale = _initialScale;
 

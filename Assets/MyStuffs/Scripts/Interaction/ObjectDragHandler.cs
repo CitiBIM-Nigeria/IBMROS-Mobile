@@ -198,7 +198,18 @@ public class ObjectDragHandler : MonoBehaviour
             return null;
 
         FurnitureItem item = hit.transform.GetComponentInParent<FurnitureItem>();
-        return item != null ? item.transform : hit.transform;
+        if (item != null)
+            return item.transform;
+
+        // A door is not a sofa. Openings sit on the Interactable layer so they can be
+        // selected by the same framework, but they have no free position — they own a
+        // slot in a wall — so this handler must never take one. OpeningInteraction slides
+        // them along their host wall instead.
+        if (!string.IsNullOrEmpty(
+                IBMROS.Designer.Openings.OpeningInteraction.OpeningIdOf(hit.transform)))
+            return null;
+
+        return hit.transform;
     }
 
     private bool IsPlacing()

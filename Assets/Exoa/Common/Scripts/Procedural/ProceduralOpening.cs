@@ -145,19 +145,38 @@ namespace Exoa.Designer
             return md;
         }
 
+        /// <summary>
+        /// IBMROS: re-SYNC, not just add.
+        ///
+        /// This used to add a MeshCollider only when one was missing and never touch
+        /// sharedMesh again. A MeshCollider keeps whatever mesh it was handed and does
+        /// NOT follow its MeshFilter, and Generate() assigns a brand-new mesh every
+        /// call — so from the second generation onward the collider described the
+        /// opening's PREVIOUS size. Resizing a door left its pickable shape at the old
+        /// dimensions, which is the same defect fixed in ProceduralRoom (commit
+        /// b60eb53) for wall/floor/ceiling colliders.
+        ///
+        /// Only sharedMesh is re-pointed when it already matches, so no garbage is
+        /// produced on the steady-state re-assert path.
+        /// </summary>
         private void AddMeshColliders()
         {
-            if (addMeshColliders)
-            {
-                if (doorMf != null && doorMf.GetComponent<MeshCollider>() == null)
-                    doorMf.gameObject.AddComponent<MeshCollider>();
-                if (glassMf != null && glassMf.GetComponent<MeshCollider>() == null)
-                    glassMf.gameObject.AddComponent<MeshCollider>();
-                if (handleMf != null && handleMf.GetComponent<MeshCollider>() == null)
-                    handleMf.gameObject.AddComponent<MeshCollider>();
+            if (!addMeshColliders)
+                return;
+            SyncCollider(doorMf);
+            SyncCollider(glassMf);
+            SyncCollider(handleMf);
+        }
 
-
-            }
+        private static void SyncCollider(MeshFilter mf)
+        {
+            if (mf == null)
+                return;
+            MeshCollider mc = mf.GetComponent<MeshCollider>();
+            if (mc == null)
+                mc = mf.gameObject.AddComponent<MeshCollider>();
+            if (mc.sharedMesh != mf.sharedMesh)
+                mc.sharedMesh = mf.sharedMesh;
         }
 
 

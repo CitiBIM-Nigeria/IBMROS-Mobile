@@ -89,7 +89,27 @@ public class SelectionManager : MonoBehaviour
     private static Transform ResolveSelectable(Transform hit)
     {
         FurnitureItem item = hit.GetComponentInParent<FurnitureItem>();
-        return item != null ? item.transform : hit;
+        if (item != null)
+            return item.transform;
+
+        // Doors and windows share the Interactable layer so this selection framework and
+        // the contextual toolbar work for them unchanged — but they are architectural,
+        // not furniture: they belong to a wall and their state lives in the floor-plan
+        // document, not in a Transform. Resolve the hit to the whole opening visual and
+        // tell OpeningInteraction, which owns what can then be done to it.
+        var openings = IBMROS.Designer.Openings.OpeningInteraction.Instance;
+        if (openings != null)
+        {
+            string openingId = IBMROS.Designer.Openings.OpeningInteraction.OpeningIdOf(hit);
+            if (!string.IsNullOrEmpty(openingId))
+            {
+                openings.Select(openingId);
+                Transform visual = IBMROS.Designer.Openings.OpeningInteraction.VisualOf(openingId);
+                return visual != null ? visual : hit;
+            }
+            openings.Select(null);
+        }
+        return hit;
     }
 
     // --- PUBLIC METHODS (Called by ObjectManipulator) ---
