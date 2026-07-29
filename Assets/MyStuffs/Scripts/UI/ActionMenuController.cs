@@ -365,21 +365,42 @@ public class ActionMenuController : MonoBehaviour
                 safeArea.xMin + halfW, safeArea.xMax - halfW);
             float y = PlaceClearOf(panelBelow, screenBounds, safeArea, above: false);
 
-            // Ensure minimum gap between above and below panels
+            // Keep the two panels apart. When both end up on the SAME side of the
+            // item (the safe area had no room on one side, so PlaceClearOf flipped
+            // one of them), the old symmetric nudge pushed each halfway and left
+            // them crowded against each other — and could shove one back over the
+            // item. Stack the lower panel a full gap under the upper one instead,
+            // and only nudge the upper one if the stack runs out of safe area.
             if (panelAbove != null && panelAbove.gameObject.activeSelf)
             {
-                float aboveBottom = panelAbove.position.y
-                    - panelAbove.rect.height * panelAbove.lossyScale.y * 0.5f;
-                float belowTop = y + halfH;
-                float overlap  = belowTop - aboveBottom + minVerticalSpacing;
+                float aboveHalfH = panelAbove.rect.height * panelAbove.lossyScale.y * 0.5f;
+                float aboveBottom = panelAbove.position.y - aboveHalfH;
+                float wantTop = y + halfH;
 
-                if (overlap > 0f)
+                if (wantTop > aboveBottom - minVerticalSpacing)
                 {
-                    panelAbove.position = new Vector3(
-                        panelAbove.position.x,
-                        panelAbove.position.y + overlap * 0.5f,
-                        0f);
-                    y -= overlap * 0.5f;
+                    float stackedY = aboveBottom - minVerticalSpacing - halfH;
+                    float floorY = safeArea.yMin + halfH;
+                    if (stackedY >= floorY)
+                    {
+                        y = stackedY;              // room below: stack cleanly
+                    }
+                    else
+                    {
+                        // No room: hold this panel at the floor and lift the other
+                        // one so the full gap still exists between them.
+                        y = floorY;
+                        float need = (y + halfH + minVerticalSpacing + aboveHalfH)
+                                     - panelAbove.position.y;
+                        if (need > 0f)
+                        {
+                            float ceilY = safeArea.yMax - aboveHalfH;
+                            panelAbove.position = new Vector3(
+                                panelAbove.position.x,
+                                Mathf.Min(panelAbove.position.y + need, ceilY),
+                                0f);
+                        }
+                    }
                 }
             }
 

@@ -98,7 +98,13 @@ namespace IBMROS.Designer.Plan
             {
                 RenderSettings.ambientMode = AmbientMode.Flat;
                 RenderSettings.ambientLight = PLAN_AMBIENT;
-                IBMROS.Bridge.Interaction.SelectionService.HighlightLayerExclusionMask = wallMask;
+                // Exclude EVERY room surface from the selection tint, not just the
+                // walls. Tinting the floor multiplied its material colour and turned
+                // a wood floor teal whenever the room was selected (e.g. while
+                // reshaping it) — the user never asked for a colour change, and the
+                // selected room is already shown by the blue outline below.
+                IBMROS.Bridge.Interaction.SelectionService.HighlightLayerExclusionMask =
+                    wallMask | LayerMask.GetMask("ExoaFloor", "Ceil");
                 IBMROS.Bridge.Interaction.SelectionService.Suspended = false;
                 nextApply = 0f; // tint immediately
                 FramePlan();
