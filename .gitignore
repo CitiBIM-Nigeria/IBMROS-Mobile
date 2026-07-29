@@ -10,6 +10,10 @@
 [Uu]ser[Ss]ettings/
 MemoryCaptures/
 Recordings/
+# Android/NDK build temp (Gradle + CMake/Ninja intermediates, one tree per build
+# hash). 146 files of this were tracked, which is why configure_fingerprint.bin
+# showed up as modified after every Android build.
+.utmp/
 
 # Unity crash / logs
 sysinfo.txt
@@ -30,6 +34,10 @@ ExportedObj/
 # Visual Studio / Rider files
 # =========================
 *.csproj
+# ...but the headless guards under Tooling/ are hand-written sources, not
+# Unity-generated project files. This rule was hiding them from the repo, so CI's
+# "dotnet build Tooling/EngineSyntaxCheck" could never work from a fresh clone.
+!Tooling/**/*.csproj
 *.sln
 *.unityproj
 *.suo

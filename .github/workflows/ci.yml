@@ -1,37 +1,58 @@
 name: CI
 
+# Retargeted 2026-07-29. Every path filter below used to be "Assets/IBMROS/**", a
+# directory deleted on 2026-07-17, so this workflow never triggered on any real change
+# — and when it did run it built projects that globbed the same deleted path, compiling
+# zero files and passing vacuously. Worse, Tooling/ was excluded from the repo entirely
+# by the blanket "*.csproj" ignore rule, so `dotnet build Tooling/...` could not have
+# worked from a fresh clone at all. Filters, projects and the ignore rule are all fixed.
+
 on:
   push:
     branches: [main, furniture-backend-migration]
     paths:
-      - "Assets/IBMROS/**"
+      - "Assets/IBMROSBridge/**"
+      - "Assets/IBMROSDesigner/**"
+      - "Assets/MyStuffs/Scripts/**"
+      - "Assets/Exoa/**"
       - "Tooling/**"
       - "Packages/manifest.json"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
-      - "Assets/IBMROS/**"
+      - "Assets/IBMROSBridge/**"
+      - "Assets/IBMROSDesigner/**"
+      - "Assets/MyStuffs/Scripts/**"
+      - "Assets/Exoa/**"
       - "Tooling/**"
+      - "Packages/manifest.json"
+      - ".github/workflows/ci.yml"
 
 jobs:
-  # Fast, license-free guard: compiles the pure-C# room engine + vendored
-  # geometry libs at Unity's exact language level (C# 9 / netstandard2.1)
-  # with zero Unity references. Catches both syntax breaks and any attempt
-  # to leak UnityEngine into the engine assembly (doctrine D3).
-  engine-syntax:
+  # Fast, license-free firewall guard: compiles the bridge's Unity-free core
+  # (PolygonSplit, SnapshotHistory, SnapshotCodec, IUndoableAction) at Unity's exact
+  # language level (C# 9 / netstandard2.1) with zero Unity references. Those types
+  # document themselves as Unity-independent so the undo data structure and the split
+  # geometry stay testable outside the editor; this job is what makes that true rather
+  # than aspirational — the first `using UnityEngine;` to leak in fails the build.
+  pure-core-firewall:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
-      - name: Build engine (no Unity)
+      - name: Compile the Unity-free bridge core (no Unity references)
         run: dotnet build Tooling/EngineSyntaxCheck -c Release
-      - name: Run pure engine tests (no Unity)
-        run: dotnet test Tooling/EngineTests -c Release --logger "console;verbosity=minimal"
 
-  # Full Unity edit-mode test run (GeometrySpikeTests, GoldenAssert, glTFast
-  # spike, and everything Phase 1+ adds). Requires game-ci license secrets:
+  # NOTE: the old "Run pure engine tests" step (dotnet test Tooling/EngineTests) is
+  # deliberately gone. That project globs Assets/IBMROS/Tests/EditMode/Engine/**, which
+  # no longer exists, so it ran zero tests. The pure-C# assertions that DID exist for
+  # PolygonSplit and SnapshotHistory were ad-hoc console runs, never committed as test
+  # files. Re-add a job here once real NUnit tests for the Unity-free core land — a job
+  # that runs nothing is worse than no job, because it reports green.
+
+  # Full Unity edit-mode test run. Requires game-ci license secrets:
   #   UNITY_LICENSE (or UNITY_EMAIL/UNITY_PASSWORD/UNITY_SERIAL)
   # Opt in by setting the repository variable ENABLE_UNITY_CI to 'true'
   # after configuring secrets — see https://game.ci/docs/github/activation

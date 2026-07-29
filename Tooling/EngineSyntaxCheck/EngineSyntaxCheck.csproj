@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Headless firewall guard for the Unity-free core of IBMROSBridge.
+
+    Several bridge types state in their own doc comments that they carry no Unity
+    dependency, precisely so the logic is reviewable and testable outside the editor
+    (SnapshotHistory: "Pure C# with no Unity dependency ... so the entire undo data
+    structure is unit-testable outside Unity"; PolygonSplit: pure geometry). Nothing
+    enforced that. This project compiles exactly those files with NO Unity reference,
+    at Unity 6's API profile and language level, so the first `using UnityEngine;` that
+    leaks into them fails the build instead of quietly ending the invariant.
+
+    It previously globbed Assets/IBMROS/Engine/** — a directory deleted on 2026-07-17 —
+    so it compiled zero files and passed vacuously.
+
+      netstandard2.1  : Unity 6's API profile
+      LangVersion 9.0 : Unity 6's C# language level
+      no Unity refs   : any UnityEngine usage in these files fails this build
+
+    Run locally:  dotnet build Tooling/EngineSyntaxCheck
+    Runs in CI on every push (see .github/workflows/ci.yml).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>IBMROS.Bridge.PureCore.SyntaxCheck</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Add a file here only if it is genuinely Unity-free. Deliberately NOT included:
+      ItemColor.cs (uses UnityEngine.Color) and the rest of the bridge, which
+      legitimately talks to the engine.
+    -->
+    <Compile Include="../../Assets/IBMROSBridge/Core/PolygonSplit.cs" />
+    <Compile Include="../../Assets/IBMROSBridge/UndoRedo/SnapshotHistory.cs" />
+    <Compile Include="../../Assets/IBMROSBridge/UndoRedo/SnapshotCodec.cs" />
+    <Compile Include="../../Assets/MyStuffs/Scripts/UndoRedo/IUndoableAction.cs" />
+  </ItemGroup>
+
+</Project>
