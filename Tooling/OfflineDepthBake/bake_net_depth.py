@@ -52,7 +52,7 @@ def rgb_rotation_for(session):
     default, since that is what every session recorded before 2026-08-05 actually is.
     """
     try:
-        with open(os.path.join(session, "manifest.json")) as f:
+        with open(os.path.join(session, "manifest.json"), encoding="utf-8-sig") as f:
             m = json.load(f)
     except (OSError, ValueError):
         return 180, "no readable manifest -> assuming v1 (180 deg)"
@@ -78,7 +78,11 @@ def main():
                     help="override the manifest-derived RGB rotation (0 or 180)")
     args = ap.parse_args()
 
-    recs = [json.loads(l) for l in open(os.path.join(args.session, "frames.jsonl")) if l.strip()]
+    # utf-8-sig, not utf-8: the first schema-v2 recorder wrote frames.jsonl with a BOM
+    # (Encoding.UTF8 emits one). Fixed at source, but those sessions exist, and a reader
+    # that rejects them for a leading EF BB BF is no use to anyone.
+    with open(os.path.join(args.session, "frames.jsonl"), encoding="utf-8-sig") as fh:
+        recs = [json.loads(l) for l in fh if l.strip()]
     if args.limit:
         recs = recs[: args.limit]
 

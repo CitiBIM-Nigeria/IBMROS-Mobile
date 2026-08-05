@@ -41,6 +41,16 @@ namespace OpenRoomPlan.Capture
 
         private const int Capacity = 96;
 
+        /// <summary>
+        /// UTF-8 with NO byte-order mark. Encoding.UTF8 — the static property — emits one when
+        /// it creates a file, and File.AppendAllText's own default does not. Passing
+        /// Encoding.UTF8 to match the previous behaviour therefore silently CHANGED it: the
+        /// first v2 session put an EF BB BF in front of frames.jsonl, and strict JSON parsers
+        /// reject line 1 outright (Python's json.loads raises, and JsonUtility would too).
+        /// Text files in this format must stay BOM-free.
+        /// </summary>
+        private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
+
         private readonly BlockingCollection<Item> _queue =
             new BlockingCollection<Item>(new ConcurrentQueue<Item>(), Capacity);
         private readonly Thread _thread;
@@ -90,7 +100,7 @@ namespace OpenRoomPlan.Capture
                 try
                 {
                     if (item.text != null)
-                        File.AppendAllText(item.path, item.text, Encoding.UTF8);
+                        File.AppendAllText(item.path, item.text, Utf8NoBom);
                     else
                         File.WriteAllBytes(item.path, item.bytes);
                     Interlocked.Increment(ref _written);
