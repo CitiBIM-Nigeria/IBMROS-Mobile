@@ -25,13 +25,38 @@ namespace OpenRoomPlan.Reconstruction
     /// </summary>
     public static class PlaneRansac
     {
+        /// <summary>
+        /// Default RANSAC seed. Fixed on purpose — see the <paramref name="seed"/> note on
+        /// <see cref="Extract"/>.
+        /// </summary>
+        public const int DefaultSeed = 12345;
+
+        /// <param name="seed">
+        /// Seed for the hypothesis sampler. Deterministic by default, for two reasons that
+        /// both bit us:
+        ///
+        ///   1. REPRODUCIBILITY. This is the solver an eval harness runs to compare depth
+        ///      variants (platform vs net vs fused). With an unseeded global RNG the same
+        ///      session yields different corner/angle/IoU numbers on every run, so a metric
+        ///      delta could not be attributed to the depth model rather than to the draw.
+        ///      Go/No-Go thresholds are meaningless against a moving measurement.
+        ///   2. IT MUST RUN OUTSIDE UNITY. This used to call UnityEngine.Random, which is a
+        ///      native ECall — it throws SecurityException in any plain .NET process, so the
+        ///      assembly could not actually be driven headlessly or from CI despite this
+        ///      module documenting itself as pure geometry. System.Random is managed.
+        ///
+        /// Pass a varying seed only to deliberately measure sampling sensitivity.
+        /// </param>
         public static List<ExtractedPlane> Extract(
             IReadOnlyList<Vector3> points,
-            int maxPlanes = 10, float distThresh = 0.04f, int iterations = 300, int minInliers = 300)
+            int maxPlanes = 10, float distThresh = 0.04f, int iterations = 300, int minInliers = 300,
+            int seed = DefaultSeed)
         {
             var results = new List<ExtractedPlane>();
             int n = points.Count;
             if (n < minInliers) return results;
+
+            var rng = new System.Random(seed);
 
             var remaining = new List<int>(n);
             for (int i = 0; i < n; i++) remaining.Add(i);
@@ -43,9 +68,9 @@ namespace OpenRoomPlan.Reconstruction
 
                 for (int it = 0; it < iterations; it++)
                 {
-                    int i0 = remaining[Random.Range(0, remaining.Count)];
-                    int i1 = remaining[Random.Range(0, remaining.Count)];
-                    int i2 = remaining[Random.Range(0, remaining.Count)];
+                    int i0 = remaining[rng.Next(remaining.Count)];
+                    int i1 = remaining[rng.Next(remaining.Count)];
+                    int i2 = remaining[rng.Next(remaining.Count)];
                     if (i0 == i1 || i1 == i2 || i0 == i2) continue;
 
                     Vector3 a = points[i0], b = points[i1], c = points[i2];
