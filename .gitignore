@@ -96,3 +96,8 @@ mono_crash.*.json
 ProfilerCaptures/
 Assets/Screenshots/
 Assets/Screenshots.meta
+
+# Python tooling (Tooling/OfflineDepthBake)
+.venv/
+__pycache__/
+*.pyc
