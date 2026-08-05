@@ -13,9 +13,23 @@ namespace OpenRoomPlan.Capture
     /// </summary>
     public static class SessionIO
     {
-        public const string SchemaVersion = "orp-session-1";
+        /// <summary>
+        /// v2 (2026-08-05): frame timestamps became the CAMERA IMAGE's own timestamp rather
+        /// than Unity's clock, <c>frameTimestampNs</c> and <c>screenOrientation</c> were added,
+        /// and RGB is written in the same orientation as the depth map (v1 JPEGs are 180 deg
+        /// rotated relative to their depth — see CaptureSessionRecorder.EncodeRgbJpg). Readers
+        /// that care about RGB/depth alignment must check this.
+        /// </summary>
+        public const string SchemaVersion = "orp-session-2";
         const string ManifestFile = "manifest.json";
         const string FramesFile = "frames.jsonl";
+
+        /// <summary>Absolute path of the frame-record file, for queued appends.</summary>
+        public static string FrameRecordPath(string sessionId) =>
+            Path.Combine(SessionDir(sessionId), FramesFile);
+
+        /// <summary>One JSON-Lines record, ready to append.</summary>
+        public static string EncodeFrameRecord(in FrameRecord r) => JsonUtility.ToJson(r) + "\n";
 
         public static string SessionsRoot =>
             Path.Combine(Application.persistentDataPath, "OpenRoomPlan", "Sessions");
@@ -55,14 +69,55 @@ namespace OpenRoomPlan.Capture
             return list;
         }
 
-        // ---- depth binary (self-describing) ----
-        public static void WriteDepthBin(string absPath, float[] depth, int width, int height)
+        // ---- encoders ----
+        // These exist so capture can serialize on the main thread (a BlockCopy) and hand the
+        // bytes to SessionWriteQueue, keeping file I/O off the frame path. They also replace
+        // per-element BinaryWriter loops, which cost one virtual call per float.
+        // Little-endian is written explicitly rather than inherited from BitConverter, so the
+        // format does not silently depend on host endianness.
+
+        static void PutInt32(byte[] b, int off, int v)
         {
-            using var bw = new BinaryWriter(File.Open(absPath, FileMode.Create));
-            bw.Write(width);
-            bw.Write(height);
-            for (int i = 0; i < depth.Length; i++) bw.Write(depth[i]);
+            b[off] = (byte)v; b[off + 1] = (byte)(v >> 8);
+            b[off + 2] = (byte)(v >> 16); b[off + 3] = (byte)(v >> 24);
         }
+
+        /// <summary>[int32 w][int32 h][float32 * w*h] metres — identical bytes to WriteDepthBin.</summary>
+        public static byte[] EncodeDepthBin(float[] depth, int width, int height)
+        {
+            var bytes = new byte[8 + depth.Length * 4];
+            PutInt32(bytes, 0, width);
+            PutInt32(bytes, 4, height);
+            System.Buffer.BlockCopy(depth, 0, bytes, 8, depth.Length * 4);
+            return bytes;
+        }
+
+        public static byte[] EncodeConfidenceBin(byte[] conf, int width, int height)
+        {
+            var bytes = new byte[8 + conf.Length];
+            PutInt32(bytes, 0, width);
+            PutInt32(bytes, 4, height);
+            System.Buffer.BlockCopy(conf, 0, bytes, 8, conf.Length);
+            return bytes;
+        }
+
+        /// <summary>[int32 count][float32 x,y,z] * count, world space.</summary>
+        public static byte[] EncodePointsBin(IReadOnlyList<Vector3> pts)
+        {
+            var bytes = new byte[4 + pts.Count * 12];
+            PutInt32(bytes, 0, pts.Count);
+            var scratch = new float[pts.Count * 3];
+            for (int i = 0; i < pts.Count; i++)
+            {
+                scratch[i * 3] = pts[i].x; scratch[i * 3 + 1] = pts[i].y; scratch[i * 3 + 2] = pts[i].z;
+            }
+            System.Buffer.BlockCopy(scratch, 0, bytes, 4, scratch.Length * 4);
+            return bytes;
+        }
+
+        // ---- depth binary (self-describing) ----
+        public static void WriteDepthBin(string absPath, float[] depth, int width, int height) =>
+            File.WriteAllBytes(absPath, EncodeDepthBin(depth, width, height));
 
         public static float[] ReadDepthBin(string absPath, out int width, out int height)
         {
@@ -74,13 +129,8 @@ namespace OpenRoomPlan.Capture
             return depth;
         }
 
-        public static void WriteConfidenceBin(string absPath, byte[] conf, int width, int height)
-        {
-            using var bw = new BinaryWriter(File.Open(absPath, FileMode.Create));
-            bw.Write(width);
-            bw.Write(height);
-            bw.Write(conf, 0, conf.Length);
-        }
+        public static void WriteConfidenceBin(string absPath, byte[] conf, int width, int height) =>
+            File.WriteAllBytes(absPath, EncodeConfidenceBin(conf, width, height));
 
         public static byte[] ReadConfidenceBin(string absPath, out int width, out int height)
         {
@@ -91,15 +141,8 @@ namespace OpenRoomPlan.Capture
         }
 
         // ---- sparse VIO points (world space): [int32 count][float32 x,y,z]*count ----
-        public static void WritePointsBin(string absPath, System.Collections.Generic.IReadOnlyList<Vector3> pts)
-        {
-            using var bw = new BinaryWriter(File.Open(absPath, FileMode.Create));
-            bw.Write(pts.Count);
-            for (int i = 0; i < pts.Count; i++)
-            {
-                bw.Write(pts[i].x); bw.Write(pts[i].y); bw.Write(pts[i].z);
-            }
-        }
+        public static void WritePointsBin(string absPath, IReadOnlyList<Vector3> pts) =>
+            File.WriteAllBytes(absPath, EncodePointsBin(pts));
 
         public static Vector3[] ReadPointsBin(string absPath)
         {

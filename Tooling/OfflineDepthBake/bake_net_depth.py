@@ -9,13 +9,14 @@ The Unity Eval Tool and the headless harness then reconstruct from it with no ch
 
 TWO ORIENTATION FACTS, both established by measurement on sess_20260805_114510:
 
-  1. The recorded JPEG is 180 deg rotated relative to the ARCore depth map, and hence
-     relative to the camera pose. Registration test over 34 frames, net-depth vs
-     ARCore-depth Pearson r on a common grid:
+  1. Schema-v1 sessions recorded the JPEG 180 deg rotated relative to the ARCore depth
+     map, and hence relative to the camera pose. Registration test over 34 frames,
+     net-depth vs ARCore-depth Pearson r on a common grid:
          rot180 +0.73   mirrorH +0.40   mirrorV -0.04   identity -0.12
-     So the image is rotated back by 180 deg before inference. Skipping this silently
-     destroys the comparison: the net's depth would be geometrically transposed onto the
-     scene, and every metric computed from it would be noise.
+     Getting this wrong is silent and fatal: the net's depth is transposed onto the scene
+     and every metric derived from it is noise. So the rotation is not hardcoded -- it
+     comes from the manifest (see rgb_rotation_for), because v2 recorders fixed the
+     problem at source and a stale constant here would reintroduce it backwards.
 
   2. After that rotation the frame is upright: in-image gravity derived from the camera
      pose points down in 100% of the session's 423 frames. No further rotation is applied,
@@ -35,7 +36,30 @@ from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
 MODEL_ID = "depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf"
 OUT_ID = "depth-anything-v2-metric-indoor-small"
-RGB_ROT_DEG = 180
+
+
+def rgb_rotation_for(session):
+    """
+    How far to rotate the recorded JPEG so it sits in the depth map's frame.
+
+    Read from the manifest rather than hardcoded, because the answer depends on which
+    build recorded the session and getting it wrong is silent. Schema v2 recorders write
+    RGB already aligned (`rgbAlignedWithDepth`); v1 wrote it 180 deg rotated, because
+    `Transformation.MirrorY` mirrors across the y-axis (a HORIZONTAL flip) and the
+    Texture2D encode path added a vertical one.
+
+    A v1 session that predates the flag is assumed misaligned -- the conservative
+    default, since that is what every session recorded before 2026-08-05 actually is.
+    """
+    try:
+        with open(os.path.join(session, "manifest.json")) as f:
+            m = json.load(f)
+    except (OSError, ValueError):
+        return 180, "no readable manifest -> assuming v1 (180 deg)"
+    if m.get("rgbAlignedWithDepth"):
+        return 0, f"manifest says RGB is aligned (schema {m.get('schemaVersion')})"
+    return 180, (f"schema {m.get('schemaVersion', 'v1?')}, "
+                 f"rgbTransform={m.get('rgbTransform', 'MirrorY (assumed)')} -> 180 deg")
 
 
 def write_depth_bin(path, depth, w, h):
@@ -50,11 +74,18 @@ def main():
     ap.add_argument("session")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--device", default=None)
+    ap.add_argument("--rgb-rot", type=int, default=None,
+                    help="override the manifest-derived RGB rotation (0 or 180)")
     args = ap.parse_args()
 
     recs = [json.loads(l) for l in open(os.path.join(args.session, "frames.jsonl")) if l.strip()]
     if args.limit:
         recs = recs[: args.limit]
+
+    rot, why = rgb_rotation_for(args.session)
+    if args.rgb_rot is not None:
+        rot, why = args.rgb_rot, "overridden on the command line"
+    print(f"RGB rotation: {rot} deg  ({why})", flush=True)
 
     dev = args.device or ("mps" if torch.backends.mps.is_available() else "cpu")
     proc = AutoImageProcessor.from_pretrained(MODEL_ID)
@@ -68,8 +99,8 @@ def main():
     with torch.no_grad():
         for k, r in enumerate(recs):
             img = Image.open(os.path.join(args.session, r["rgbFile"])).convert("RGB")
-            if RGB_ROT_DEG:
-                img = img.rotate(RGB_ROT_DEG)  # 180 is its own inverse; no expand needed
+            if rot:
+                img = img.rotate(rot)  # 180 is its own inverse; no expand needed
             W, H = img.size
 
             t0 = time.time()

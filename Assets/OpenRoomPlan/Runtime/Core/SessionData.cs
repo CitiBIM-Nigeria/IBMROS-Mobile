@@ -34,6 +34,25 @@ namespace OpenRoomPlan.Core
         public long startTimestampNs;
         public string notes;            // room label, lighting, "blank walls", etc.
         public string schemaVersion;    // bump when the format changes
+
+        /// <summary>
+        /// The XRCpuImage.Transformation applied when writing RGB ("MirrorX", "MirrorY", ...).
+        /// Recorded because it decides whether the JPEG is in the same frame as the depth map,
+        /// and getting that wrong is silent: v1 sessions used MirrorY, which combined with
+        /// Unity's bottom-up raw texture rows to leave the JPEG 180 deg rotated relative to
+        /// its own depth. Offline consumers branch on this instead of assuming.
+        /// </summary>
+        public string rgbTransform;
+
+        /// <summary>
+        /// True when RGB and depth share an orientation, i.e. a pixel at (u,v) in the JPEG is
+        /// the same ray as (u,v) in the depth map (modulo resolution and FOV crop). False for
+        /// v1 sessions, which need a 180 deg rotation first.
+        /// </summary>
+        public bool rgbAlignedWithDepth;
+
+        /// <summary>Screen.orientation at StartRecording, e.g. "Portrait".</summary>
+        public string screenOrientation;
     }
 
     /// <summary>Pinhole intrinsics for the resolution they were captured at.</summary>
@@ -51,10 +70,36 @@ namespace OpenRoomPlan.Core
     public struct FrameRecord
     {
         public int index;
+
+        /// <summary>
+        /// Timestamp of the RGB IMAGE itself (XRCpuImage.timestamp), not the app clock. v1
+        /// recorded Time.unscaledTime, which cannot be compared against anything the platform
+        /// produced and so made pose/image desync undiagnosable.
+        /// </summary>
         public long timestampNs;
+
+        /// <summary>
+        /// Timestamp of the camera frame whose arrival triggered this capture, and hence of the
+        /// pose in <see cref="cameraPose"/>. Differs from <see cref="timestampNs"/> when
+        /// TryAcquireLatestCpuImage hands back an older image than the frame just delivered —
+        /// that difference IS the pose/image desynchronisation, and it is worth measuring
+        /// because the resulting error scales with rotation rate: at 13 deg/s, 228 ms of lag is
+        /// 0.16 m of misplacement on a surface 3 m away, against a 4 cm RANSAC threshold.
+        /// 0 when the platform reported no frame timestamp.
+        /// </summary>
+        public long frameTimestampNs;
+
         public CameraIntrinsics intrinsics;
         public Pose cameraPose;         // world-space VIO pose (position + rotation)
         public bool poseTracked;        // ARSession tracking state was good this frame
+
+        /// <summary>
+        /// Screen.orientation as an int at capture time. The CPU images are in SENSOR
+        /// orientation while the camera pose is in DISPLAY orientation, so anything that maps
+        /// image axes onto camera axes needs to know this; v1 stored it nowhere, leaving the
+        /// relationship unresolvable after the fact.
+        /// </summary>
+        public int screenOrientation;
         public int sparsePointCount;    // VIO feature points available for scale anchoring
         public string rgbFile;          // relative path, e.g. "frames/000123.jpg"
         public string depthFile;        // relative path, "" if none this frame

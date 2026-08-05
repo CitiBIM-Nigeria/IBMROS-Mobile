@@ -31,9 +31,9 @@ PyTorch is the sane export path; Keras 3 with custom layers is not.
 
 ## The 180-degree rotation
 
-The recorded JPEG is **180 degrees rotated** relative to the ARCore depth map, and therefore
-relative to the camera pose. The script rotates it back before inference. This was not
-guessed — it was measured, comparing net depth against ARCore depth over 34 frames:
+Schema-**v1** sessions recorded the JPEG **180 degrees rotated** relative to the ARCore depth
+map, and therefore relative to the camera pose. This was not guessed — it was measured,
+comparing net depth against ARCore depth over 34 frames:
 
 | transform applied to net depth | mean Pearson r | frames r > 0.5 |
 | --- | --- | --- |
@@ -46,10 +46,15 @@ Skipping it is silent and fatal: the net's depth gets transposed onto the scene 
 metric derived from it is noise. Before the fix, whole-session net-vs-ARCore pixel
 correlation was **negative** (−0.12); after it, **+0.46**.
 
-The underlying cause is in the recorder (`WriteRgbJpg` uses `Transformation.MirrorY`, then
-`Texture2D` + `EncodeToJPG` applies its own row reversal). Once the recorder writes RGB in the
-same frame as the depth, set `RGB_ROT_DEG = 0` here — and re-verify with the table above
-rather than trusting either of us.
+The cause was in the recorder: `Transformation.MirrorY` mirrors across the *y-axis*, which is
+a **horizontal** flip, and the `Texture2D` + `EncodeToJPG` path then added a **vertical** one —
+together a 180° rotation. Schema v2 uses `MirrorX` and encodes the raw bytes directly, so RGB
+now lands in the depth's frame.
+
+**The rotation is therefore not a constant here.** It comes from the manifest
+(`rgbAlignedWithDepth`), so v1 and v2 sessions both bake correctly and nobody has to remember
+to flip a flag. `--rgb-rot` overrides it for experiments. When you first bake a v2 session,
+re-run the table above and confirm **identity** wins — verify, don't trust this file.
 
 ## On-device viability
 

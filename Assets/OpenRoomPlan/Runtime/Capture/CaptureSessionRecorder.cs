@@ -83,6 +83,9 @@ namespace OpenRoomPlan.Capture
                 startTimestampNs = System.DateTime.Now.Ticks * 100,
                 notes = roomNotes,
                 schemaVersion = SessionIO.SchemaVersion,
+                rgbTransform = RgbTransform.ToString(),
+                rgbAlignedWithDepth = true,   // v2 writes RGB in the depth's frame (EncodeRgbJpg)
+                screenOrientation = Screen.orientation.ToString(),
             };
             SessionIO.WriteManifest(CurrentSessionId, m);
             _pendingManifest = m;
@@ -90,6 +93,7 @@ namespace OpenRoomPlan.Capture
             if (occlusionManager != null)
                 occlusionManager.requestedEnvironmentDepthMode = EnvironmentDepthMode.Fastest;
 
+            _writer = new SessionWriteQueue();
             cameraManager.frameReceived += OnFrameReceived;
             IsRecording = true;
             Debug.Log($"[ORP] Recording started: {CurrentSessionId} -> {SessionIO.SessionDir(CurrentSessionId)}");
@@ -100,14 +104,33 @@ namespace OpenRoomPlan.Capture
             if (!IsRecording) return;
             cameraManager.frameReceived -= OnFrameReceived;
             IsRecording = false;
+
+            // Drain before the manifest lands, so a session that reports "stopped" is complete
+            // on disk rather than still being written behind the user's back.
+            if (_writer != null)
+            {
+                int pending = _writer.Pending;
+                if (pending > 0) Debug.Log($"[ORP] Flushing {pending} queued writes…");
+                _writer.CompleteAndWait();
+                _writer.Dispose();
+                _writer = null;
+            }
+
             _pendingManifest.frameCount = FrameCount;
             SessionIO.WriteManifest(CurrentSessionId, _pendingManifest);
             Debug.Log($"[ORP] Recording stopped: {CurrentSessionId}, {FrameCount} frames");
         }
 
-        SessionManifest _pendingManifest;
+        void OnDisable()
+        {
+            // Never leave the writer thread holding a half-written session.
+            if (IsRecording) StopRecording();
+        }
 
-        void OnFrameReceived(ARCameraFrameEventArgs _)
+        SessionManifest _pendingManifest;
+        SessionWriteQueue _writer;
+
+        void OnFrameReceived(ARCameraFrameEventArgs args)
         {
             if (!IsRecording) return;
 
@@ -120,6 +143,13 @@ namespace OpenRoomPlan.Capture
 
             if (!cameraManager.TryGetIntrinsics(out XRCameraIntrinsics intr)) return;
             if (!cameraManager.TryAcquireLatestCpuImage(out XRCpuImage rgbImage)) return;
+
+            // The pose was read for the frame this callback is delivering; the IMAGE may be an
+            // older one. Record both clocks so the gap is measurable instead of assumed — see
+            // FrameRecord.frameTimestampNs.
+            long frameTsNs = args.timestampNs ?? 0L;
+            long imageTsNs = (long)(rgbImage.timestamp * 1e9);
+            if (imageTsNs <= 0L) imageTsNs = frameTsNs;   // provider gave no image clock
 
             int idx = FrameCount;
             CameraIntrinsics scaledIntr;
@@ -135,7 +165,9 @@ namespace OpenRoomPlan.Capture
                     outH = rgbLongEdge; outW = Mathf.RoundToInt(rgbLongEdge * (float)rgbImage.width / rgbImage.height);
                 }
 
-                if (!WriteRgbJpg(rgbImage, outW, outH, RgbPath(idx))) return;
+                byte[] jpg = EncodeRgbJpg(rgbImage, outW, outH);
+                if (jpg == null || jpg.Length == 0) return;
+                _writer.Write(RgbPath(idx), jpg);
                 scaledIntr = ScaleIntrinsics(intr, outW, outH);
 
                 if (_pendingManifest.rgbWidth == 0)
@@ -159,13 +191,14 @@ namespace OpenRoomPlan.Capture
                     var depth = ReadDepthPlaneMeters(depthImage, out int dw, out int dh);
                     if (isIOS && captureLiDARWhenAvailable)
                     {
-                        SessionIO.WriteDepthBin(Path.Combine(SessionIO.SessionDir(CurrentSessionId), "lidar", $"{idx:D6}.bin"), depth, dw, dh);
+                        _writer.Write(Path.Combine(SessionIO.SessionDir(CurrentSessionId), "lidar", $"{idx:D6}.bin"),
+                                      SessionIO.EncodeDepthBin(depth, dw, dh));
                         lidarRel = $"lidar/{idx:D6}.bin";
                         _pendingManifest.hasLiDAR = true;
                     }
                     else
                     {
-                        SessionIO.WriteDepthBin(DepthPath(idx), depth, dw, dh);
+                        _writer.Write(DepthPath(idx), SessionIO.EncodeDepthBin(depth, dw, dh));
                         depthRel = $"depth/{idx:D6}.bin";
                     }
                     if (_pendingManifest.depthWidth == 0) { _pendingManifest.depthWidth = dw; _pendingManifest.depthHeight = dh; }
@@ -200,7 +233,8 @@ namespace OpenRoomPlan.Capture
                     using (confImage)
                     {
                         var conf = ReadBytePlane(confImage, out int cw, out int ch);
-                        SessionIO.WriteConfidenceBin(Path.Combine(SessionIO.SessionDir(CurrentSessionId), "depth_conf", $"{idx:D6}.bin"), conf, cw, ch);
+                        _writer.Write(Path.Combine(SessionIO.SessionDir(CurrentSessionId), "depth_conf", $"{idx:D6}.bin"),
+                                      SessionIO.EncodeConfidenceBin(conf, cw, ch));
                     }
             }
 
@@ -220,9 +254,8 @@ namespace OpenRoomPlan.Capture
                     }
                 if (_pointBuffer.Count > 0)
                 {
-                    SessionIO.WritePointsBin(
-                        Path.Combine(SessionIO.SessionDir(CurrentSessionId), "points", $"{idx:D6}.bin"),
-                        _pointBuffer);
+                    _writer.Write(Path.Combine(SessionIO.SessionDir(CurrentSessionId), "points", $"{idx:D6}.bin"),
+                                  SessionIO.EncodePointsBin(_pointBuffer));
                     pointsRel = $"points/{idx:D6}.bin";
                 }
             }
@@ -230,17 +263,19 @@ namespace OpenRoomPlan.Capture
             var rec = new FrameRecord
             {
                 index = idx,
-                timestampNs = (long)(now * 1e9),
+                timestampNs = imageTsNs,
+                frameTimestampNs = frameTsNs,
                 intrinsics = scaledIntr,
                 cameraPose = new Pose(pos, arCamera.transform.rotation),
                 poseTracked = true,
+                screenOrientation = (int)Screen.orientation,
                 sparsePointCount = _pointBuffer.Count,
                 rgbFile = $"frames/{idx:D6}.jpg",
                 depthFile = depthRel,
                 lidarFile = lidarRel,
                 pointsFile = pointsRel,
             };
-            SessionIO.AppendFrameRecord(CurrentSessionId, rec);
+            _writer.Append(SessionIO.FrameRecordPath(CurrentSessionId), SessionIO.EncodeFrameRecord(rec));
 
             FrameCount++;
             _lastCaptureTime = now;
@@ -263,26 +298,66 @@ namespace OpenRoomPlan.Capture
             };
         }
 
-        static bool WriteRgbJpg(XRCpuImage image, int outW, int outH, string absPath)
+        /// <summary>
+        /// The transformation applied when writing RGB. See <see cref="EncodeRgbJpg"/> — this is
+        /// recorded in the manifest so offline consumers never have to assume.
+        /// </summary>
+        public const XRCpuImage.Transformation RgbTransform = XRCpuImage.Transformation.MirrorX;
+
+        private byte[] _rgbScratch;
+
+        /// <summary>
+        /// Encode one camera image as JPEG bytes, in the SAME orientation as the depth map.
+        ///
+        /// WHY MirrorX AND NOT MirrorY. Two flips compose here, and v1 got the pair wrong:
+        ///   • XRCpuImage.Transformation mirrors ACROSS the named axis, so MirrorY mirrors across
+        ///     the y-axis — a HORIZONTAL flip. MirrorX is the vertical one.
+        ///   • Unity's raw texture rows run bottom-up while JPEG rows run top-down, so any
+        ///     encode path through raw RGBA adds a vertical flip of its own.
+        /// v1 used MirrorY, so it got a horizontal flip from the conversion plus a vertical flip
+        /// from the encode: together a 180 degree rotation of every recorded JPEG relative to its
+        /// own depth map and to the camera pose. Nothing detected it, and it silently transposes
+        /// any RGB-driven depth onto the scene — measured net-vs-ARCore correlation was NEGATIVE
+        /// (-0.12) until the rotation was undone, +0.46 after. MirrorX cancels the encode's
+        /// vertical flip and introduces no horizontal one, leaving RGB in the depth's frame.
+        ///
+        /// It also no longer round-trips through a Texture2D. EncodeArrayToJPG encodes the raw
+        /// bytes directly, which drops a per-frame texture allocation, a GPU upload via Apply()
+        /// that was pure waste (the pixels were only ever read back on the CPU), and a Destroy.
+        /// The conversion buffer is reused across frames.
+        ///
+        /// THE ONE UNVERIFIED ASSUMPTION HERE. That the v1 Texture2D path flipped vertically
+        /// is *measured*: MirrorY is horizontal, the observed result was 180 degrees, so the
+        /// encode contributed the vertical half. Whether EncodeArrayToJPG treats row 0 as the
+        /// bottom the same way LoadRawTextureData does is NOT measured — it is inferred from
+        /// Unity's texture convention, and this device has not run it yet. If the convention
+        /// differs, v2 RGB comes out vertically mirrored instead of aligned.
+        ///
+        /// So: on the FIRST v2 capture, re-run the registration table in
+        /// Tooling/OfflineDepthBake/README.md. "identity" winning confirms this; "mirrorV"
+        /// winning means EncodeArrayToJPG does not flip, and the fix is one token —
+        /// RgbTransform becomes Transformation.None. Nothing else has to change, because the
+        /// manifest records which transform was used and the bake tool reads it from there.
+        /// </summary>
+        byte[] EncodeRgbJpg(XRCpuImage image, int outW, int outH)
         {
             var conv = new XRCpuImage.ConversionParams
             {
                 inputRect = new RectInt(0, 0, image.width, image.height),
                 outputDimensions = new Vector2Int(outW, outH),
                 outputFormat = TextureFormat.RGBA32,
-                transformation = XRCpuImage.Transformation.MirrorY,
+                transformation = RgbTransform,
             };
             int size = image.GetConvertedDataSize(conv);
             using var buffer = new NativeArray<byte>(size, Allocator.Temp);
             image.Convert(conv, buffer);
 
-            var tex = new Texture2D(outW, outH, TextureFormat.RGBA32, false);
-            tex.LoadRawTextureData(buffer);
-            tex.Apply();
-            var jpg = tex.EncodeToJPG(90);
-            Object.Destroy(tex);
-            File.WriteAllBytes(absPath, jpg);
-            return true;
+            if (_rgbScratch == null || _rgbScratch.Length != size) _rgbScratch = new byte[size];
+            buffer.CopyTo(_rgbScratch);
+
+            return ImageConversion.EncodeArrayToJPG(
+                _rgbScratch, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_SRGB,
+                (uint)outW, (uint)outH, 0, 90);
         }
 
         /// <summary>
