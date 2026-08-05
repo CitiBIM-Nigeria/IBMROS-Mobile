@@ -156,7 +156,7 @@ namespace OpenRoomPlan.Capture
             {
                 using (depthImage)
                 {
-                    var depth = ReadFloatPlane(depthImage, out int dw, out int dh);
+                    var depth = ReadDepthPlaneMeters(depthImage, out int dw, out int dh);
                     if (isIOS && captureLiDARWhenAvailable)
                     {
                         SessionIO.WriteDepthBin(Path.Combine(SessionIO.SessionDir(CurrentSessionId), "lidar", $"{idx:D6}.bin"), depth, dw, dh);
@@ -169,7 +169,31 @@ namespace OpenRoomPlan.Capture
                         depthRel = $"depth/{idx:D6}.bin";
                     }
                     if (_pendingManifest.depthWidth == 0) { _pendingManifest.depthWidth = dw; _pendingManifest.depthHeight = dh; }
-                    if (!_loggedFormats) Debug.Log($"[ORP] env-depth {dw}x{dh} fmt={depthImage.format} platform={(isIOS ? "iOS/GT" : "Android/candidate")}");
+                    if (!_loggedFormats)
+                    {
+                        // Log what was DECODED, not just the declared format. A format
+                        // mismatch produces plausible-looking files full of ~1e14, and the
+                        // only cheap way to catch that on the device is to state the range
+                        // once: a room is metres, so anything outside ~0.1–30 m is a bug.
+                        float lo = float.MaxValue, hi = 0f; int valid = 0;
+                        for (int i = 0; i < depth.Length; i++)
+                        {
+                            float d = depth[i];
+                            if (d <= 0.001f || float.IsNaN(d) || float.IsInfinity(d)) continue;
+                            valid++;
+                            if (d < lo) lo = d;
+                            if (d > hi) hi = d;
+                        }
+                        string range = valid > 0 ? $"{lo:F2}–{hi:F2} m" : "no valid pixels";
+                        Debug.Log($"[ORP] env-depth {dw}x{dh} fmt={depthImage.format} " +
+                                  $"stride={depthImage.GetPlane(0).pixelStride} decoded={range} " +
+                                  $"valid={100f * valid / depth.Length:F0}% " +
+                                  $"platform={(isIOS ? "iOS/GT" : "Android/candidate")}");
+                        if (valid == 0 || hi > 100f)
+                            Debug.LogError("[ORP] env-depth decoded outside any plausible room range — " +
+                                           "the plane format is not what ReadDepthPlaneMeters assumed. " +
+                                           "This session's depth is unusable; fix before capturing more.");
+                    }
                 }
 
                 if (occlusionManager.TryAcquireEnvironmentDepthConfidenceCpuImage(out XRCpuImage confImage))
@@ -261,21 +285,58 @@ namespace OpenRoomPlan.Capture
             return true;
         }
 
-        /// <summary>Read a single-channel float32 depth CPU image (meters) honoring row stride.</summary>
-        static float[] ReadFloatPlane(XRCpuImage img, out int w, out int h)
+        /// <summary>
+        /// Read a single-channel depth CPU image into METRES, honouring the plane's actual
+        /// format and row stride.
+        ///
+        /// WHY THIS BRANCHES ON FORMAT. The two platforms disagree, and assuming either one
+        /// silently destroys the other's data:
+        ///   ARCore  -> XRCpuImage.Format.DepthUint16, pixelStride 2, value = MILLIMETRES.
+        ///   ARKit   -> DepthFloat32 (sceneDepth), pixelStride 4, value = metres.
+        /// This method used to hardcode the float32 case while still advancing by the real
+        /// pixelStride, so on Android it read OVERLAPPING 4-byte windows across a 2-byte
+        /// plane and reinterpreted them as floats. That decodes to ~1e14 or ~0 — the first
+        /// Pixel 8 Pro session recorded 423 frames of it with no error anywhere, because
+        /// nothing downstream range-checked the result. Hence also the sanity log below:
+        /// a depth reader that can be wrong in silence must say what it decoded.
+        ///
+        /// Byte assembly is done with shifts rather than BitConverter over a temporary
+        /// array: the old version allocated a 4-byte array PER PIXEL, i.e. 14,400 per frame
+        /// at 160x90, which on a phone is pure GC pressure during capture.
+        /// </summary>
+        static float[] ReadDepthPlaneMeters(XRCpuImage img, out int w, out int h)
         {
             w = img.width; h = img.height;
             var plane = img.GetPlane(0);
             var raw = plane.data;
             var outArr = new float[w * h];
-            int rowStride = plane.rowStride, pxStride = plane.pixelStride; // expect pxStride == 4
+            int rowStride = plane.rowStride, pxStride = plane.pixelStride;
+
+            // Trust the declared format; fall back to the stride when a provider reports
+            // something unexpected (OneComponent32 is float, OneComponent16/Depth16 is not).
+            bool millimetreUint16 = img.format == XRCpuImage.Format.DepthUint16 || pxStride == 2;
+
             for (int y = 0; y < h; y++)
             {
                 int row = y * rowStride;
-                for (int x = 0; x < w; x++)
+                int outRow = y * w;
+                if (millimetreUint16)
                 {
-                    int b = row + x * pxStride;
-                    outArr[y * w + x] = System.BitConverter.ToSingle(new byte[] { raw[b], raw[b + 1], raw[b + 2], raw[b + 3] }, 0);
+                    for (int x = 0; x < w; x++)
+                    {
+                        int b = row + x * pxStride;
+                        int mm = raw[b] | (raw[b + 1] << 8);
+                        outArr[outRow + x] = mm * 0.001f;
+                    }
+                }
+                else
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        int b = row + x * pxStride;
+                        int bits = raw[b] | (raw[b + 1] << 8) | (raw[b + 2] << 16) | (raw[b + 3] << 24);
+                        outArr[outRow + x] = System.BitConverter.Int32BitsToSingle(bits);
+                    }
                 }
             }
             return outArr;
