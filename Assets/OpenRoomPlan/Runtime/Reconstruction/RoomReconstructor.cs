@@ -47,12 +47,12 @@ namespace OpenRoomPlan.Reconstruction
             float[] depth, int width, int height,
             in CameraIntrinsics intr, in Pose pose,
             float minDepth = 0.3f, float maxDepth = 5f, int stride = 2, bool flipV = false,
-            byte[] semantics = null)
+            byte[] semantics = null, bool depthIsRadial = false)
         {
             if (_tsdf != null)
-                _tsdf.IntegrateFrame(depth, width, height, intr, pose, minDepth, maxDepth, stride, flipV, semantics);
+                _tsdf.IntegrateFrame(depth, width, height, intr, pose, minDepth, maxDepth, stride, flipV, semantics, depthIsRadial);
             else
-                DepthBackprojector.Accumulate(_cloud, depth, width, height, intr, pose, minDepth, maxDepth, stride, flipV);
+                DepthBackprojector.Accumulate(_cloud, depth, width, height, intr, pose, minDepth, maxDepth, stride, flipV, depthIsRadial);
         }
 
         public RoomModel Solve(ManhattanSolver.Config cfg = default)

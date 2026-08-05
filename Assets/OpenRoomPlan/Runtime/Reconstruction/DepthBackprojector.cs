@@ -12,10 +12,26 @@ namespace OpenRoomPlan.Reconstruction
     /// </summary>
     public static class DepthBackprojector
     {
+        /// <param name="depthIsRadial">
+        /// True when a depth value is the distance from the camera CENTRE to the point (a
+        /// radial range), false when it is the distance along the optical axis (a z value).
+        ///
+        /// This is not a stylistic choice — it is a measured property of the provider, and
+        /// getting it wrong over-projects every off-axis pixel by 1/cos(theta), worst at the
+        /// frame edges where most pixels live. On sess_20260805_134446 (Pixel 8 Pro, ARCore)
+        /// the median wall-hit radius climbed monotonically with a pixel's off-axis angle —
+        /// 1.019 m at 0-5 deg rising to 1.172 m at 20-30 deg, a 15% outward bulge — and
+        /// treating the value as radial cut the wall-surface smear from 32.4 cm to 22.4 cm.
+        /// So ARCore is radial.
+        ///
+        /// Monocular nets are the other way round: Depth-Anything predicts a z map, so baked
+        /// model depth must pass false. Hence a parameter rather than a constant.
+        /// </param>
         public static void Accumulate(
             PointCloud cloud, float[] depth, int dw, int dh,
             in CameraIntrinsics intr, in Pose pose,
-            float minDepth = 0.3f, float maxDepth = 5.0f, int stride = 2, bool flipV = false)
+            float minDepth = 0.3f, float maxDepth = 5.0f, int stride = 2, bool flipV = false,
+            bool depthIsRadial = false)
         {
             if (depth == null || depth.Length < dw * dh || !intr.IsValid) return;
 
@@ -69,9 +85,18 @@ namespace OpenRoomPlan.Reconstruction
                     float d = depth[v * dw + u];
                     if (float.IsNaN(d) || d < minDepth || d > maxDepth) continue;
 
-                    float camX = (u - cx) / fx * d;
-                    float camY = -(vv - cy) / fy * d; // image v grows down; Unity Y grows up
-                    float camZ = d;
+                    float xn = (u - cx) / fx;
+                    float yn = -(vv - cy) / fy;      // image v grows down; Unity Y grows up
+
+                    // A radial range has to be divided by the ray length before it can be used
+                    // as a z, or every off-axis pixel lands too far out (see depthIsRadial).
+                    float z = depthIsRadial
+                        ? d / Mathf.Sqrt(1f + xn * xn + yn * yn)
+                        : d;
+
+                    float camX = xn * z;
+                    float camY = yn * z;
+                    float camZ = z;
 
                     cloud.Add(pos + rot * new Vector3(camX, camY, camZ));
                 }

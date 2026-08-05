@@ -53,14 +53,22 @@ namespace OpenRoomPlan.Reconstruction
             float[] depth, int dw, int dh,
             in CameraIntrinsics intr, in Pose pose,
             float minDepth = 0.3f, float maxDepth = 5f, int stride = 2, bool flipV = false,
-            byte[] semantics = null)
+            byte[] semantics = null, bool depthIsRadial = false)
         {
             if (depth == null || depth.Length < dw * dh || !intr.IsValid) return;
 
-            float sx = dw / (float)intr.width;
-            float sy = dh / (float)intr.height;
-            float fx = intr.fx * sx, fy = intr.fy * sy;
-            float cx = intr.cx * sx, cy = intr.cy * sy;
+            // Single scale factor plus a centre-crop term — one sensor means square pixels, so
+            // fx and fy cannot scale independently. This is the same correction as
+            // DepthBackprojector; it was fixed there first and this path was still wrong,
+            // which is why the TSDF accumulator looked no better than the raw cloud.
+            float s_ = dw / (float)intr.width;
+            float expectedH = intr.height * s_;
+            float cropY = (expectedH - dh) * 0.5f;
+            if (cropY < 0f) { s_ = dh / (float)intr.height; cropY = 0f; }
+            float cropX = (intr.width * s_ - dw) * 0.5f;
+
+            float fx = intr.fx * s_, fy = intr.fy * s_;
+            float cx = intr.cx * s_ - cropX, cy = intr.cy * s_ - cropY;
             if (fx <= 0f || fy <= 0f) return;
 
             var rot = pose.rotation;
@@ -80,6 +88,11 @@ namespace OpenRoomPlan.Reconstruction
                     // Camera-space ray for this pixel, parameterized by Z-depth s: p_cam(s) = dirCam · s.
                     Vector3 dirCam = new Vector3((u - cx) / fx, -(vv - cy) / fy, 1f);
                     Vector3 dirWorld = rot * dirCam;
+
+                    // The band below is walked in z, so a radial range must become a z first
+                    // (see DepthBackprojector.Accumulate's depthIsRadial note). |dirCam| is
+                    // exactly the ray-length factor, and it is already to hand.
+                    if (depthIsRadial) d /= dirCam.magnitude;
 
                     // Update the truncation band around the observed surface. Step < voxel size along
                     // the ray so no voxel in the band is skipped.
