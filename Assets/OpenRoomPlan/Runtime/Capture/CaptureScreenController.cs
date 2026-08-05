@@ -146,14 +146,40 @@ namespace OpenRoomPlan.Capture
             // Defer a frame so "Exporting…" paints before the (blocking) zip work.
             _root.schedule.Execute(() =>
             {
-                var res = SessionExporter.Export(sessionId);
-                if (_status != null)
-                    _status.text = res.ok
-                        ? $"✓ Exported — {res.userFacing}"
-                        : $"Export failed: {res.error}";
+                string message = ExportAndShare(sessionId);
+                if (_status != null) _status.text = message;
                 _exporting = false;
                 _export?.SetEnabled(true);
             }).ExecuteLater(60);
+        }
+
+        /// <summary>
+        /// Zips the session, then offers it to the system share sheet so the user can send it
+        /// wherever they already have an app for (Drive, Gmail, WhatsApp, Files, Nearby Share)
+        /// instead of hunting for app-private storage over USB.
+        ///
+        /// Sharing is best-effort on purpose: the zip is on disk and published to Downloads
+        /// regardless, so a share sheet that cannot open degrades to the old path-on-screen
+        /// behaviour rather than losing the scan. Returns the status text to show.
+        /// </summary>
+        string ExportAndShare(string sessionId)
+        {
+            var res = SessionExporter.Export(sessionId);
+            if (!res.ok)
+                return $"Export failed: {res.error}";
+
+            if (!string.IsNullOrEmpty(res.publishWarning))
+                Debug.LogWarning($"[ORP] Downloads publish skipped: {res.publishWarning}");
+
+            if (!SessionShare.IsSupported)
+                return $"✓ Exported — {res.userFacing}";
+
+            string subject = $"OpenRoomPlan scan {sessionId}";
+            if (SessionShare.TryShare(res.zipPath, res.contentUri, subject, out string shareError))
+                return $"Choose where to send — {sessionId}.zip";
+
+            Debug.LogWarning($"[ORP] Share sheet unavailable: {shareError}");
+            return $"✓ Exported (share unavailable) — {res.userFacing}";
         }
 
         void Refresh()

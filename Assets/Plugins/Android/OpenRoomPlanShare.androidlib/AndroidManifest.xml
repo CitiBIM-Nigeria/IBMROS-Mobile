@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Library Project that exists purely to carry one resource file:
+  res/xml/orp_file_paths.xml, the <paths> declaration for the OpenRoomPlan share
+  FileProvider (declared in ../AndroidManifest.xml, used by SessionShare).
+
+  WHY A LIBRARY INSTEAD OF Assets/Plugins/Android/res. Unity 6 removed that folder
+  outright — the build fails with "OBSOLETE - Providing Android resources in
+  Assets/Plugins/Android/res was removed, please move your resources to an AAR or an
+  Android Library". A `.androidlib` directory IS that Android Library: Unity turns it
+  into a Gradle library subproject and merges its res/ into the app.
+
+  SHAPE COPIED FROM UNITY'S OWN. com.unity.xr.management ships
+  xrmanifest.androidlib containing nothing but a manifest with a `package` attribute
+  — no project.properties, no build.gradle. That is the form known to build on this
+  editor version (6000.4.6f1), so this mirrors it rather than inventing a fuller
+  Gradle project. The package here only names the library; it is unrelated to the
+  app's own application id.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="com.citibim.ibmros.openroomplan.share">
+    <application>
+    </application>
+</manifest>

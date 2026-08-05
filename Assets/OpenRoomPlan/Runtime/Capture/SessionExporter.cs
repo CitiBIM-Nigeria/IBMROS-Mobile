@@ -13,6 +13,12 @@ namespace OpenRoomPlan.Capture
     ///      plugins needed on API 29+ (apps own what they insert into MediaStore).
     ///      iOS: the zip stays under Documents, which the Files app exposes once UIFileSharingEnabled +
     ///      LSSupportsOpeningDocumentsInPlace are set (done by the iOS build postprocessor).
+    ///   3. The caller then usually hands <see cref="Result.contentUri"/> (or the zip path) to
+    ///      <see cref="SessionShare"/>, which opens the system share sheet — that is what makes a
+    ///      scan reachable without a USB cable at all.
+    ///
+    /// Step 2 is kept even though step 3 exists: landing the zip in Downloads means the file is still
+    /// findable later, after whatever the share sheet did or did not do.
     /// </summary>
     public static class SessionExporter
     {
@@ -25,6 +31,20 @@ namespace OpenRoomPlan.Capture
             public string zipPath;        // absolute path of the produced zip
             public string userFacing;     // where the USER finds it, for the status label
             public string error;
+
+            /// <summary>
+            /// content:// URI of the published copy, when MediaStore accepted it. Directly
+            /// shareable (SessionShare) with no FileProvider involved, because an app may
+            /// hand out rows it inserted itself. Null when publishing was skipped or failed.
+            /// </summary>
+            public string contentUri;
+
+            /// <summary>
+            /// Why MediaStore did not publish, when it did not. Surfaced rather than only
+            /// logged: this path can fail on a specific ROM and never in the Editor, so the
+            /// reason has to be readable on the device that failed.
+            /// </summary>
+            public string publishWarning;
         }
 
         /// <summary>Zip a session and surface it to the user. Safe to call repeatedly (overwrites).</summary>
@@ -43,11 +63,15 @@ namespace OpenRoomPlan.Capture
                                             includeBaseDirectory: true);
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-                string publicLocation = PublishToAndroidDownloads(zipPath, sessionId + ".zip");
+                string contentUri = PublishToAndroidDownloads(zipPath, sessionId + ".zip", out string warning);
                 return new Result
                 {
                     ok = true, zipPath = zipPath,
-                    userFacing = publicLocation ?? $"app files: {zipPath} (pull via USB)",
+                    contentUri = contentUri,
+                    publishWarning = warning,
+                    userFacing = contentUri != null
+                        ? $"Files ▸ Downloads ▸ OpenRoomPlan ▸ {sessionId}.zip"
+                        : $"app files: {zipPath} (pull via USB)",
                 };
 #elif UNITY_IOS && !UNITY_EDITOR
                 return new Result
@@ -68,11 +92,13 @@ namespace OpenRoomPlan.Capture
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         /// <summary>
-        /// Insert the zip into MediaStore.Downloads (Download/OpenRoomPlan/<name>). Returns the
-        /// user-facing location, or null on failure (zip still exists in app storage).
+        /// Insert the zip into MediaStore.Downloads (Download/OpenRoomPlan/&lt;name&gt;). Returns the
+        /// resulting content:// URI — shareable as-is — or null on failure, with the reason in
+        /// <paramref name="warning"/>. The zip always remains in app storage either way.
         /// </summary>
-        static string PublishToAndroidDownloads(string zipPath, string fileName)
+        static string PublishToAndroidDownloads(string zipPath, string fileName, out string warning)
         {
+            warning = null;
             try
             {
                 using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
@@ -87,27 +113,56 @@ namespace OpenRoomPlan.Capture
                 using var downloadsUriClass = new AndroidJavaClass("android.provider.MediaStore$Downloads");
                 using var collection = downloadsUriClass.GetStatic<AndroidJavaObject>("EXTERNAL_CONTENT_URI");
                 using var itemUri = resolver.Call<AndroidJavaObject>("insert", collection, values);
-                if (itemUri == null) return null;
+                if (itemUri == null)
+                {
+                    warning = "MediaStore refused the insert (returned no URI)";
+                    return null;
+                }
 
                 using var stream = resolver.Call<AndroidJavaObject>("openOutputStream", itemUri);
-                var bytes = File.ReadAllBytes(zipPath);
-                // JNI signature write(byte[], int, int); managed byte[] maps to Java byte[] via sbyte[].
-                var sbytes = (sbyte[])(Array)bytes;
+
+                // Stream it. Two deliberate choices here, both fixes:
+                //   • Read in chunks instead of File.ReadAllBytes — a session of ~900 frames
+                //     zips to tens of MB, and holding the whole thing plus a second managed
+                //     copy for JNI is avoidable pressure on a phone.
+                //   • Convert byte[]→sbyte[] with Buffer.BlockCopy rather than casting via
+                //     (sbyte[])(Array)bytes. That cast leans on CLR array-covariance between
+                //     same-width primitives; Mono tolerates it, IL2CPP is not guaranteed to,
+                //     and an InvalidCastException here would be swallowed into exactly the
+                //     silent "publish failed, pull via USB" fallback. BlockCopy is defined
+                //     for primitive arrays and needs no such tolerance.
                 const int chunk = 1 << 20;
-                for (int off = 0; off < sbytes.Length; off += chunk)
+                var buffer = new byte[chunk];
+                var part = new sbyte[chunk];
+                using (var file = File.OpenRead(zipPath))
                 {
-                    int len = Math.Min(chunk, sbytes.Length - off);
-                    var part = new sbyte[len];
-                    Array.Copy(sbytes, off, part, 0, len);
-                    stream.Call("write", part);
+                    int read;
+                    while ((read = file.Read(buffer, 0, chunk)) > 0)
+                    {
+                        if (read == chunk)
+                        {
+                            Buffer.BlockCopy(buffer, 0, part, 0, read);
+                            stream.Call("write", part);
+                        }
+                        else
+                        {
+                            // Final short chunk: write(byte[]) writes the WHOLE array, so it
+                            // has to be exactly the remaining length or the file gains padding.
+                            var tail = new sbyte[read];
+                            Buffer.BlockCopy(buffer, 0, tail, 0, read);
+                            stream.Call("write", tail);
+                        }
+                    }
                 }
                 stream.Call("flush");
                 stream.Call("close");
-                return $"Files ▸ Downloads ▸ OpenRoomPlan ▸ {fileName}";
+
+                return itemUri.Call<string>("toString");
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[ORP] MediaStore publish failed (zip still in app storage): {e.Message}");
+                warning = e.Message;
+                Debug.LogWarning($"[ORP] MediaStore publish failed (zip still in app storage): {e}");
                 return null;
             }
         }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Roots the OpenRoomPlan FileProvider may hand out. Referenced as @xml/orp_file_paths
+  by the <provider> in Assets/Plugins/Android/AndroidManifest.xml, and reached from C#
+  by SessionShare.FileProviderUri.
+
+  <files-path> is Application.persistentDataPath on Android — the
+  /data/user/0/<package>/files/OpenRoomPlan/Exports/... path the capture screen prints
+  — so only the exports folder is exposed, not the whole sandbox. Session recordings
+  stay unreachable to other apps; a share can only ever name a zip the user explicitly
+  exported.
+-->
+<paths>
+  <files-path name="orp_exports" path="OpenRoomPlan/Exports/" />
+</paths>
